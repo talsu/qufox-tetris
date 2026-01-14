@@ -110,17 +110,19 @@ export class Engine {
         dropCounter: { softDrop: number, hardDrop: number, autoDrop: number },
         tSpinCornerOccupiedCount: { pointSide: number, flatSide: number }
     ) {
+        const { pointSide, flatSide } = tSpinCornerOccupiedCount;
+
         // Is T-Spin
-        let isTSpin =
+        const isTSpin =
             tetrominoType == TetrominoType.T &&
             droppedRotateType != lockedRotateType &&
             movement == 'rotate' &&
-            tSpinCornerOccupiedCount.pointSide + tSpinCornerOccupiedCount.flatSide > 2;
+            pointSide + flatSide > 2;
 
         // Is T-Spin mini
-        let isTSpinMini =
+        const isTSpinMini =
             isTSpin &&
-            tSpinCornerOccupiedCount.pointSide < 2 &&
+            pointSide < 2 &&
             kickDataIndex < 3;
 
         /**
@@ -142,13 +144,13 @@ export class Engine {
         }
 
         // Combine action segment.
-        let actionNameArray = [];
+        const actionNameArray: string[] = [];
         if (isTSpin) actionNameArray.push('T-Spin');
         if (isTSpinMini) actionNameArray.push('Mini');
         if (clearedLineCount) actionNameArray.push(['Single', 'Double', 'Triple', 'Tetris'][clearedLineCount - 1]);
 
         // Create action name and get base score.
-        let actionName = null;
+        let actionName: string | null = null;
         let scoreBase = 0;
         if (actionNameArray.length) {
             actionName = actionNameArray.join(' ');
@@ -158,7 +160,7 @@ export class Engine {
 
         // Add action score.
         if (scoreBase) {
-            let score = scoreBase * (isBackToBackBonus ? 1.5 : 1) * this.level;
+            const score = scoreBase * (isBackToBackBonus ? 1.5 : 1) * this.level;
             this.score += score;
             const actionFullName = `${isBackToBackBonus ? 'Back to Back ' : ''}${actionName}`;
             this.levelIndicator.setAction(actionFullName);

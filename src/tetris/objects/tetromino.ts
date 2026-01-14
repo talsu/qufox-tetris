@@ -22,6 +22,8 @@ export class Tetromino extends ObjectBase {
     public type: TetrominoType;
     public lastMovement: string;
     public lastKickDataIndex: number;
+    public manipulationCount: number = 0;
+    public lowestRow: number = -999;
     public dropCounter: { softDrop: number, hardDrop: number, autoDrop: number } = {
         softDrop: 0,
         hardDrop: 0,
@@ -81,8 +83,8 @@ export class Tetromino extends ObjectBase {
         this.moveBlockImages();
 
         // Initial position
-        let initCol = col === undefined ? 3 : col;
-        let initRow = row || -2;
+        const initCol = col ?? 3;
+        const initRow = row ?? -2;
 
         // Move to initial position and set spawn state.
         this.isSpawnSuccess = this.move(initCol, initRow, 'spwan');
@@ -102,6 +104,14 @@ export class Tetromino extends ObjectBase {
         // Set col, row positions.
         this.col = col;
         this.row = row;
+
+        // Update lowest row and manipulation count.
+        if (this.row > this.lowestRow) {
+            this.lowestRow = this.row;
+            this.manipulationCount = 0;
+        } else if (['rotate', 'left', 'right'].includes(movement)) {
+            this.manipulationCount++;
+        }
 
         // Set container x, y.
         this.container.x = this.col * BLOCK_SIZE;

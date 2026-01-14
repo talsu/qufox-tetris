@@ -60,21 +60,23 @@ export class LevelIndicator extends ObjectBase {
     }
 
     setAction(action?: string) {
-        if (this.actionTextShowEvent) {
-            this.actionTextShowEvent.destroy();
-            this.actionTextShowEvent = null;
-        }
+        this.actionTextShowEvent?.destroy();
+        this.actionTextShowEvent = null;
+
         this.actionText.setText(action || '');
-        this.actionTextShowEvent = this.scene.time.addEvent({
-            delay: 3000, callback: () => {
-                this.actionText.setText('');
-            }, callbackScope: this
-        });
+        if (action) {
+            this.actionTextShowEvent = this.scene.time.addEvent({
+                delay: 3000,
+                callback: () => {
+                    this.actionText.setText('');
+                },
+                callbackScope: this
+            });
+        }
     }
 
-    setCombo(combo?: number) {
-        if (!combo || combo < 0) this.comboText.setText('');
-        else this.comboText.setText(`${combo} Combo`);
+    setCombo(combo: number = -1) {
+        this.comboText.setText(combo > 0 ? `${combo} Combo` : '');
     }
 
     clear() {

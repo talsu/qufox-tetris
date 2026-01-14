@@ -209,25 +209,20 @@ export class PlayField extends ObjectBase {
      */
     clearLine(lockedTetromino: Tetromino) {
         // get rows for check clear line.
-        let clearCheckRows = lockedTetromino.getBlocks()
-            .map(colRow => colRow[1])
-            .reduce((result, row) => {
-                result[row] = 1;
-                return result;
-            }, {});
+        const rowsToCheck = new Set(lockedTetromino.getBlocks().map(([, row]) => row));
 
-        let needClearRows = [];
-        let inactiveBlocks = this.getInactiveBlocks();
+        const needClearRows: number[] = [];
+        const inactiveBlocks = this.getInactiveBlocks();
+        
         // get target of clear line rows.
-        for (let key in clearCheckRows) {
-            let row = Number(key);
-            let numberOfRowBlocks = inactiveBlocks.filter(colRow => colRow[1] == row).length;
+        for (const row of rowsToCheck) {
+            const numberOfRowBlocks = inactiveBlocks.filter(([, r]) => r === row).length;
             if (numberOfRowBlocks >= CONST.PLAY_FIELD.COL_COUNT) needClearRows.push(row);
         }
 
         // call clear line method each tetromino.
         needClearRows.forEach(row => {
-            let emptyTetrominos = this.inactiveTetrominos.filter(tetromino => tetromino.clearLine(row));
+            const emptyTetrominos = this.inactiveTetrominos.filter(tetromino => tetromino.clearLine(row));
             // remove empty tetromino.
             emptyTetrominos.forEach(tetromino => {
                 this.container.remove(tetromino.container);
@@ -356,9 +351,12 @@ export class PlayField extends ObjectBase {
             if (this.activeTetromino.isLockable()) {
                 // Set dropped rotate type.
                 if (setDroppedRotate) this.droppedRotateType = this.activeTetromino.rotateType;
-                // Restart lock timer.
-                this.stopLockTimer();
-                this.startLockTimer();
+                
+                // Restart lock timer only if manipulation count < 15 (Extended Placement).
+                if (this.activeTetromino.manipulationCount < 15) {
+                    this.stopLockTimer();
+                    this.startLockTimer();
+                }
             } else {
                 // Stop lock timer.
                 this.stopLockTimer();

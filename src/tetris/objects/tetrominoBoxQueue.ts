@@ -14,11 +14,27 @@ export class TetrominoBoxQueue extends ObjectBase {
         // Create container.
         this.container = scene.add.container(x, y);
 
+        let currentY = BLOCK_SIZE;
         // Create tetromino boxes with queue size.
         for (let i = 0; i < queueSize; ++i) {
-            let box = new TetrominoBox(this.scene, BLOCK_SIZE, BLOCK_SIZE + (4 * BLOCK_SIZE * i + BLOCK_SIZE * i), 6 * BLOCK_SIZE, 4 * BLOCK_SIZE);
+            let scale = i === 0 ? 1.0 : 0.6;
+            let width = 6 * BLOCK_SIZE;
+            let height = 4 * BLOCK_SIZE;
+            
+            // Calculate X to center the box relative to the first box (width 6).
+            // Normal box center is at 1 + 3 = 4.
+            // Scaled box center should be at 4.
+            // Scaled width is 6 * scale. Half is 3 * scale.
+            // X = 4 - (3 * scale).
+            let boxX = (4 - (3 * scale)) * BLOCK_SIZE;
+            
+            let box = new TetrominoBox(this.scene, boxX, currentY, width, height);
+            box.container.setScale(scale);
+            
             this.boxes.push(box);
             this.container.add(box.container);
+            
+            currentY += (height * scale) + (0.25 * BLOCK_SIZE);
         }
     }
 

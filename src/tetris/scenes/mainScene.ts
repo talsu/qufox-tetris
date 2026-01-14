@@ -10,6 +10,8 @@ import {TetrominoBox} from "../objects/tetrominoBox";
 import {TetrominoBoxQueue} from "../objects/tetrominoBoxQueue";
 import {LevelIndicator} from '../objects/levelIndicator';
 import {Engine} from '../engine';
+import { io, Socket } from "socket.io-client";
+
 let BLOCK_SIZE = getBlockSize();
 
 /**
@@ -29,9 +31,19 @@ export class MainScene extends Phaser.Scene {
     };
 
     private playField: PlayField;
+    private opponentPlayField: PlayField;
     private engine: Engine;
     private dasFlags: Record<string, number> = {};
     private isPause: boolean = false;
+    private socket: Socket;
+    private roomId: string;
+    private statusText: Phaser.GameObjects.Text;
+    private lastUpdateSend: number = 0;
+    private isGameRunning: boolean = false;
+    
+    // Logical base resolution
+    private readonly GAME_WIDTH = 1920;
+    private readonly GAME_HEIGHT = 1080;
 
     constructor() {
         super({key: "MainScene", mapAdd: {game: 'game'}});
@@ -52,24 +64,66 @@ export class MainScene extends Phaser.Scene {
      * create - call after preload.
      */
     create(): void {
-        // Set background image.
         this.setBackgroundImage();
-        // Create tetromino hold box.
-        const holdBox = new TetrominoBox(this, BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE * 6, BLOCK_SIZE * 4);
-        // Create level indicator.
-        const levelIndicator = new LevelIndicator(this, BLOCK_SIZE, BLOCK_SIZE * 6);
 
-        // Calculate play field size.
-        const playFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
-        const playFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
+        // Register resize handler
+        this.scale.on('resize', this.resize, this);
+        
+        // Initial resize to set zoom
+        this.resize(this.scale.width, this.scale.height);
 
-        // Create tetromino queue. length = 6
-        const tetrominoQueue = new TetrominoBoxQueue(this, holdBox.container.width + playFieldWidth + (2 * BLOCK_SIZE), 0, 6);
+        // UI Text (Center of Logical Screen)
+        this.statusText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'Connecting to server...', {
+            fontSize: '32px',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
 
-        // Create play field.
-        this.playField = new PlayField(this, holdBox.container.width + (2 * BLOCK_SIZE), BLOCK_SIZE, playFieldWidth, playFieldHeight);
+        // Connect to server (assume localhost:3000 for now, or relative if proxied)
+        // Since we serve via webpack dev server 8080 and socket is 3000
+        this.socket = io('http://localhost:3000');
 
-        // Create input key bindings.
+        this.socket.on('connect', () => {
+            this.statusText.setText('Connected! Waiting for opponent...');
+            this.socket.emit('join_game');
+        });
+
+        this.socket.on('waiting_for_opponent', () => {
+            this.statusText.setText('Waiting for opponent...');
+        });
+
+        this.socket.on('game_start', (data) => {
+            this.roomId = data.roomId;
+            this.statusText.setVisible(false);
+            this.startGame();
+        });
+
+        this.socket.on('opponent_state_update', (data) => {
+            if (this.opponentPlayField) {
+                this.opponentPlayField.deserialize(data.board);
+            }
+        });
+
+        this.socket.on('receive_garbage', (data) => {
+            if (this.playField) {
+                this.playField.insertGarbage(data.count);
+                // Shake effect?
+                this.cameras.main.shake(200, 0.01);
+            }
+        });
+
+        this.socket.on('opponent_game_over', () => {
+             this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'YOU WIN!', {
+                fontSize: '64px',
+                color: '#00ff00',
+                stroke: '#000000',
+                strokeThickness: 6
+            }).setOrigin(0.5);
+            this.isGameRunning = false;
+        });
+
+        // Setup Input Keys (but don't process yet)
         this.keys = {
             LEFT: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT),
             RIGHT: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT),
@@ -81,37 +135,88 @@ export class MainScene extends Phaser.Scene {
             X: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X),
             C: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C)
         };
+    }
 
-        // Pause and resume with window key down event, because Phaser key event is not working when pause.
-        window.onkeydown = (event:KeyboardEvent) => {
-            if (event.code == 'Escape' || event.key == 'Escape') {
-                if (this.isPause)
-                    this.scene.resume('MainScene');
-                else
-                    this.scene.pause('MainScene');
-                this.isPause = !this.isPause;
-            }
-        };
+    startGame() {
+        this.isGameRunning = true;
+        
+        // Calculate dimensions
+        const playFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
+        const playFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
+        
+        // Center position for P1 (Left side of Logical Screen)
+        const p1X = (this.GAME_WIDTH * 0.25) - (playFieldWidth / 2);
+        const p1Y = (this.GAME_HEIGHT - playFieldHeight) / 2;
 
+        // P2 (Right side of Logical Screen)
+        const p2X = (this.GAME_WIDTH * 0.75) - (playFieldWidth / 2);
+        const p2Y = (this.GAME_HEIGHT - playFieldHeight) / 2;
+
+        // --- Player 1 Setup ---
+        const holdBox = new TetrominoBox(this, BLOCK_SIZE, BLOCK_SIZE, p1X - (BLOCK_SIZE * 5), p1Y); // Adjust pos
+        const levelIndicator = new LevelIndicator(this, BLOCK_SIZE, p1X - (BLOCK_SIZE * 5)); // Adjust pos
+        const tetrominoQueue = new TetrominoBoxQueue(this, p1X + playFieldWidth + BLOCK_SIZE, p1Y, 6);
+        
+        this.playField = new PlayField(this, p1X, p1Y, playFieldWidth, playFieldHeight);
+        
+        // Engine setup
         this.engine = new Engine(this.playField, holdBox, tetrominoQueue, levelIndicator);
+        
+        // Attach Attack Handler
+        this.engine.setAttackHandler((count) => {
+            this.socket.emit('send_garbage', { roomId: this.roomId, count });
+        });
+        
+        // Game Over Handler
+        this.playField.on('gameOver', () => {
+            this.socket.emit('game_over', { roomId: this.roomId });
+            this.isGameRunning = false;
+            this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'GAME OVER', {
+                fontSize: '64px',
+                color: '#ff0000',
+                stroke: '#000000',
+                strokeThickness: 6
+            }).setOrigin(0.5);
+        });
+
         this.engine.start();
+
+
+        // --- Player 2 Setup (Opponent) ---
+        // Opponent needs a PlayField.
+        this.opponentPlayField = new PlayField(this, p2X, p2Y, playFieldWidth, playFieldHeight);
+        // Opponent Name Tag
+        this.add.text(p2X, p2Y - 30, 'Opponent', { fontSize: '20px', color: '#ffffff' });
     }
 
     private setBackgroundImage() {
         // Add background Image.
         const backgroundImage = this.textures.get('background').getSourceImage();
-        const backgroundImageScale = Math.max(window.innerWidth / backgroundImage.width, window.innerHeight / backgroundImage.height);
-        const xOffset = (window.innerWidth - backgroundImage.width * backgroundImageScale) / 2;
-        const yOffset = (window.innerHeight - backgroundImage.height * backgroundImageScale) / 2;
-        this.add.image(xOffset, yOffset, 'background').setOrigin(0).setScale(backgroundImageScale);
+        // Just place it at 0,0 of logical screen and scale to cover logical screen
+        const scaleX = this.GAME_WIDTH / backgroundImage.width;
+        const scaleY = this.GAME_HEIGHT / backgroundImage.height;
+        const scale = Math.max(scaleX, scaleY);
+        
+        this.add.image(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'background')
+            .setOrigin(0.5)
+            .setScale(scale);
     }
 
-    resize (width, height)
+    resize (gameSize, baseSize?, displaySize?, resolution?)
     {
-        if (width === undefined) { width = this.sys.game.config.width; }
-        if (height === undefined) { height = this.sys.game.config.height; }
+        // Handle different call signatures of resize event
+        const width = (typeof gameSize === 'number') ? gameSize : gameSize.width;
+        const height = (typeof gameSize === 'number') ? baseSize : gameSize.height;
 
         this.cameras.resize(width, height);
+
+        // Zoom to fit
+        const zoomX = width / this.GAME_WIDTH;
+        const zoomY = height / this.GAME_HEIGHT;
+        const zoom = Math.min(zoomX, zoomY);
+
+        this.cameras.main.setZoom(zoom);
+        this.cameras.main.centerOn(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2);
     }
     /**
      * update - call when every tick.
@@ -119,6 +224,8 @@ export class MainScene extends Phaser.Scene {
      * @param {number} delta - time difference with before update time.
      */
     update(time: number, delta: number): void {
+        if (!this.isGameRunning) return;
+
         // Charge DAS with key pressed state.
         this.chargeDAS("left", this.keys.LEFT.isDown, delta);
         this.chargeDAS("right", this.keys.RIGHT.isDown, delta);
@@ -127,6 +234,17 @@ export class MainScene extends Phaser.Scene {
         this.chargeDAS("anticlockwise", this.keys.Z.isDown || this.keys.CTRL.isDown, delta);
         this.chargeDAS("clockwise", this.keys.X.isDown || this.keys.UP.isDown, delta);
         this.chargeDAS("hold", this.keys.C.isDown, delta);
+        
+        // Network Sync
+        if (time - this.lastUpdateSend > 100) { // 10Hz sync
+            this.lastUpdateSend = time;
+            if (this.playField && this.socket) {
+                this.socket.emit('update_state', {
+                    roomId: this.roomId,
+                    board: this.playField.serialize()
+                });
+            }
+        }
     }
 
     /*
@@ -176,6 +294,8 @@ export class MainScene extends Phaser.Scene {
      * @param state key state - press, hold, release
      */
     onInput(direction: string, state: InputState) {
-        this.engine.onInput(direction, state);
+        if (this.engine) {
+            this.engine.onInput(direction, state);
+        }
     }
 }

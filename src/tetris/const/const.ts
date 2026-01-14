@@ -1,4 +1,4 @@
-export enum TetrominoType { I = "I", J = "J", L = "L", O = "O", S = "S", T = "T", Z = "Z" }
+export enum TetrominoType { I = "I", J = "J", L = "L", O = "O", S = "S", T = "T", Z = "Z", GARBAGE = "GARBAGE" }
 
 export enum RotateType { UP = "0", LEFT = "L", DOWN = "2", RIGHT = "R" }
 
@@ -173,8 +173,5 @@ export let CONST = {
 };
 
 export const getBlockSize = () => {
-    return Math.min(
-        window.innerWidth / CONST.SCREEN.COL_COUNT,
-        window.innerHeight / CONST.SCREEN.ROW_COUNT
-    );
+    return 32; // Fixed base size, scaling handled by Camera
 };

@@ -356,9 +356,12 @@ export class PlayField extends ObjectBase {
             if (this.activeTetromino.isLockable()) {
                 // Set dropped rotate type.
                 if (setDroppedRotate) this.droppedRotateType = this.activeTetromino.rotateType;
-                // Restart lock timer.
-                this.stopLockTimer();
-                this.startLockTimer();
+                
+                // Restart lock timer only if manipulation count < 15 (Extended Placement).
+                if (this.activeTetromino.manipulationCount < 15) {
+                    this.stopLockTimer();
+                    this.startLockTimer();
+                }
             } else {
                 // Stop lock timer.
                 this.stopLockTimer();

@@ -63,8 +63,8 @@ export class MainScene extends Phaser.Scene {
         const playFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
         const playFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
 
-        // Create tetromino queue. length = 4
-        const tetrominoQueue = new TetrominoBoxQueue(this, holdBox.container.width + playFieldWidth + (2 * BLOCK_SIZE), 0, 4);
+        // Create tetromino queue. length = 6
+        const tetrominoQueue = new TetrominoBoxQueue(this, holdBox.container.width + playFieldWidth + (2 * BLOCK_SIZE), 0, 6);
 
         // Create play field.
         this.playField = new PlayField(this, holdBox.container.width + (2 * BLOCK_SIZE), BLOCK_SIZE, playFieldWidth, playFieldHeight);

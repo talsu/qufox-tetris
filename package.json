@@ -21,7 +21,7 @@
     "webpack-dev-server": "^4.15.1"
   },
   "dependencies": {
-    "phaser": "3.11.0"
+    "phaser": "^3.90.0"
   },
   "scripts": {
     "dev": "webpack serve --mode development",

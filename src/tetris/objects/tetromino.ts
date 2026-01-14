@@ -83,8 +83,8 @@ export class Tetromino extends ObjectBase {
         this.moveBlockImages();
 
         // Initial position
-        let initCol = col === undefined ? 3 : col;
-        let initRow = row || -2;
+        const initCol = col ?? 3;
+        const initRow = row ?? -2;
 
         // Move to initial position and set spawn state.
         this.isSpawnSuccess = this.move(initCol, initRow, 'spwan');

@@ -4,14 +4,12 @@
  * @license      MIT
  */
 
-/// <reference path="../phaser.d.ts"/>
-
 import "phaser";
 import {MainScene} from "./scenes/mainScene";
 import {CONST, getBlockSize} from "./const/const";
 
 // main game configuration
-const config: GameConfig = {
+const config: Phaser.Types.Core.GameConfig = {
     width: getBlockSize() * CONST.SCREEN.COL_COUNT,
     height: getBlockSize() * CONST.SCREEN.ROW_COUNT,
     type: Phaser.AUTO,
@@ -20,19 +18,19 @@ const config: GameConfig = {
     physics: {
         default: "arcade",
         arcade: {
-            gravity: {y: 200}
+            gravity: {x: 0, y: 200}
         }
     }
 };
 
 // game class
 export class Game extends Phaser.Game {
-    constructor(config: GameConfig) {
+    constructor(config: Phaser.Types.Core.GameConfig) {
         super(config);
     }
 }
 
 // when the page is loaded, create our game instance
-window.onload = () => {
+window.addEventListener('load', () => {
     new Game(config);
-};
+});

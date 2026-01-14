@@ -30,7 +30,7 @@ export class MainScene extends Phaser.Scene {
 
     private playField: PlayField;
     private engine: Engine;
-    private dasFlags: any = {};
+    private dasFlags: Record<string, number> = {};
     private isPause: boolean = false;
 
     constructor() {
@@ -118,15 +118,15 @@ export class MainScene extends Phaser.Scene {
      * @param {number} time - current time.
      * @param {number} delta - time difference with before update time.
      */
-    update(time, delta): void {
+    update(time: number, delta: number): void {
         // Charge DAS with key pressed state.
-        this.chargeDAS("left", Phaser.Input.Keyboard.DownDuration(this.keys.LEFT), delta);
-        this.chargeDAS("right", Phaser.Input.Keyboard.DownDuration(this.keys.RIGHT), delta);
-        this.chargeDAS("softDrop", Phaser.Input.Keyboard.DownDuration(this.keys.DOWN), delta, this.playField.autoDropDelay / 20, this.playField.autoDropDelay / 20);
-        this.chargeDAS("hardDrop", Phaser.Input.Keyboard.DownDuration(this.keys.SPACE), delta);
-        this.chargeDAS("anticlockwise", Phaser.Input.Keyboard.DownDuration(this.keys.Z) || Phaser.Input.Keyboard.DownDuration(this.keys.CTRL), delta);
-        this.chargeDAS("clockwise", Phaser.Input.Keyboard.DownDuration(this.keys.X) || Phaser.Input.Keyboard.DownDuration(this.keys.UP), delta);
-        this.chargeDAS("hold", Phaser.Input.Keyboard.DownDuration(this.keys.C), delta);
+        this.chargeDAS("left", this.keys.LEFT.isDown, delta);
+        this.chargeDAS("right", this.keys.RIGHT.isDown, delta);
+        this.chargeDAS("softDrop", this.keys.DOWN.isDown, delta, this.playField.autoDropDelay / 20, this.playField.autoDropDelay / 20);
+        this.chargeDAS("hardDrop", this.keys.SPACE.isDown, delta);
+        this.chargeDAS("anticlockwise", this.keys.Z.isDown || this.keys.CTRL.isDown, delta);
+        this.chargeDAS("clockwise", this.keys.X.isDown || this.keys.UP.isDown, delta);
+        this.chargeDAS("hold", this.keys.C.isDown, delta);
     }
 
     /*
@@ -136,13 +136,13 @@ export class MainScene extends Phaser.Scene {
         // Set initial value to 0.
         if (!this.dasFlags[input]) this.dasFlags[input] = 0;
         // Copy old value.
-        let oldValue = this.dasFlags[input];
+        const oldValue = this.dasFlags[input];
         // If pressed increase value by time. (ms)
         if (isPressed) this.dasFlags[input] += time;
         // If not pressed reset value to 0.
         else this.dasFlags[input] = 0;
         // Copy new value.
-        let newValue = this.dasFlags[input];
+        const newValue = this.dasFlags[input];
 
         // If old value is 0 and new value is positive, key is pressed.
         if (oldValue == 0 && newValue) this.onInput(input, InputState.PRESS);
@@ -153,9 +153,9 @@ export class MainScene extends Phaser.Scene {
         if (newValue == 0) return;
 
         // Delay value between 'press' and first 'hold' state.
-        let initDelay = init || CONST.PLAY_FIELD.DAS_MS;
+        const initDelay = init || CONST.PLAY_FIELD.DAS_MS;
         // Delay value between 'hold' and next 'hold' state.
-        let repeatDelay = repeat || CONST.PLAY_FIELD.AR_MS;
+        const repeatDelay = repeat || CONST.PLAY_FIELD.AR_MS;
         // Last 'hold' state called time.
         let rOld = Math.floor((oldValue - initDelay) / repeatDelay);
         // New 'hold' state time.

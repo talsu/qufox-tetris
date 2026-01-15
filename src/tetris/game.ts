@@ -5,7 +5,9 @@
  */
 
 import "phaser";
-import {MainScene} from "./scenes/mainScene";
+import {PlayScene} from "./scenes/playScene";
+import {MenuScene} from "./scenes/menuScene";
+import {LobbyScene} from "./scenes/lobbyScene";
 import {CONST, getBlockSize} from "./const/const";
 
 // main game configuration
@@ -16,10 +18,10 @@ const config: Phaser.Types.Core.GameConfig = {
     scale: {
         mode: Phaser.Scale.RESIZE,
         parent: "game",
-        autoCenter: Phaser.Scale.CENTER_BOTH
+        autoCenter: Phaser.Scale.NO_CENTER
     },
     parent: "game",
-    scene: MainScene,
+    scene: [MenuScene, LobbyScene, PlayScene],
     physics: {
         default: "arcade",
         arcade: {

@@ -136,6 +136,14 @@ export class Tetromino extends ObjectBase {
     }
 
     /**
+     * Set blocked positions.
+     * @param {ColRow[]} blockedPositions - Blocked positions.
+     */
+    setBlockedPositions(blockedPositions: ColRow[]) {
+        this.blockedPositions = blockedPositions;
+    }
+
+    /**
      * Move tetromino.
      */
     private move(col: number, row: number, movement: string): boolean {

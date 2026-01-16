@@ -262,7 +262,32 @@ export class PlayField extends ObjectBase {
         // A broken line is a row with one empty cell.
         // The column of the hole is usually determined by the attack.
         // For this implementation, we pick one random hole for the batch.
-        const holeIndex = Phaser.Math.Between(0, CONST.PLAY_FIELD.COL_COUNT - 1);
+        
+        // Find previous garbage hole index to avoid same column (Guideline: hole should change)
+        let previousHoleIndex = -1;
+        for (let i = this.inactiveTetrominos.length - 1; i >= 0; i--) {
+            const t = this.inactiveTetrominos[i];
+            if (t.type === TetrominoType.GARBAGE) {
+                const blocks = t.getBlocks();
+                const cols = new Set(blocks.map(b => b[0]));
+                for (let c = 0; c < CONST.PLAY_FIELD.COL_COUNT; c++) {
+                    if (!cols.has(c)) {
+                        previousHoleIndex = c;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        let holeIndex;
+        if (previousHoleIndex !== -1) {
+            // Ensure different hole
+            const shift = Phaser.Math.Between(1, CONST.PLAY_FIELD.COL_COUNT - 1);
+            holeIndex = (previousHoleIndex + shift) % CONST.PLAY_FIELD.COL_COUNT;
+        } else {
+            holeIndex = Phaser.Math.Between(0, CONST.PLAY_FIELD.COL_COUNT - 1);
+        }
         
         for (let i = 0; i < count; i++) {
             const blocks: any[] = [];
@@ -285,6 +310,12 @@ export class PlayField extends ObjectBase {
             
             this.inactiveTetrominos.push(garbageTetromino);
             this.container.add(garbageTetromino.container);
+        }
+
+        // Update active tetromino's blocked positions map and ghost block
+        if (this.activeTetromino) {
+            this.activeTetromino.setBlockedPositions(this.getInactiveBlocks());
+            this.activeTetromino.drawGhostBlocks();
         }
     }
 
@@ -436,6 +467,14 @@ export class PlayField extends ObjectBase {
         if (this.activeTetromino && this.activeTetromino.isPlayingLockAnimation()) {
             this.activeTetromino.stopLockAnimation();
         }
+    }
+
+    /**
+     * Stop all timers.
+     */
+    stop() {
+        this.stopLockTimer();
+        this.stopAutoDropTimer();
     }
 
     /**

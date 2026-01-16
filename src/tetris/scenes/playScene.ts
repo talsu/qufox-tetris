@@ -45,6 +45,7 @@ export class PlayScene extends Phaser.Scene {
     private backgroundImage: Phaser.GameObjects.Image;
     private menuContainer: Phaser.GameObjects.Container;
     private isMenuOpen: boolean = false;
+    private isGameEnded: boolean = false;
     
     // Logical base resolution
     private readonly GAME_WIDTH = 1920;
@@ -70,6 +71,7 @@ export class PlayScene extends Phaser.Scene {
         this.isMenuOpen = false;
         this.isPause = false;
         this.isGameRunning = false;
+        this.isGameEnded = false;
         this.dasFlags = {};
         this.lastUpdateSend = 0;
         this.selectedMenuIndex = 0;
@@ -124,13 +126,11 @@ export class PlayScene extends Phaser.Scene {
                  });
 
                  this.socket.on('opponent_game_over', () => {
-                    this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'YOU WIN!', {
-                        fontSize: '64px',
-                        color: '#00ff00',
-                        stroke: '#000000',
-                        strokeThickness: 6
-                    }).setOrigin(0.5);
-                    this.isGameRunning = false;
+                    this.showEndGameMessage('YOU WIN!', '#00ff00');
+                 });
+
+                 this.socket.on('restart_signal', () => {
+                     this.scene.restart({ mode: 'multi', socket: this.socket, roomId: this.roomId });
                  });
 
                  this.socket.on('opponent_disconnected', () => {
@@ -168,6 +168,7 @@ export class PlayScene extends Phaser.Scene {
             this.socket.off('opponent_state_update');
             this.socket.off('receive_garbage');
             this.socket.off('opponent_game_over');
+            this.socket.off('restart_signal');
             this.socket.off('opponent_disconnected');
         }
     }
@@ -269,6 +270,31 @@ export class PlayScene extends Phaser.Scene {
         }
     }
 
+    showEndGameMessage(mainText: string, color: string) {
+        this.isGameRunning = false;
+        this.isGameEnded = true;
+        if (this.playField) {
+            this.playField.stop();
+        }
+
+        const centerX = this.GAME_WIDTH / 2;
+        const centerY = this.GAME_HEIGHT / 2;
+
+        this.add.text(centerX, centerY, mainText, {
+            fontSize: '64px',
+            color: color,
+            stroke: '#000000',
+            strokeThickness: 6
+        }).setOrigin(0.5);
+
+        this.add.text(centerX, centerY + 80, 'Press SPACE to Exit, ENTER to Restart', {
+            fontSize: '32px',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+    }
+
     startGame() {
         this.isGameRunning = true;
         
@@ -310,13 +336,7 @@ export class PlayScene extends Phaser.Scene {
             if (this.mode === 'multi' && this.socket) {
                 this.socket.emit('game_over', { roomId: this.roomId });
             }
-            this.isGameRunning = false;
-            this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'GAME OVER', {
-                fontSize: '64px',
-                color: '#ff0000',
-                stroke: '#000000',
-                strokeThickness: 6
-            }).setOrigin(0.5);
+            this.showEndGameMessage('GAME OVER', '#ff0000');
         });
 
         this.engine.start();
@@ -399,6 +419,19 @@ export class PlayScene extends Phaser.Scene {
                 this.triggerMenuSelection();
             }
             return; // Don't process game input if menu is open
+        }
+
+        if (this.isGameEnded) {
+            if (Phaser.Input.Keyboard.JustDown(this.keys.SPACE)) {
+                this.exitGame();
+            } else if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
+                if (this.mode === 'single') {
+                    this.scene.restart({ mode: 'single' });
+                } else if (this.mode === 'multi' && this.socket) {
+                    this.socket.emit('request_restart', { roomId: this.roomId });
+                }
+            }
+            return;
         }
 
         if (!this.isGameRunning || this.isPause) return;

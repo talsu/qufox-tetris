@@ -280,7 +280,7 @@ export class Engine {
         console.log(`Game Over - ${gameOverType}`);
 
         // TODO: Show game over screen and score.
-        this.start();
+        // this.start();
     }
 
     /**

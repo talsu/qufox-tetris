@@ -88,6 +88,17 @@ io.on('connection', (socket) => {
         socket.to(data.roomId).emit('opponent_game_over');
     });
 
+    socket.on('request_restart', (data) => {
+        const room = rooms[data.roomId];
+        if (room) {
+            // Reset ready states
+            room.p1Ready = false;
+            room.p2Ready = false;
+            // Notify both players to reset and get ready
+            io.to(data.roomId).emit('restart_signal');
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
         // Clean up rooms where this user was a player

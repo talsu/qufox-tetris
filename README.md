@@ -46,6 +46,16 @@ To generate a production-ready bundle:
 npm run build
 ```
 
+## Testing
+This project uses Jest for unit testing. To run the tests:
+```bash
+# Run all tests
+npx jest
+
+# Run specific test file
+npx jest test/unit/engine.test.ts
+```
+
 ## Technical Specifications
 - **Game Engine:** Phaser 3.90.0
 - **Language:** TypeScript

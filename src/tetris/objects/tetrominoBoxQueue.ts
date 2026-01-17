@@ -21,12 +21,9 @@ export class TetrominoBoxQueue extends ObjectBase {
             let width = 6 * BLOCK_SIZE;
             let height = 4 * BLOCK_SIZE;
             
-            // Calculate X to center the box relative to the first box (width 6).
-            // Normal box center is at 1 + 3 = 4.
-            // Scaled box center should be at 4.
-            // Scaled width is 6 * scale. Half is 3 * scale.
-            // X = 4 - (3 * scale).
-            let boxX = (4 - (3 * scale)) * BLOCK_SIZE;
+            // Align all boxes to the left, matching the first box's position.
+            // The first box starts at 1 * BLOCK_SIZE (relative to container).
+            let boxX = 1 * BLOCK_SIZE;
             
             let box = new TetrominoBox(this.scene, boxX, currentY, width, height);
             box.container.setScale(scale);

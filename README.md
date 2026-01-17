@@ -46,6 +46,27 @@ To generate a production-ready bundle:
 npm run build
 ```
 
+## Running Tests
+To execute the unit tests:
+```bash
+npm test
+```
+
+## Multiplayer Server
+To run the multiplayer server locally:
+1. Build the production bundle:
+```bash
+npm run build
+```
+
+2. Start the server:
+```bash
+npm run server
+```
+
+3. Open your browser and visit:
+[http://localhost:3000](http://localhost:3000)
+
 ## Technical Specifications
 - **Game Engine:** Phaser 3.90.0
 - **Language:** TypeScript

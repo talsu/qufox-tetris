@@ -11,7 +11,8 @@ export class PlayField extends ObjectBase {
     private inactiveTetrominos: Tetromino[] = [];
     private activeTetromino: Tetromino = null;
     private canHold: boolean;
-    private container: Phaser.GameObjects.Container;
+    public container: Phaser.GameObjects.Container;
+    private maskGraphics: Phaser.GameObjects.Graphics;
     private autoDropTimer: Phaser.Time.TimerEvent;
     private droppedRotateType: RotateType;
     public autoDropDelay: number = 1000;
@@ -20,45 +21,52 @@ export class PlayField extends ObjectBase {
     constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number) {
         super(scene);
 
-        // Create background.
-        const topPadding = BLOCK_SIZE / 3;
-        let background = scene.add.graphics();
-        // Set background color.
-        background.fillStyle(0x000000, 0.4);
-        background.fillRect(x, y-topPadding, width, height+topPadding);
-        // Set background border
-        const borderThick = 1;
-        background.lineStyle(borderThick, 0xEEEEEE, 1.0);
-        background.strokeRect(x-borderThick, y-topPadding-borderThick, width+(borderThick*2), height+topPadding+(borderThick*2));
-
-        // background grid
-        for (let row = 0; row < CONST.PLAY_FIELD.ROW_COUNT; ++row)
-        for (let col = 0; col < CONST.PLAY_FIELD.COL_COUNT; ++col) {
-            const backgroundBlock = this.scene.add.image(
-                x+(col * BLOCK_SIZE),
-                y+(row * BLOCK_SIZE),
-                'blockSheet', 10);
-            backgroundBlock.setOrigin(0);
-            backgroundBlock.setAlpha(0.3);
-            if (BLOCK_SIZE != CONST.SCREEN.BLOCK_IMAGE_SIZE) backgroundBlock.setScale(BLOCK_SIZE / CONST.SCREEN.BLOCK_IMAGE_SIZE);
-        }
-
         // Create container and set size.
         this.container = scene.add.container(x, y);
         this.container.width = width;
         this.container.height = height;
 
+        // Create background.
+        const topPadding = BLOCK_SIZE / 3;
+        let background = scene.add.graphics();
+        // Set background color.
+        background.fillStyle(0x000000, 0.4);
+        background.fillRect(0, -topPadding, width, height+topPadding);
+        // Set background border
+        const borderThick = 1;
+        background.lineStyle(borderThick, 0xEEEEEE, 1.0);
+        background.strokeRect(-borderThick, -topPadding-borderThick, width+(borderThick*2), height+topPadding+(borderThick*2));
+        this.container.add(background);
+
+        // background grid
+        for (let row = 0; row < CONST.PLAY_FIELD.ROW_COUNT; ++row)
+        for (let col = 0; col < CONST.PLAY_FIELD.COL_COUNT; ++col) {
+            const backgroundBlock = this.scene.add.image(
+                (col * BLOCK_SIZE),
+                (row * BLOCK_SIZE),
+                'blockSheet', 10);
+            backgroundBlock.setOrigin(0);
+            backgroundBlock.setAlpha(0.3);
+            if (BLOCK_SIZE != CONST.SCREEN.BLOCK_IMAGE_SIZE) backgroundBlock.setScale(BLOCK_SIZE / CONST.SCREEN.BLOCK_IMAGE_SIZE);
+            this.container.add(backgroundBlock);
+        }
+
         this.effects = new PlayFieldEffects(scene, this.container);
 
-        const maskShape = this.scene.make.graphics({});
+        this.maskGraphics = this.scene.make.graphics({x: x, y: y});
 
         //  Create a Graphics object for mask.
-        maskShape.fillStyle(0xffffff);
+        this.maskGraphics.fillStyle(0xffffff);
 
         //  You have to begin a path for a Geometry mask to work
         // maskShape.beginPath();
-        maskShape.fillRect(x, y - (BLOCK_SIZE / 3), width, height + (BLOCK_SIZE / 3));
-        this.container.setMask(maskShape.createGeometryMask());
+        this.maskGraphics.fillRect(0, -(BLOCK_SIZE / 3), width, height + (BLOCK_SIZE / 3));
+        this.container.setMask(this.maskGraphics.createGeometryMask());
+    }
+
+    setScale(scale: number) {
+        this.container.setScale(scale);
+        this.maskGraphics.setScale(scale);
     }
 
     /**

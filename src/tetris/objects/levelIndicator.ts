@@ -3,7 +3,7 @@ import {getBlockSize} from "../const/const";
 const BLOCK_SIZE = getBlockSize();
 
 export class LevelIndicator extends ObjectBase {
-    private readonly container: Phaser.GameObjects.Container;
+    public container: Phaser.GameObjects.Container;
 
     // UI Elements
     private scoreValueText: Phaser.GameObjects.Text;

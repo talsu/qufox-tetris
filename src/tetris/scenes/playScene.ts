@@ -54,6 +54,10 @@ export class PlayScene extends Phaser.Scene {
     private menuContainer: Phaser.GameObjects.Container;
     private isMenuOpen: boolean = false;
     private isGameEnded: boolean = false;
+
+    // Configurable Scales
+    private readonly MAIN_SCALE = 2;
+    private readonly SIDE_SCALE = 0.85;
     
     // Logical base resolution
     private GAME_WIDTH: number;
@@ -192,8 +196,10 @@ export class PlayScene extends Phaser.Scene {
         // Prevent default browser touch actions (scrolling, zooming) to ensure pointermove fires correctly
         this.game.canvas.style.touchAction = 'none';
 
-        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
             if (!this.isGameRunning || this.isPause || this.isMenuOpen || this.isGameEnded) return;
+
+            if (currentlyOver && currentlyOver.length > 0) return;
 
             this.touchStartX = pointer.worldX;
             this.touchStartY = pointer.worldY;
@@ -214,7 +220,7 @@ export class PlayScene extends Phaser.Scene {
 
              // Horizontal Move
              const deltaX = pointer.worldX - this.lastPointerX;
-             if (Math.abs(deltaX) > BLOCK_SIZE) {
+             if (Math.abs(deltaX) > (BLOCK_SIZE * this.MAIN_SCALE)) {
                  if (deltaX > 0) {
                      this.onInput('right', InputState.PRESS);
                      this.time.delayedCall(50, () => this.onInput('right', InputState.RELEASE));
@@ -227,7 +233,7 @@ export class PlayScene extends Phaser.Scene {
 
              // Vertical Move (Soft Drop)
              const deltaY = pointer.worldY - this.lastPointerY;
-             if (Math.abs(deltaY) > BLOCK_SIZE && !this.isTap) {
+             if (Math.abs(deltaY) > (BLOCK_SIZE * this.MAIN_SCALE) && !this.isTap) {
                 if (deltaY > 0) {
                     this.onInput('softDrop', InputState.PRESS);
                     this.time.delayedCall(50, () => this.onInput('softDrop', InputState.RELEASE)) ;
@@ -248,16 +254,6 @@ export class PlayScene extends Phaser.Scene {
             this.onInput('softDrop', InputState.RELEASE);
 
             if (this.isTap) {
-                // Check Hold Box
-                if (this.holdBox && this.holdBox.container) {
-                    const bounds = this.holdBox.container.getBounds();
-                    if (bounds.contains(pointer.worldX, pointer.worldY)) {
-                        this.onInput('hold', InputState.PRESS);
-                        this.time.delayedCall(100, () => this.onInput('hold', InputState.RELEASE));
-                        return;
-                    }
-                }
-
                 // Check Rotation
                 if (pointer.worldX < this.GAME_WIDTH / 2) {
                     this.onInput('anticlockwise', InputState.PRESS);
@@ -464,20 +460,24 @@ export class PlayScene extends Phaser.Scene {
     startGame() {
         this.isGameRunning = true;
         
-        // Calculate dimensions
-        const playFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
-        const playFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
+        // Calculate dimensions (Unscaled)
+        const rawPlayFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
+        const rawPlayFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
         
+        // Determine Scales
+        const currentMainScale = (this.mode === 'single') ? this.MAIN_SCALE : 1;
+        const currentSideScale = (this.mode === 'single') ? this.SIDE_SCALE : 1;
+
         let p1X, p1Y;
         
         if (this.mode === 'single') {
-            // Center for Single Player
-            p1X = (this.GAME_WIDTH - playFieldWidth) / 2;
-            p1Y = (this.GAME_HEIGHT - playFieldHeight) / 2;
+            // Center for Single Player (Account for Scale)
+            p1X = (this.GAME_WIDTH - (rawPlayFieldWidth * currentMainScale)) / 2;
+            p1Y = (this.GAME_HEIGHT - (rawPlayFieldHeight * currentMainScale)) / 2;
         } else {
-            // P1 (Left side) for Multiplayer
-            p1X = (this.GAME_WIDTH * 0.25) - (playFieldWidth / 2);
-            p1Y = (this.GAME_HEIGHT - playFieldHeight) / 2;
+            // P1 (Left side) for Multiplayer (Default Scale)
+            p1X = (this.GAME_WIDTH * 0.25) - (rawPlayFieldWidth / 2);
+            p1Y = (this.GAME_HEIGHT - rawPlayFieldHeight) / 2;
         }
 
         // --- Layout Constants ---
@@ -487,22 +487,35 @@ export class PlayScene extends Phaser.Scene {
 
         // --- Player 1 Setup ---
         // Hold Queue (Top-Left)
-        const holdX = p1X - HOLD_WIDTH - GAP;
+        // Position: p1X - Gap - (HoldWidth * Scale)
+        const holdX = p1X - GAP - (HOLD_WIDTH * currentSideScale);
         const holdY = p1Y;
         this.holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT);
+        this.holdBox.container.setScale(currentSideScale);
+        
+        const holdZone = this.add.zone(holdX, holdY, HOLD_WIDTH * currentSideScale, HOLD_HEIGHT * currentSideScale).setOrigin(0);
+        holdZone.setInteractive();
+        holdZone.on('pointerdown', () => {
+            if (!this.isGameRunning || this.isPause || this.isMenuOpen || this.isGameEnded) return;
+            this.onInput('hold', InputState.PRESS);
+            this.time.delayedCall(100, () => this.onInput('hold', InputState.RELEASE));
+        });
 
         // Game Info (Left, Below Hold Queue)
         const infoX = holdX;
-        const infoY = holdY + HOLD_HEIGHT + GAP * 0.5;
+        const infoY = holdY + (HOLD_HEIGHT * currentSideScale) + (GAP * 0.5);
         const levelIndicator = new LevelIndicator(this, infoX, infoY);
+        levelIndicator.container.setScale(currentSideScale);
 
         // Next Queue (Top-Right)
-        // Adjust for internal padding in TetrominoBoxQueue (1 block left, 1 block top)
-        const queueX = p1X + playFieldWidth + GAP - BLOCK_SIZE;
-        const queueY = p1Y - BLOCK_SIZE;
+        // Position: p1X + (FieldWidth * Scale) + Gap - (VisualOffset * Scale)
+        const queueX = p1X + (rawPlayFieldWidth * currentMainScale) + GAP - (BLOCK_SIZE * currentSideScale);
+        const queueY = p1Y - (BLOCK_SIZE * currentSideScale);
         const tetrominoQueue = new TetrominoBoxQueue(this, queueX, queueY, 6);
+        tetrominoQueue.container.setScale(currentSideScale);
         
-        this.playField = new PlayField(this, p1X, p1Y, playFieldWidth, playFieldHeight);
+        this.playField = new PlayField(this, p1X, p1Y, rawPlayFieldWidth, rawPlayFieldHeight);
+        this.playField.setScale(currentMainScale);
         
         // Engine setup
         this.engine = new Engine(this.playField, this.holdBox, tetrominoQueue, levelIndicator);
@@ -527,9 +540,9 @@ export class PlayScene extends Phaser.Scene {
 
         // --- Player 2 Setup (Opponent) ---
         if (this.mode === 'multi') {
-            const p2X = (this.GAME_WIDTH * 0.75) - (playFieldWidth / 2);
-            const p2Y = (this.GAME_HEIGHT - playFieldHeight) / 2;
-            this.opponentPlayField = new PlayField(this, p2X, p2Y, playFieldWidth, playFieldHeight);
+            const p2X = (this.GAME_WIDTH * 0.75) - (rawPlayFieldWidth / 2);
+            const p2Y = (this.GAME_HEIGHT - rawPlayFieldHeight) / 2;
+            this.opponentPlayField = new PlayField(this, p2X, p2Y, rawPlayFieldWidth, rawPlayFieldHeight);
             this.add.text(p2X, p2Y - 30, 'Opponent', { fontSize: '20px', color: '#ffffff' });
         }
     }

@@ -63,17 +63,6 @@ describe('2009 Tetris Guideline Compliance', () => {
             expect(onHold).toHaveBeenCalled();
             const heldType = onHold.mock.calls[0][0]; // First arg
             expect(heldType).toBe(TetrominoType.T);
-
-            // Expect active tetromino to be destroyed/null (until callback spawns new one)
-            // In the code: it destroys active, calls emit, then callback spawns new.
-            // Since our mock emit is synchronous (if implemented that way) or we need to simulate the callback.
-            // Wait, PlayField emit logic:
-            /*
-             this.emit('hold', holdType, (releasedType: TetrominoType) => {
-                 this.spawnTetromino(releasedType);
-             });
-             */
-             // We need to implement the callback in our test to simulate the Engine's response.
         });
     });
 
@@ -92,35 +81,11 @@ describe('2009 Tetris Guideline Compliance', () => {
 
         test('I-Piece should kick when blocked', () => {
             const tetromino = new Tetromino(scene, TetrominoType.I);
-            // Move to a position where simple rotation would be blocked
-            // I piece UP:
-            // [ ][ ][ ][ ]
-            // [x][x][x][x] (row 1)
-            // [ ][ ][ ][ ]
-
-            // I piece RIGHT (pivots):
-            // [ ][ ][x][ ]
-            // [ ][ ][x][ ]
-            // [ ][ ][x][ ]
-            // [ ][ ][x][ ]
-
-            // Let's create a blocked scenario.
-            // We can add "blockedPositions" to the tetromino.
 
             // Force move to 5,5
             tetromino['move'](5, 5, 'test');
 
-            // Mock blocked positions.
-            // If we rotate T (UP) to RIGHT, it occupies specific cells.
-            // I piece rotation is complex.
-            // Let's rely on the kick data logic.
-
-            // If we set a blocked position at where the natural rotation would land,
-            // it should try the kick data.
-            // Natural rotation 0->R for I (flat to vertical) usually fails if walls are tight.
-            // But checking specific coordinate kicks is better.
-
-            // Let's mock isValidPosition to fail the first check (offset 0,0) and pass the second (offset -2, 0).
+            // Mock blocked positions logic (via isValidPosition override)
             const originalIsValid = tetromino.isValidPosition.bind(tetromino);
 
             jest.spyOn(tetromino, 'isValidPosition').mockImplementation((rot, col, row) => {
@@ -154,15 +119,10 @@ describe('2009 Tetris Guideline Compliance', () => {
             // Trigger moveDown (autoDrop) which starts lock timer
             playField['startLockTimer']();
 
-            // Verify lock animation started (In a real scenario. In mock, it might finish instantly).
-            // expect(tetromino.isPlayingLockAnimation()).toBe(true);
-
-            // Fast forward 500ms (relevant if mock supports time, otherwise just ensuring state)
+            // Fast forward 500ms
             jest.advanceTimersByTime(500);
 
             // Verify the piece is locked (active is null, inactive list has it)
-            // Note: In our mock, tweens are instantaneous, so this happens immediately.
-            // The assertion confirms that the lock logic (triggered by timer/tween) actually executes.
             expect(playField['activeTetromino']).toBeNull();
             expect(playField['inactiveTetrominos'].length).toBeGreaterThan(0);
          });
@@ -217,9 +177,6 @@ describe('2009 Tetris Guideline Compliance', () => {
         });
 
         test('Single Line Clear', () => {
-            // Simulate lock event
-            // onLock(clearedLineCount, type, droppedRot, lockedRot, movement, kickIndex, dropCounter, tspin)
-
             engine.onLock(
                 1, // 1 line
                 TetrominoType.I,
@@ -230,7 +187,7 @@ describe('2009 Tetris Guideline Compliance', () => {
                 { pointSide: 0, flatSide: 0 }
             );
 
-            expect(engine['score']).toBe(100); // Level 1 Single
+            expect(engine.getScore()).toBe(100); // Level 1 Single
         });
 
         test('Tetris (4 lines)', () => {
@@ -244,33 +201,23 @@ describe('2009 Tetris Guideline Compliance', () => {
                 { pointSide: 0, flatSide: 0 }
             );
 
-            expect(engine['score']).toBe(800); // Level 1 Tetris
+            expect(engine.getScore()).toBe(800); // Level 1 Tetris
         });
 
         test('Back-to-Back Tetris', () => {
              // First Tetris
              engine.onLock(4, TetrominoType.I, RotateType.UP, RotateType.UP, 'autoDrop', 0, {softDrop:0,hardDrop:0,autoDrop:0}, {pointSide:0,flatSide:0});
-             expect(engine['isBackToBackChain']).toBe(true);
-             let score1 = engine['score']; // 800
+             let score1 = engine.getScore(); // 800
 
              // Second Tetris
              engine.onLock(4, TetrominoType.I, RotateType.UP, RotateType.UP, 'autoDrop', 0, {softDrop:0,hardDrop:0,autoDrop:0}, {pointSide:0,flatSide:0});
 
-             let score2 = engine['score'] - score1;
-             // If Level is 2, score is 800 * 1.5 * 2 = 2400. + Combo(100) = 2500.
-             // If Level is 1, score is 800 * 1.5 * 1 = 1200. + Combo(50) = 1250.
-             // Previous run suggested 2500.
+             let score2 = engine.getScore() - score1;
 
-             // Note: Guideline says B2B uses 1.5 multiplier.
-             // In this implementation, Tetris clears 8 lines (weighted) towards level up.
-             // Level 1 requires 5 lines. So First Tetris (8 lines) triggers Level Up to 2.
-
-             // Score Calc (Level 2):
-             // Base: 800 (Tetris)
-             // B2B: 800 * 1.5 = 1200
-             // Level 2: 1200 * 2 = 2400
-             // Combo: 100 (50 * 1 * 2)
-             // Total: 2500
+             // Level 2 (triggered by first tetris)
+             // Base 800 * B2B 1.5 * Level 2 = 2400
+             // Combo 1 (50*1*2) = 100
+             // Total 2500
              expect(score2).toBe(2500);
         });
 
@@ -286,7 +233,7 @@ describe('2009 Tetris Guideline Compliance', () => {
                 { pointSide: 3, flatSide: 0 } // 3 corners
             );
 
-            expect(engine['score']).toBe(1200); // Level 1 T-Spin Double
+            expect(engine.getScore()).toBe(1200); // Level 1 T-Spin Double
         });
     });
 });

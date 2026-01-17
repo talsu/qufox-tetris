@@ -2,7 +2,8 @@ import {PlayField} from "./objects/playField";
 import {TetrominoBox} from "./objects/tetrominoBox";
 import {TetrominoBoxQueue} from "./objects/tetrominoBoxQueue";
 import {LevelIndicator} from "./objects/levelIndicator";
-import {InputState, TetrominoType, RotateType, CONST} from "./const/const";
+import {InputState, TetrominoType, RotateType} from "./const/const";
+import {ScoreSystem} from "./logic/scoreSystem";
 
 /**
  * Tetris game engine.
@@ -12,14 +13,8 @@ export class Engine {
     private holdBox: TetrominoBox;
     private queue: TetrominoBoxQueue;
     private levelIndicator: LevelIndicator;
-    private isBackToBackChain: boolean = false;
+    private scoreSystem: ScoreSystem;
 
-    private level: number;
-    private score: number;
-    private clearedLines: number;
-    private nextLevelRequireClearedLines: number;
-
-    private comboCount: number = -1;
     private onAttack: (count: number) => void;
 
     constructor(playField: PlayField, holdBox: TetrominoBox, queue: TetrominoBoxQueue, levelIndicator: LevelIndicator) {
@@ -27,6 +22,8 @@ export class Engine {
         this.holdBox = holdBox;
         this.queue = queue;
         this.levelIndicator = levelIndicator;
+        this.scoreSystem = new ScoreSystem();
+
         this.playField.on('start', this.start.bind(this));
         this.playField.on('gameOver', this.gameOver.bind(this));
         this.playField.on('generateRandomType', this.onPlayFieldGenerateType.bind(this));
@@ -43,10 +40,7 @@ export class Engine {
      * Clear - reset stats
      */
     clear() {
-        this.level = 1;
-        this.nextLevelRequireClearedLines = this.level * 5;
-        this.score = 0;
-        this.clearedLines = 0;
+        this.scoreSystem.clear();
     }
 
     /**
@@ -62,14 +56,14 @@ export class Engine {
         // Clear Play field.
         this.playField.clear();
         // Set auto drop delay.
-        this.playField.autoDropDelay = this.getAutoDropDelay();
+        this.playField.autoDropDelay = this.scoreSystem.getAutoDropDelay();
         // Clear level indicator.
         this.levelIndicator.clear();
 
         // Set level indicator.
-        this.levelIndicator.setLevel(this.level);
-        this.levelIndicator.setLine(0, this.nextLevelRequireClearedLines);
-        this.levelIndicator.setScore(this.score);
+        this.levelIndicator.setLevel(this.scoreSystem.getLevel());
+        this.levelIndicator.setLine(0, this.scoreSystem.getNextLevelRequireClearedLines());
+        this.levelIndicator.setScore(this.scoreSystem.getScore());
 
         // Spawn tetromino.
         this.playField.spawnTetromino();
@@ -115,128 +109,40 @@ export class Engine {
         dropCounter: { softDrop: number, hardDrop: number, autoDrop: number },
         tSpinCornerOccupiedCount: { pointSide: number, flatSide: number }
     ) {
-        const { pointSide, flatSide } = tSpinCornerOccupiedCount;
+        const result = this.scoreSystem.onLock(
+            clearedLineCount,
+            tetrominoType,
+            droppedRotateType,
+            lockedRotateType,
+            movement,
+            kickDataIndex,
+            dropCounter,
+            tSpinCornerOccupiedCount
+        );
 
-        // Is T-Spin
-        const isTSpin =
-            tetrominoType == TetrominoType.T &&
-            droppedRotateType != lockedRotateType &&
-            movement == 'rotate' &&
-            pointSide + flatSide > 2;
-
-        // Is T-Spin mini
-        const isTSpinMini =
-            isTSpin &&
-            pointSide < 2 &&
-            kickDataIndex < 3;
-
-        /**
-         * Back to Back
-         * t-Spins and Mini t-Spins that do not clear any lines do not receive the Back-to-Back Bonus;
-         * instead they are scored as normal. they also cannot start a Back-to-Back sequence,
-         * however, they do not break an existing Back-to-Back sequence and so are included in the Back-to-Back description.
-         */
-        let isBackToBackBonus = false;
-        if (this.isBackToBackChain) { // back to back chain is running.
-            // if T-Spin or Tetris, keep up back to back chain.
-            this.isBackToBackChain = Boolean(isTSpin || clearedLineCount == 4 || !clearedLineCount);
-            // if back to back chain and cleared line, get back to back bonus.
-            isBackToBackBonus = this.isBackToBackChain && clearedLineCount > 0;
-        } else { // back to back chain is no running.
-            // is Start chain ?
-            // if T-Spin with clear line or Tetris, start chain.
-            this.isBackToBackChain = Boolean((isTSpin && clearedLineCount) || clearedLineCount == 4);
+        if (result.scoreAdded > 0 && result.actionName) {
+            console.log(`${result.actionName} - ${result.scoreAdded}`);
         }
-
-        // Combine action segment.
-        const actionNameArray: string[] = [];
-        if (isTSpin) actionNameArray.push('T-Spin');
-        if (isTSpinMini) actionNameArray.push('Mini');
-        if (clearedLineCount) actionNameArray.push(['Single', 'Double', 'Triple', 'Tetris'][clearedLineCount - 1]);
-
-        // Create action name and get base score.
-        let actionName: string | null = null;
-        let scoreBase = 0;
-        if (actionNameArray.length) {
-            actionName = actionNameArray.join(' ');
-            scoreBase = CONST.SCORE[actionName] || 0;
-            if (!scoreBase) console.error(`Unexpected action - ${actionName}`);
-        }
-
-        // Add action score.
-        if (scoreBase) {
-            const score = scoreBase * (isBackToBackBonus ? 1.5 : 1) * this.level;
-            this.score += score;
-            const actionFullName = `${isBackToBackBonus ? 'Back to Back ' : ''}${actionName}`;
-            this.levelIndicator.setAction(actionFullName);
-            console.log(`${actionFullName} - ${score} (${scoreBase}${isBackToBackBonus ? ' x 1.5' : ''} x ${this.level})`);
-        }
-
-        // Add combo score.
-        if (clearedLineCount) this.comboCount++;
-        else this.comboCount = -1;
-
-        this.levelIndicator.setCombo(this.comboCount);
-
-        if (this.comboCount > 0) {
-            const comboScore = 50 * this.comboCount * this.level;
-            this.score += comboScore;
-            console.log(`Combo ${this.comboCount} - ${comboScore} (50 x ${this.comboCount} x ${this.level})`);
-        }
-
-        // Add drop score.
-        this.score += dropCounter.softDrop; // Soft drop is 1 point per cell.
-        this.score += dropCounter.hardDrop * 2; // Hard drop is 2 point per cell.
-
-        // Calculate level.
-        if (actionName) {
-            let lineCount = CONST.LINE_COUNT[actionName];
-            if (isBackToBackBonus) lineCount = Math.ceil(lineCount * 1.5);
-            this.addLineCount(lineCount);
+        if (result.combo > 0) {
+            const comboScore = 50 * result.combo * result.level; // Logic duplication for logging?
+            // Better rely on ScoreSystem to return combo score details if we want detailed logs,
+            // but for now simple log is fine.
+             console.log(`Combo ${result.combo}`);
         }
 
         // Update indicator.
-        this.levelIndicator.setLevel(this.level);
-        this.levelIndicator.setLine(this.clearedLines, this.nextLevelRequireClearedLines);
-        this.levelIndicator.setScore(this.score);
+        if (result.actionName) this.levelIndicator.setAction(result.actionName);
+        this.levelIndicator.setCombo(result.combo);
+        
+        this.levelIndicator.setLevel(result.level);
+        this.levelIndicator.setLine(this.scoreSystem.getClearedLines(), this.scoreSystem.getNextLevelRequireClearedLines());
+        this.levelIndicator.setScore(this.scoreSystem.getScore());
+
+        // Update drop delay
+        this.playField.autoDropDelay = this.scoreSystem.getAutoDropDelay();
 
         // Calculate Garbage (Multiplayer)
-        let garbage = 0;
-        
-        // Basic Line Clears & T-Spins
-        if (isTSpin) {
-            if (clearedLineCount === 1) garbage = 2; // T-Spin Single
-            else if (clearedLineCount === 2) garbage = 4; // T-Spin Double
-            else if (clearedLineCount === 3) garbage = 6; // T-Spin Triple
-        } else if (isTSpinMini) {
-             if (clearedLineCount === 2) garbage = 1; // Mini T-Spin Double
-        } else {
-            if (clearedLineCount === 2) garbage = 1; // Double
-            else if (clearedLineCount === 3) garbage = 2; // Triple
-            else if (clearedLineCount === 4) garbage = 4; // Tetris
-        }
-
-        // Back-to-Back
-        if (isBackToBackBonus) {
-            garbage += 1;
-        }
-
-        // Combo
-        // Ren (Combo) table: 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4... (varies)
-        // Guideline 2009:
-        // 0-1: 0
-        // 2-3: 1
-        // 4-5: 2
-        // 6-7: 3
-        // 8-9: 4
-        // 10+: 5
-        if (this.comboCount >= 2) {
-            if (this.comboCount < 4) garbage += 1;
-            else if (this.comboCount < 6) garbage += 2;
-            else if (this.comboCount < 8) garbage += 3;
-            else if (this.comboCount < 10) garbage += 4;
-            else garbage += 5;
-        }
+        let garbage = result.garbage;
 
         // Perfect Clear
         if (this.playField.getInactiveBlocks().length === 0) {
@@ -250,34 +156,10 @@ export class Engine {
     }
 
     /**
-     * Add cleared line count and level up.
-     */
-    addLineCount(count: number) {
-        this.clearedLines += count;
-        if (this.clearedLines >= this.nextLevelRequireClearedLines) {
-            while (true) {
-                this.level++;
-                this.nextLevelRequireClearedLines += this.level * 5;
-                if (this.clearedLines < this.nextLevelRequireClearedLines) break;
-            }
-            this.levelIndicator.setLevel(this.level);
-            this.playField.autoDropDelay = this.getAutoDropDelay();
-        }
-    }
-
-    /**
-     * Get auto drop speed. (milliseconds per line)
-     * Calculate with level.
-     */
-    getAutoDropDelay() {
-        return Math.pow((0.8 - ((this.level - 1) * 0.007)), (this.level - 1)) * 1000;
-    }
-
-    /**
      * Get current score.
      */
     getScore(): number {
-        return this.score;
+        return this.scoreSystem.getScore();
     }
 
     /**

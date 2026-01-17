@@ -235,6 +235,136 @@ export class PlayField extends ObjectBase {
     }
 
     /**
+     * Insert garbage lines from bottom.
+     * @param {number} count - Garbage line count.
+     */
+    insertGarbage(count: number) {
+        if (count <= 0) return;
+
+        // Move all blocks up.
+        this.inactiveTetrominos.forEach(tetromino => {
+            // Check if forceMoveUp exists (it should now)
+            if (tetromino['forceMoveUp']) {
+                tetromino.forceMoveUp(count);
+            } else {
+                 // Fallback or error
+                 tetromino.moveUp(); // Incorrect but fallback
+            }
+        });
+
+        // Also move active tetromino up to prevent collision logic weirdness
+        if (this.activeTetromino) {
+             this.activeTetromino.row -= count;
+             this.activeTetromino.container.y -= (count * BLOCK_SIZE);
+        }
+
+        // Generate garbage lines (Broken Lines per 2009 Guideline)
+        // A broken line is a row with one empty cell.
+        // The column of the hole is usually determined by the attack.
+        // For this implementation, we pick one random hole for the batch.
+        
+        // Find previous garbage hole index to avoid same column (Guideline: hole should change)
+        let previousHoleIndex = -1;
+        for (let i = this.inactiveTetrominos.length - 1; i >= 0; i--) {
+            const t = this.inactiveTetrominos[i];
+            if (t.type === TetrominoType.GARBAGE) {
+                const blocks = t.getBlocks();
+                const cols = new Set(blocks.map(b => b[0]));
+                for (let c = 0; c < CONST.PLAY_FIELD.COL_COUNT; c++) {
+                    if (!cols.has(c)) {
+                        previousHoleIndex = c;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        let holeIndex;
+        if (previousHoleIndex !== -1) {
+            // Ensure different hole
+            const shift = Phaser.Math.Between(1, CONST.PLAY_FIELD.COL_COUNT - 1);
+            holeIndex = (previousHoleIndex + shift) % CONST.PLAY_FIELD.COL_COUNT;
+        } else {
+            holeIndex = Phaser.Math.Between(0, CONST.PLAY_FIELD.COL_COUNT - 1);
+        }
+        
+        for (let i = 0; i < count; i++) {
+            const blocks: any[] = [];
+            // Fill bottom-most rows. 
+            const targetRow = CONST.PLAY_FIELD.ROW_COUNT - 1 - i;
+            
+            for (let col = 0; col < CONST.PLAY_FIELD.COL_COUNT; col++) {
+                if (col !== holeIndex) {
+                    // Push block with explicit GARBAGE type
+                    blocks.push({ col: col, row: targetRow, type: TetrominoType.GARBAGE });
+                }
+            }
+            
+            // Create a garbage tetromino container
+            // We use Type I as a placeholder for the class constructor, but setInactiveBlocks overwrites visuals.
+            // Initialize at (0, 0) to prevent offset.
+            let garbageTetromino = new Tetromino(this.scene, TetrominoType.I, [], 0, 0);
+            garbageTetromino.type = TetrominoType.GARBAGE; // Explicitly set type property
+            garbageTetromino.setInactiveBlocks(blocks);
+            
+            this.inactiveTetrominos.push(garbageTetromino);
+            this.container.add(garbageTetromino.container);
+        }
+
+        // Update active tetromino's blocked positions map and ghost block
+        if (this.activeTetromino) {
+            this.activeTetromino.setBlockedPositions(this.getInactiveBlocks());
+            this.activeTetromino.drawGhostBlocks();
+        }
+    }
+
+    /**
+     * Serialize field state.
+     */
+    serialize(): any[] {
+        const result = [];
+
+        // Collect inactive blocks
+        this.inactiveTetrominos.forEach(t => {
+            const blocks = t.getBlocks();
+            blocks.forEach(([col, row]) => {
+                result.push({ col, row, type: t.type });
+            });
+        });
+
+        // Collect active block
+        if (this.activeTetromino) {
+            const blocks = this.activeTetromino.getBlocks();
+            blocks.forEach(([col, row]) => {
+                result.push({ col, row, type: this.activeTetromino.type });
+            });
+        }
+
+        return result;
+    }
+
+    /**
+     * Deserialize field state (for opponent view).
+     */
+    deserialize(blocks: any[]) {
+        this.clear(); // Clears all tetrominos
+        
+        if (!blocks || blocks.length === 0) return;
+        
+        // Create a single dummy tetromino to display these blocks.
+        // Initialize at (0, 0) to match absolute coordinates from server.
+        let dummy = new Tetromino(this.scene, TetrominoType.I, [], 0, 0);
+        dummy.setInactiveBlocks(blocks);
+        this.inactiveTetrominos.push(dummy);
+        this.container.add(dummy.container);
+    }
+
+    /**
+     * Lock tetromino.
+     */
+
+    /**
      * Lock tetromino.
      */
     lock() {
@@ -337,6 +467,14 @@ export class PlayField extends ObjectBase {
         if (this.activeTetromino && this.activeTetromino.isPlayingLockAnimation()) {
             this.activeTetromino.stopLockAnimation();
         }
+    }
+
+    /**
+     * Stop all timers.
+     */
+    stop() {
+        this.stopLockTimer();
+        this.stopAutoDropTimer();
     }
 
     /**

@@ -5,16 +5,23 @@
  */
 
 import "phaser";
-import {MainScene} from "./scenes/mainScene";
+import {PlayScene} from "./scenes/playScene";
+import {MenuScene} from "./scenes/menuScene";
+import {LobbyScene} from "./scenes/lobbyScene";
 import {CONST, getBlockSize} from "./const/const";
 
 // main game configuration
 const config: Phaser.Types.Core.GameConfig = {
-    width: getBlockSize() * CONST.SCREEN.COL_COUNT,
-    height: getBlockSize() * CONST.SCREEN.ROW_COUNT,
+    width: '100%',
+    height: '100%',
     type: Phaser.AUTO,
+    scale: {
+        mode: Phaser.Scale.RESIZE,
+        parent: "game",
+        autoCenter: Phaser.Scale.NO_CENTER
+    },
     parent: "game",
-    scene: MainScene,
+    scene: [MenuScene, LobbyScene, PlayScene],
     physics: {
         default: "arcade",
         arcade: {

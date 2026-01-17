@@ -91,11 +91,60 @@ export class Tetromino extends ObjectBase {
     }
 
     /**
+     * Set inactive blocks directly.
+     * @param {any[]} blocks - Block positions with type info.
+     */
+    setInactiveBlocks(blocks: any[]) {
+        // We don't store inactiveBlocks as ColRow[] anymore in this context, 
+        // or we just map back to ColRow[] for internal logic if needed?
+        // Actually, for dummy tetromino, we just need to render.
+        // But for collision (not needed for dummy), we might need inactiveBlocks.
+        // Let's populate inactiveBlocks with just coords for safety.
+        this.inactiveBlocks = blocks.map(b => [b.col, b.row]);
+        
+        // Clear existing images
+        this.blockImages.removeAll(true);
+
+        // Remove ghost blocks and graphics (Fix for lingering initial ghost artifact)
+        if (this.ghostBlockGraphics) {
+            this.ghostBlockGraphics.clear();
+            this.ghostBlockGraphics.destroy();
+        }
+        if (this.ghostBlockImages) {
+            this.ghostBlockImages.removeAll(true);
+            this.ghostBlockImages.destroy();
+        }
+        
+        // Re-create images with correct frames
+        blocks.forEach(block => {
+            // Default to frame 7 (Gray/Garbage)
+            let frame = 7;
+            
+            // If type exists and has a mapped frame, use it.
+            if (block.type && CONST.TETROMINO.SPRITE_IMAGE_FRAME[block.type] !== undefined) {
+                frame = CONST.TETROMINO.SPRITE_IMAGE_FRAME[block.type];
+            }
+
+            const blockImage = this.scene.add.image(
+                block.col * BLOCK_SIZE,
+                block.row * BLOCK_SIZE,
+                'blockSheet', frame);
+            blockImage.setOrigin(0);
+            if (BLOCK_SIZE != CONST.SCREEN.BLOCK_IMAGE_SIZE) blockImage.setScale(BLOCK_SIZE / CONST.SCREEN.BLOCK_IMAGE_SIZE);
+            this.blockImages.add(blockImage);
+        });
+    }
+
+    /**
+     * Set blocked positions.
+     * @param {ColRow[]} blockedPositions - Blocked positions.
+     */
+    setBlockedPositions(blockedPositions: ColRow[]) {
+        this.blockedPositions = blockedPositions;
+    }
+
+    /**
      * Move tetromino.
-     * @param {number} col - Col position.
-     * @param {number} row - Row position.
-     * @param {string} movement - Action name for save last movement.
-     * @returns {boolean} - Is move success.
      */
     private move(col: number, row: number, movement: string): boolean {
         // Check new position is valid and if it's invalid return false.
@@ -148,6 +197,16 @@ export class Tetromino extends ObjectBase {
      */
     moveUp(): boolean {
         return this.move(this.col, this.row - 1, 'up');
+    }
+
+    /**
+     * Force move tetromino up (no validation).
+     * @param {number} amount - Amount to move up.
+     */
+    forceMoveUp(amount: number) {
+        this.row -= amount;
+        this.container.y = this.row * BLOCK_SIZE;
+        this.moveBlockImages();
     }
 
     /**

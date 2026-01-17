@@ -20,6 +20,7 @@ export class Engine {
     private nextLevelRequireClearedLines: number;
 
     private comboCount: number = -1;
+    private onAttack: (count: number) => void;
 
     constructor(playField: PlayField, holdBox: TetrominoBox, queue: TetrominoBoxQueue, levelIndicator: LevelIndicator) {
         this.playField = playField;
@@ -32,6 +33,10 @@ export class Engine {
         this.playField.on('hold', this.onPlayFieldHold.bind(this));
         this.playField.on('lock', this.onLock.bind(this));
         this.clear();
+    }
+
+    public setAttackHandler(handler: (count: number) => void) {
+        this.onAttack = handler;
     }
 
     /**
@@ -194,11 +199,58 @@ export class Engine {
         this.levelIndicator.setLevel(this.level);
         this.levelIndicator.setLine(this.clearedLines, this.nextLevelRequireClearedLines);
         this.levelIndicator.setScore(this.score);
+
+        // Calculate Garbage (Multiplayer)
+        let garbage = 0;
+        
+        // Basic Line Clears & T-Spins
+        if (isTSpin) {
+            if (clearedLineCount === 1) garbage = 2; // T-Spin Single
+            else if (clearedLineCount === 2) garbage = 4; // T-Spin Double
+            else if (clearedLineCount === 3) garbage = 6; // T-Spin Triple
+        } else if (isTSpinMini) {
+             if (clearedLineCount === 2) garbage = 1; // Mini T-Spin Double
+        } else {
+            if (clearedLineCount === 2) garbage = 1; // Double
+            else if (clearedLineCount === 3) garbage = 2; // Triple
+            else if (clearedLineCount === 4) garbage = 4; // Tetris
+        }
+
+        // Back-to-Back
+        if (isBackToBackBonus) {
+            garbage += 1;
+        }
+
+        // Combo
+        // Ren (Combo) table: 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4... (varies)
+        // Guideline 2009:
+        // 0-1: 0
+        // 2-3: 1
+        // 4-5: 2
+        // 6-7: 3
+        // 8-9: 4
+        // 10+: 5
+        if (this.comboCount >= 2) {
+            if (this.comboCount < 4) garbage += 1;
+            else if (this.comboCount < 6) garbage += 2;
+            else if (this.comboCount < 8) garbage += 3;
+            else if (this.comboCount < 10) garbage += 4;
+            else garbage += 5;
+        }
+
+        // Perfect Clear
+        if (this.playField.getInactiveBlocks().length === 0) {
+            garbage += 10;
+        }
+
+        // Send Garbage
+        if (garbage > 0 && this.onAttack) {
+            this.onAttack(garbage);
+        }
     }
 
     /**
      * Add cleared line count and level up.
-     * @param {number} count - Cleared line count.
      */
     addLineCount(count: number) {
         this.clearedLines += count;
@@ -228,7 +280,7 @@ export class Engine {
         console.log(`Game Over - ${gameOverType}`);
 
         // TODO: Show game over screen and score.
-        this.start();
+        // this.start();
     }
 
     /**

@@ -1,4 +1,4 @@
-export enum TetrominoType { I = "I", J = "J", L = "L", O = "O", S = "S", T = "T", Z = "Z" }
+export enum TetrominoType { I = "I", J = "J", L = "L", O = "O", S = "S", T = "T", Z = "Z", GARBAGE = "GARBAGE" }
 
 export enum RotateType { UP = "0", LEFT = "L", DOWN = "2", RIGHT = "R" }
 
@@ -57,15 +57,6 @@ export let CONST = {
             TetrominoType.T,
             TetrominoType.Z
         ],
-        IMAGES: {
-            I: 'cyan-block',
-            J: 'blue-block',
-            L: 'orange-block',
-            O: 'yellow-block',
-            S: 'green-block',
-            T: 'purple-block',
-            Z: 'red-block'
-        },
         SPRITE_IMAGE_FRAME: {
             I: 6,
             J: 2,
@@ -173,8 +164,5 @@ export let CONST = {
 };
 
 export const getBlockSize = () => {
-    return Math.min(
-        window.innerWidth / CONST.SCREEN.COL_COUNT,
-        window.innerHeight / CONST.SCREEN.ROW_COUNT
-    );
+    return 32; // Fixed base size, scaling handled by Camera
 };

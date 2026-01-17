@@ -241,6 +241,9 @@ export class PlayField extends ObjectBase {
      * @param {number[]} rows - Rows to clear.
      */
     clearRows(rows: number[]) {
+        // Sort rows top-down (asc) to ensure shifting doesn't mess up subsequent row indices
+        rows.sort((a, b) => a - b);
+
         // call clear line method each tetromino.
         rows.forEach(row => {
             const emptyTetrominos = this.inactiveTetrominos.filter(tetromino => tetromino.clearLine(row));

@@ -57,15 +57,6 @@ export let CONST = {
             TetrominoType.T,
             TetrominoType.Z
         ],
-        IMAGES: {
-            I: 'cyan-block',
-            J: 'blue-block',
-            L: 'orange-block',
-            O: 'yellow-block',
-            S: 'green-block',
-            T: 'purple-block',
-            Z: 'red-block'
-        },
         SPRITE_IMAGE_FRAME: {
             I: 6,
             J: 2,

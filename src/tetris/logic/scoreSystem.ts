@@ -19,6 +19,14 @@ export class ScoreSystem {
     private comboCount: number = -1;
     private isBackToBackChain: boolean = false;
 
+    // New stats
+    private startTime: number = 0;
+    private totalLinesCleared: number = 0;
+    private tetrisCount: number = 0;
+    private tSpinCount: number = 0;
+    private maxCombo: number = 0;
+    private totalPiecesLocked: number = 0;
+
     constructor() {
         this.clear();
     }
@@ -30,6 +38,18 @@ export class ScoreSystem {
         this.nextLevelRequireClearedLines = 5;
         this.comboCount = -1;
         this.isBackToBackChain = false;
+
+        // Reset new stats
+        this.startTime = Date.now();
+        this.totalLinesCleared = 0;
+        this.tetrisCount = 0;
+        this.tSpinCount = 0;
+        this.maxCombo = 0;
+        this.totalPiecesLocked = 0;
+    }
+
+    start() {
+        this.startTime = Date.now();
     }
 
     getLevel() {
@@ -65,6 +85,9 @@ export class ScoreSystem {
         dropCounter: { softDrop: number, hardDrop: number, autoDrop: number },
         tSpinCornerOccupiedCount: { pointSide: number, flatSide: number }
     ): LockResult {
+        this.totalPiecesLocked++;
+        this.totalLinesCleared += clearedLineCount;
+
         const { pointSide, flatSide } = tSpinCornerOccupiedCount;
 
         // Is T-Spin
@@ -73,6 +96,9 @@ export class ScoreSystem {
             droppedRotateType != lockedRotateType &&
             movement == 'rotate' &&
             pointSide + flatSide > 2;
+
+        if (isTSpin) this.tSpinCount++;
+        if (clearedLineCount === 4) this.tetrisCount++;
 
         // Is T-Spin mini
         const isTSpinMini =
@@ -109,6 +135,10 @@ export class ScoreSystem {
         // Combo
         if (clearedLineCount) this.comboCount++;
         else this.comboCount = -1;
+
+        if (this.comboCount > this.maxCombo) {
+            this.maxCombo = this.comboCount;
+        }
 
         if (this.comboCount > 0) {
             const comboScore = 50 * this.comboCount * this.level;
@@ -177,5 +207,31 @@ export class ScoreSystem {
 
     getAutoDropDelay() {
         return Math.pow((0.8 - ((this.level - 1) * 0.007)), (this.level - 1)) * 1000;
+    }
+
+    getStats(gameTime: number) {
+        // Format Time: MM:SS.ms
+        const minutes = Math.floor(gameTime / 60000);
+        const seconds = Math.floor((gameTime % 60000) / 1000);
+        const ms = Math.floor((gameTime % 1000) / 10); // Display 2 digits (centiseconds)
+
+        const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+
+        const minutesFloat = gameTime / 60000;
+        const tpm = minutesFloat > 0 ? Math.floor(this.totalPiecesLocked / minutesFloat) : 0;
+        const lpm = minutesFloat > 0 ? Math.floor(this.totalLinesCleared / minutesFloat) : 0;
+
+        return {
+            score: this.score,
+            level: this.level,
+            lines: this.totalLinesCleared,
+            time: timeStr,
+            goal: this.nextLevelRequireClearedLines - this.clearedLines,
+            tetrises: this.tetrisCount,
+            tspins: this.tSpinCount,
+            combos: this.maxCombo,
+            tpm: tpm,
+            lpm: lpm
+        };
     }
 }

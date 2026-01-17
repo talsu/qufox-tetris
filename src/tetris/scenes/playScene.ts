@@ -531,6 +531,11 @@ export class PlayScene extends Phaser.Scene {
 
         if (!this.isGameRunning || this.isPause) return;
 
+        // Update Engine (Score, Time, etc)
+        if (this.engine) {
+            this.engine.update(time, delta);
+        }
+
         // Charge DAS with key pressed state.
         this.chargeDAS("left", this.keys.LEFT.isDown, delta);
         this.chargeDAS("right", this.keys.RIGHT.isDown, delta);

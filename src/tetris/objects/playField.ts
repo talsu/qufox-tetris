@@ -515,7 +515,15 @@ export class PlayField extends ObjectBase {
 
         // Draw trail
         if (distance > 0) {
+            // Only draw trail for the top-most block in each column
+            const trails = new Map<number, number>(); // col -> minRow
             blocks.forEach(([col, row]) => {
+                if (!trails.has(col) || row < trails.get(col)) {
+                    trails.set(col, row);
+                }
+            });
+
+            trails.forEach((row, col) => {
                 const x = col * BLOCK_SIZE;
                 const y = (row - distance) * BLOCK_SIZE;
                 const width = BLOCK_SIZE;

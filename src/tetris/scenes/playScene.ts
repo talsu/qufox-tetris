@@ -367,10 +367,27 @@ export class PlayScene extends Phaser.Scene {
             p1Y = (this.GAME_HEIGHT - playFieldHeight) / 2;
         }
 
+        // --- Layout Constants ---
+        const GAP = BLOCK_SIZE;
+        const HOLD_WIDTH = BLOCK_SIZE * 6;
+        const HOLD_HEIGHT = BLOCK_SIZE * 4;
+
         // --- Player 1 Setup ---
-        const holdBox = new TetrominoBox(this, BLOCK_SIZE, BLOCK_SIZE, p1X - (BLOCK_SIZE * 5), p1Y); // Adjust pos
-        const levelIndicator = new LevelIndicator(this, BLOCK_SIZE, p1X - (BLOCK_SIZE * 5)); // Adjust pos
-        const tetrominoQueue = new TetrominoBoxQueue(this, p1X + playFieldWidth + BLOCK_SIZE, p1Y, 6);
+        // Hold Queue (Top-Left)
+        const holdX = p1X - HOLD_WIDTH - GAP;
+        const holdY = p1Y;
+        const holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT);
+
+        // Game Info (Left, Below Hold Queue)
+        const infoX = holdX;
+        const infoY = holdY + HOLD_HEIGHT + GAP;
+        const levelIndicator = new LevelIndicator(this, infoX, infoY);
+
+        // Next Queue (Top-Right)
+        // Adjust for internal padding in TetrominoBoxQueue (1 block left, 1 block top)
+        const queueX = p1X + playFieldWidth + GAP - BLOCK_SIZE;
+        const queueY = p1Y - BLOCK_SIZE;
+        const tetrominoQueue = new TetrominoBoxQueue(this, queueX, queueY, 6);
         
         this.playField = new PlayField(this, p1X, p1Y, playFieldWidth, playFieldHeight);
         

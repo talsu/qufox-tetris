@@ -35,7 +35,9 @@
     "dev": "webpack serve --mode development",
     "start": "webpack serve --mode production",
     "dev-build": "webpack --mode development",
-    "build": "webpack --mode production"
+    "build": "webpack --mode production",
+    "test": "jest",
+    "server": "node server/index.js"
   },
   "repository": {
     "type": "git",

@@ -286,14 +286,35 @@ export class Tetromino extends ObjectBase {
      * @param {number} row - Row to clear.
      */
     clearLine(row: number): boolean {
-        // remove row blocks..
-        this.inactiveBlocks
-            .filter(colRow => row == (this.row + colRow[1]))
-            .forEach((colRow) => this.inactiveBlocks.splice(this.inactiveBlocks.indexOf(colRow), 1));
-        // pull down upper blocks.
-        this.inactiveBlocks
-            .filter(colRow => row > (this.row + colRow[1]))
-            .forEach(colRow => colRow[1] = colRow[1] + 1);
+        // Find indices to remove (backwards to be safe for array mutation if we were splicing in place,
+        // but here we need to sync with blockImages)
+        const indicesToRemove = [];
+        for (let i = 0; i < this.inactiveBlocks.length; i++) {
+            const colRow = this.inactiveBlocks[i];
+            if (row === (this.row + colRow[1])) {
+                indicesToRemove.push(i);
+            }
+        }
+
+        // Remove from both arrays in reverse order to maintain indices
+        indicesToRemove.reverse().forEach(index => {
+            // Remove data
+            this.inactiveBlocks.splice(index, 1);
+
+            // Remove image
+            const image = this.blockImages.list[index];
+            if (image) {
+                this.blockImages.remove(image); // Ensure removal from list
+                image.destroy(); // Destroy Phaser object
+            }
+        });
+
+        // Pull down upper blocks.
+        this.inactiveBlocks.forEach(colRow => {
+             if (row > (this.row + colRow[1])) {
+                 colRow[1] += 1;
+             }
+        });
 
         // draw inactive blocks
         this.moveBlockImages();

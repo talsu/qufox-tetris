@@ -274,13 +274,17 @@ export class Engine {
     }
 
     /**
+     * Get current score.
+     */
+    getScore(): number {
+        return this.score;
+    }
+
+    /**
      * Game over. emit from play field, when can not create tetromino anymore.
      */
     gameOver(gameOverType) {
         console.log(`Game Over - ${gameOverType}`);
-
-        // TODO: Show game over screen and score.
-        // this.start();
     }
 
     /**

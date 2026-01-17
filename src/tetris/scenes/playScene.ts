@@ -270,7 +270,7 @@ export class PlayScene extends Phaser.Scene {
         }
     }
 
-    showEndGameMessage(mainText: string, color: string) {
+    showEndGameMessage(mainText: string, color: string, score?: number) {
         this.isGameRunning = false;
         this.isGameEnded = true;
         if (this.playField) {
@@ -280,19 +280,60 @@ export class PlayScene extends Phaser.Scene {
         const centerX = this.GAME_WIDTH / 2;
         const centerY = this.GAME_HEIGHT / 2;
 
-        this.add.text(centerX, centerY, mainText, {
+        // Container for Game Over UI
+        const gameOverContainer = this.add.container(0, 0);
+        gameOverContainer.setDepth(2000); // Ensure it's on top
+
+        // Dimmed background
+        const dim = this.add.rectangle(centerX, centerY, this.GAME_WIDTH, this.GAME_HEIGHT, 0x000000, 0.7);
+        dim.setInteractive(); // Block clicks below
+
+        // Panel
+        const panel = this.add.rectangle(centerX, centerY, 600, 500, 0x333333).setStrokeStyle(4, 0xffffff);
+
+        // Main Text
+        const titleText = this.add.text(centerX, centerY - 150, mainText, {
             fontSize: '64px',
             color: color,
             stroke: '#000000',
             strokeThickness: 6
         }).setOrigin(0.5);
 
-        this.add.text(centerX, centerY + 80, 'Press SPACE to Exit, ENTER to Restart', {
-            fontSize: '32px',
-            color: '#ffffff',
-            stroke: '#000000',
-            strokeThickness: 4
-        }).setOrigin(0.5);
+        // Score
+        let scoreTextObj;
+        if (score !== undefined) {
+            scoreTextObj = this.add.text(centerX, centerY - 50, `SCORE: ${score}`, {
+                fontSize: '48px',
+                color: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 4
+            }).setOrigin(0.5);
+        }
+
+        // Restart Button
+        const restartBtn = this.add.text(centerX, centerY + 50, "RESTART (ENTER)", { fontSize: '36px', color: '#fff' }).setOrigin(0.5).setInteractive();
+        restartBtn.on('pointerdown', () => {
+             if (this.mode === 'single') {
+                 this.scene.restart({ mode: 'single' });
+             } else if (this.mode === 'multi' && this.socket) {
+                 this.socket.emit('request_restart', { roomId: this.roomId });
+             }
+        });
+        restartBtn.on('pointerover', () => restartBtn.setStyle({ color: '#ff0' }));
+        restartBtn.on('pointerout', () => restartBtn.setStyle({ color: '#fff' }));
+
+        // Exit Button
+        const exitBtn = this.add.text(centerX, centerY + 130, "EXIT (SPACE)", { fontSize: '36px', color: '#f00' }).setOrigin(0.5).setInteractive();
+        exitBtn.on('pointerdown', () => {
+            this.exitGame();
+        });
+        exitBtn.on('pointerover', () => exitBtn.setStyle({ color: '#ff8888' }));
+        exitBtn.on('pointerout', () => exitBtn.setStyle({ color: '#f00' }));
+
+        const elements = [dim, panel, titleText, restartBtn, exitBtn];
+        if (scoreTextObj) elements.push(scoreTextObj);
+
+        gameOverContainer.add(elements);
     }
 
     startGame() {
@@ -336,7 +377,8 @@ export class PlayScene extends Phaser.Scene {
             if (this.mode === 'multi' && this.socket) {
                 this.socket.emit('game_over', { roomId: this.roomId });
             }
-            this.showEndGameMessage('GAME OVER', '#ff0000');
+            const score = this.engine ? this.engine.getScore() : 0;
+            this.showEndGameMessage('GAME OVER', '#ff0000', score);
         });
 
         this.engine.start();

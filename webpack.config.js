@@ -9,8 +9,23 @@ module.exports = (env, argv) => {
         entry: './src/tetris/game.ts',
         output: {
             path: path.resolve(__dirname, 'build'),
-            filename: 'bundle.js',
+            filename: '[name].bundle.js',
             publicPath: '/build/'
+        },
+        optimization: {
+            splitChunks: {
+                cacheGroups: {
+                    commons: {
+                        test: /[\\/]node_modules[\\/]/,
+                        name: 'vendors',
+                        chunks: 'all'
+                    }
+                }
+            }
+        },
+        performance: {
+            maxEntrypointSize: 2500000,
+            maxAssetSize: 2500000
         },
         devServer: {
             static: {

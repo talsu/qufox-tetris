@@ -187,7 +187,16 @@ export class PlayScene extends Phaser.Scene {
 
         this.events.on('shutdown', this.shutdown, this);
         this.setupTouchControls();
+        this.createMenuButton();
         this.createMenu();
+    }
+
+    createMenuButton() {
+        const menuBtn = this.add.text(40, 40, "MENU", { fontSize: '40px', color: '#ffffff' });
+        menuBtn.setInteractive({ useHandCursor: true });
+        menuBtn.on('pointerdown', () => {
+            this.toggleMenu();
+        });
     }
 
     setupTouchControls() {

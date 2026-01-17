@@ -6,11 +6,20 @@ import { CONST, TetrominoType, InputState } from '../../src/tetris/const/const';
 const mockGraphics = {
     fillStyle: jest.fn(),
     fillRect: jest.fn(),
+    fillGradientStyle: jest.fn(),
     destroy: jest.fn(),
     clear: jest.fn(),
     alpha: 1,
     lineStyle: jest.fn(),
-    strokeRect: jest.fn()
+    strokeRect: jest.fn(),
+    generateTexture: jest.fn(),
+    createGeometryMask: jest.fn()
+};
+
+const mockEmitter = {
+    explode: jest.fn(),
+    destroy: jest.fn(),
+    emitParticleAt: jest.fn()
 };
 
 const mockTween = {
@@ -38,14 +47,11 @@ const mockScene = {
             x: 0,
             y: 0
         })),
-        tween: jest.fn(() => mockTween)
+        tween: jest.fn(() => mockTween),
+        particles: jest.fn(() => mockEmitter)
     },
     make: {
-        graphics: jest.fn(() => ({
-            fillStyle: jest.fn(),
-            fillRect: jest.fn(),
-            createGeometryMask: jest.fn()
-        }))
+        graphics: jest.fn(() => mockGraphics)
     },
     tweens: {
         add: jest.fn()
@@ -53,6 +59,9 @@ const mockScene = {
     time: {
         addEvent: jest.fn(),
         delayedCall: jest.fn()
+    },
+    textures: {
+        exists: jest.fn().mockReturnValue(false)
     }
 };
 
@@ -75,16 +84,20 @@ describe('Visual Effects', () => {
         // Trigger Hard Drop
         playField.onInput('hardDrop', InputState.PRESS);
 
-        expect(effectSpy).toHaveBeenCalledWith(tetromino);
+        // Expect called with tetromino and a number (distance)
+        expect(effectSpy).toHaveBeenCalledWith(tetromino, expect.any(Number));
 
         // Check if graphics were created
         expect(mockScene.add.graphics).toHaveBeenCalled();
+
+        // Check if particles were created
+        expect(mockScene.add.particles).toHaveBeenCalled();
 
         // Check if tween was added for fade out
         expect(mockScene.tweens.add).toHaveBeenCalledWith(expect.objectContaining({
             targets: mockGraphics,
             alpha: 0,
-            duration: 300
+            duration: CONST.PLAY_FIELD.LOCK_DELAY_MS
         }));
     });
 });

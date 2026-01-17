@@ -4,7 +4,7 @@ import {TetrominoBox} from "./tetrominoBox";
 const BLOCK_SIZE = getBlockSize();
 
 export class TetrominoBoxQueue extends ObjectBase {
-    private container: Phaser.GameObjects.Container;
+    public container: Phaser.GameObjects.Container;
     private boxes: TetrominoBox[] = [];
     private randomBag: TetrominoType[] = [];
     private typeQueue: TetrominoType[] = [];

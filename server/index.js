@@ -2,11 +2,12 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
+    path: '/server',
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
@@ -27,7 +28,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('create_room', (roomName) => {
-        const roomId = uuidv4();
+        const roomId = crypto.randomUUID();
         rooms[roomId] = {
             id: roomId,
             name: roomName,
@@ -127,7 +128,7 @@ function getRoomList() {
     })).filter(r => r.status === 'waiting'); // Only show waiting rooms? Or all? Let's show waiting for now.
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3031;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });

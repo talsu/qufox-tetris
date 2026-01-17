@@ -73,7 +73,9 @@ export class LobbyScene extends Phaser.Scene {
         this.roomContainer = this.add.container(400, 120);
 
         // Connect to socket
-        this.socket = io('http://localhost:3000');
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const socketUrl = isLocal ? 'http://localhost:3031' : window.location.origin;
+        this.socket = io(socketUrl, { path: '/server' });
 
         this.socket.on('connect', () => {
             console.log('Connected to server');

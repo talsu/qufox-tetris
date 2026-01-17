@@ -384,8 +384,9 @@ export class PlayScene extends Phaser.Scene {
         const levelIndicator = new LevelIndicator(this, infoX, infoY);
 
         // Next Queue (Top-Right)
-        const queueX = p1X + playFieldWidth + GAP;
-        const queueY = p1Y;
+        // Adjust for internal padding in TetrominoBoxQueue (1 block left, 1 block top)
+        const queueX = p1X + playFieldWidth + GAP - BLOCK_SIZE;
+        const queueY = p1Y - BLOCK_SIZE;
         const tetrominoQueue = new TetrominoBoxQueue(this, queueX, queueY, 6);
         
         this.playField = new PlayField(this, p1X, p1Y, playFieldWidth, playFieldHeight);

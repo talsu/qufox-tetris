@@ -35,6 +35,14 @@ export class PlayScene extends Phaser.Scene {
     private opponentPlayField: PlayField;
     private engine: Engine;
     private dasFlags: Record<string, number> = {};
+    // Touch Control State
+    private touchStartX: number = 0;
+    private touchStartY: number = 0;
+    private touchStartTime: number = 0;
+    private lastPointerX: number = 0;
+    private lastPointerY: number = 0;
+    private isTap: boolean = false;
+
     private isPause: boolean = false;
     private socket: Socket;
     private roomId: string;
@@ -48,8 +56,10 @@ export class PlayScene extends Phaser.Scene {
     private isGameEnded: boolean = false;
     
     // Logical base resolution
-    private readonly GAME_WIDTH = 1920;
-    private readonly GAME_HEIGHT = 1080;
+    private GAME_WIDTH: number;
+    private GAME_HEIGHT: number;
+
+    private holdBox: TetrominoBox;
 
     private menuButtons: Phaser.GameObjects.Text[] = [];
     private selectedMenuIndex: number = 0;
@@ -60,9 +70,20 @@ export class PlayScene extends Phaser.Scene {
 
     constructor() {
         super({key: "PlayScene", mapAdd: {game: 'game'}});
+        this.GAME_WIDTH = 1920;
+        this.GAME_HEIGHT = 1080;
     }
 
     init(data: any): void {
+        // Detect Mobile Portrait
+        if (window.innerWidth < window.innerHeight) {
+            this.GAME_WIDTH = 1080;
+            this.GAME_HEIGHT = 1920;
+        } else {
+            this.GAME_WIDTH = 1920;
+            this.GAME_HEIGHT = 1080;
+        }
+
         this.mode = data.mode || 'single';
         if (this.mode === 'multi') {
             this.socket = data.socket;
@@ -161,7 +182,92 @@ export class PlayScene extends Phaser.Scene {
         };
 
         this.events.on('shutdown', this.shutdown, this);
+        this.setupTouchControls();
         this.createMenu();
+    }
+
+    setupTouchControls() {
+        this.input.addPointer(1);
+
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            if (!this.isGameRunning || this.isPause || this.isMenuOpen || this.isGameEnded) return;
+
+            this.touchStartX = pointer.worldX;
+            this.touchStartY = pointer.worldY;
+            this.touchStartTime = pointer.time;
+            this.lastPointerX = pointer.worldX;
+            this.lastPointerY = pointer.worldY;
+            this.isTap = true;
+        });
+
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+             if (!this.isGameRunning || this.isPause || this.isMenuOpen || this.isGameEnded) return;
+             if (!pointer.isDown) return;
+
+             const dist = Phaser.Math.Distance.Between(this.touchStartX, this.touchStartY, pointer.worldX, pointer.worldY);
+             if (dist > 10) {
+                 this.isTap = false;
+             }
+
+             // Horizontal Move
+             const deltaX = pointer.worldX - this.lastPointerX;
+             if (Math.abs(deltaX) > BLOCK_SIZE) {
+                 if (deltaX > 0) {
+                     this.onInput('right', InputState.PRESS);
+                     this.time.delayedCall(50, () => this.onInput('right', InputState.RELEASE));
+                 } else {
+                     this.onInput('left', InputState.PRESS);
+                     this.time.delayedCall(50, () => this.onInput('left', InputState.RELEASE));
+                 }
+                 this.lastPointerX = pointer.worldX;
+             }
+
+             // Vertical Move (Soft Drop)
+             const deltaY = pointer.worldY - this.touchStartY;
+             if (deltaY > BLOCK_SIZE && !this.isTap) {
+                 this.onInput('softDrop', InputState.PRESS);
+             } else {
+                 this.onInput('softDrop', InputState.RELEASE);
+             }
+        });
+
+        this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+            if (!this.isGameRunning || this.isPause || this.isMenuOpen || this.isGameEnded) return;
+
+            const duration = pointer.time - this.touchStartTime;
+            const deltaY = pointer.worldY - this.touchStartY;
+
+            // Release Soft Drop
+            this.onInput('softDrop', InputState.RELEASE);
+
+            if (this.isTap) {
+                // Check Hold Box
+                if (this.holdBox && this.holdBox.container) {
+                    const bounds = this.holdBox.container.getBounds();
+                    if (bounds.contains(pointer.worldX, pointer.worldY)) {
+                        this.onInput('hold', InputState.PRESS);
+                        this.time.delayedCall(100, () => this.onInput('hold', InputState.RELEASE));
+                        return;
+                    }
+                }
+
+                // Check Rotation
+                if (pointer.worldX < this.GAME_WIDTH / 2) {
+                    this.onInput('anticlockwise', InputState.PRESS);
+                    this.time.delayedCall(100, () => this.onInput('anticlockwise', InputState.RELEASE));
+                } else {
+                    this.onInput('clockwise', InputState.PRESS);
+                    this.time.delayedCall(100, () => this.onInput('clockwise', InputState.RELEASE));
+                }
+            } else {
+                // Check Hard Drop (Flick)
+                // Short duration, significant down movement
+                if (duration < 300 && deltaY > 50) {
+                    this.onInput('hardDrop', InputState.PRESS);
+                    this.time.delayedCall(100, () => this.onInput('hardDrop', InputState.RELEASE));
+                }
+            }
+        });
     }
 
     shutdown() {
@@ -376,7 +482,7 @@ export class PlayScene extends Phaser.Scene {
         // Hold Queue (Top-Left)
         const holdX = p1X - HOLD_WIDTH - GAP;
         const holdY = p1Y;
-        const holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT);
+        this.holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT);
 
         // Game Info (Left, Below Hold Queue)
         const infoX = holdX;
@@ -392,7 +498,7 @@ export class PlayScene extends Phaser.Scene {
         this.playField = new PlayField(this, p1X, p1Y, playFieldWidth, playFieldHeight);
         
         // Engine setup
-        this.engine = new Engine(this.playField, holdBox, tetrominoQueue, levelIndicator);
+        this.engine = new Engine(this.playField, this.holdBox, tetrominoQueue, levelIndicator);
         
         // Attach Attack Handler
         this.engine.setAttackHandler((count) => {

@@ -1,5 +1,6 @@
 import {CONST, getBlockSize, TetrominoType, RotateType, ColRow} from '../const/const';
 import {ObjectBase} from './objectBase';
+import {GameRules} from "../logic/gameRules";
 import Container = Phaser.GameObjects.Container;
 const BLOCK_SIZE = getBlockSize();
 
@@ -243,18 +244,7 @@ export class Tetromino extends ObjectBase {
         let newRotateType = CONST.TETROMINO.ROTATE_SEQ[index];
 
         // Get kick data.
-        let kickData = null;
-        switch (this.type) {
-            case "O":
-                kickData = [];
-                break; // 'O' block can not be kick and move.
-            case "I":
-                kickData = CONST.TETROMINO.I_KICK_DATA[this.rotateType + '>' + newRotateType];
-                break;
-            default:
-                kickData = CONST.TETROMINO.JLSTZ_KICK_DATA[this.rotateType + '>' + newRotateType];
-                break;
-        }
+        let kickData = GameRules.getKickData(this.type, this.rotateType + '>' + newRotateType);
 
         // Get first available position from kick data and move.
         return !kickData.length || kickData.some((colRow, index) => {

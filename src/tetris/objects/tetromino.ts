@@ -315,6 +315,7 @@ export class Tetromino extends ObjectBase {
                 blockImage.x = colRow[0] * BLOCK_SIZE;
                 blockImage.y = (colRow[1] + (rowOffset||0)) * BLOCK_SIZE;
                 blockImage.visible = true;
+                blockImage.alpha = 1; // Reset alpha in case it was animated.
             } else {
                 // if block is not exists, hide block image.
                 blockImage.visible = false;
@@ -478,6 +479,37 @@ export class Tetromino extends ObjectBase {
 
         // Destroy container.
         this.container.destroy();
+    }
+
+    /**
+     * Animate blocks in rows.
+     * @param {number[]} absoluteRows - Absolute rows to animate.
+     * @param {number} duration - Animation duration.
+     */
+    animateBlocksInRows(absoluteRows: number[], duration: number) {
+        // Get block position offsets.
+        const offsets = this.getBlockOffsets();
+        // Get block images.
+        const images = this.blockImages.list as Phaser.GameObjects.Image[];
+
+        offsets.forEach((colRow, index) => {
+            // Calculate absolute row.
+            const absRow = this.row + colRow[1];
+            // If row is in target rows.
+            if (absoluteRows.includes(absRow)) {
+                // Get image.
+                const img = images[index];
+                if (img) {
+                    // Animate image.
+                    this.scene.tweens.add({
+                        targets: img,
+                        alpha: 0,
+                        duration: duration,
+                        ease: 'Power1'
+                    });
+                }
+            }
+        });
     }
 
     /**

@@ -203,25 +203,46 @@ export class PlayField extends ObjectBase {
     }
 
     /**
-     * Clear line.
-     * @param {Tetromino} lockedTetromino - locked tetromino.
-     * @returns {number} Cleared line count.
+     * Get rows that are full and need to be cleared.
+     * @param {Tetromino} lockedTetromino - The tetromino that just locked.
+     * @returns {number[]} Array of row indices to clear.
      */
-    clearLine(lockedTetromino: Tetromino) {
-        // get rows for check clear line.
+    getClearedRows(lockedTetromino: Tetromino): number[] {
         const rowsToCheck = new Set(lockedTetromino.getBlocks().map(([, row]) => row));
-
         const needClearRows: number[] = [];
         const inactiveBlocks = this.getInactiveBlocks();
-        
-        // get target of clear line rows.
+
         for (const row of rowsToCheck) {
             const numberOfRowBlocks = inactiveBlocks.filter(([, r]) => r === row).length;
             if (numberOfRowBlocks >= CONST.PLAY_FIELD.COL_COUNT) needClearRows.push(row);
         }
+        return needClearRows;
+    }
 
+    /**
+     * Play clear animation on specific rows.
+     * @param {number[]} rows - Rows to animate.
+     * @param {Function} onComplete - Callback when animation finishes.
+     */
+    playClearAnimation(rows: number[], onComplete: Function) {
+        // Play animation on each tetromino
+        this.inactiveTetrominos.forEach(tetromino => {
+             tetromino.animateBlocksInRows(rows, CONST.PLAY_FIELD.LINE_CLEAR_DELAY_MS);
+        });
+
+        // Wait for delay
+        this.scene.time.delayedCall(CONST.PLAY_FIELD.LINE_CLEAR_DELAY_MS, () => {
+             if (onComplete) onComplete();
+        });
+    }
+
+    /**
+     * Clear specific rows.
+     * @param {number[]} rows - Rows to clear.
+     */
+    clearRows(rows: number[]) {
         // call clear line method each tetromino.
-        needClearRows.forEach(row => {
+        rows.forEach(row => {
             const emptyTetrominos = this.inactiveTetrominos.filter(tetromino => tetromino.clearLine(row));
             // remove empty tetromino.
             emptyTetrominos.forEach(tetromino => {
@@ -230,8 +251,6 @@ export class PlayField extends ObjectBase {
                 this.inactiveTetrominos.splice(this.inactiveTetrominos.indexOf(tetromino), 1);
             });
         });
-
-        return needClearRows.length;
     }
 
     /**
@@ -391,23 +410,35 @@ export class PlayField extends ObjectBase {
         }
 
         // clear line 
-        // TODO: clear line delay and animation
-        let clearedLineCount = this.clearLine(lockedTetromino);
+        const clearedRows = this.getClearedRows(lockedTetromino);
+        const clearedLineCount = clearedRows.length;
 
-        // Emit lock event.
-        this.emit('lock',
-            clearedLineCount,
-            lockedTetromino.type,
-            this.droppedRotateType,
-            lockedTetromino.rotateType,
-            lockedTetromino.lastMovement,
-            lockedTetromino.lastKickDataIndex,
-            lockedTetromino.dropCounter,
-            lockedTetromino.getTSpinCornerOccupiedCount()
-        );
+        // Proceed function
+        const proceed = () => {
+             // Emit lock event.
+            this.emit('lock',
+                clearedLineCount,
+                lockedTetromino.type,
+                this.droppedRotateType,
+                lockedTetromino.rotateType,
+                lockedTetromino.lastMovement,
+                lockedTetromino.lastKickDataIndex,
+                lockedTetromino.dropCounter,
+                lockedTetromino.getTSpinCornerOccupiedCount()
+            );
 
-        // ARE
-        this.scene.time.delayedCall(CONST.PLAY_FIELD.ARE_MS, () => this.spawnTetromino(), [], this);
+            // ARE
+            this.scene.time.delayedCall(CONST.PLAY_FIELD.ARE_MS, () => this.spawnTetromino(), [], this);
+        };
+
+        if (clearedLineCount > 0) {
+            this.playClearAnimation(clearedRows, () => {
+                this.clearRows(clearedRows);
+                proceed();
+            });
+        } else {
+            proceed();
+        }
     }
 
     /**

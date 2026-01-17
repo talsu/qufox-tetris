@@ -175,8 +175,8 @@ export class PlayField extends ObjectBase {
                 case "hardDrop":
                     this.activeTetromino.hardDrop();
                     this.droppedRotateType = this.activeTetromino.rotateType;
+                    this.playHardDropEffect(this.activeTetromino);
                     this.lock();
-                    // TODO: hard Drop effect animation
                     break;
                 case "hold":
                     // If canHold flag is true and active tetromino is exists, do hold.
@@ -500,5 +500,35 @@ export class PlayField extends ObjectBase {
                 this.stopLockTimer();
             }
         }
+    }
+
+    /**
+     * Play hard drop effect.
+     * @param {Tetromino} tetromino - The tetromino that hard dropped.
+     */
+    playHardDropEffect(tetromino: Tetromino) {
+        const graphics = this.scene.add.graphics();
+        graphics.fillStyle(0xFFFFFF, 0.4);
+
+        const blocks = tetromino.getBlocks();
+        blocks.forEach(([col, row]) => {
+            graphics.fillRect(
+                col * BLOCK_SIZE,
+                row * BLOCK_SIZE,
+                BLOCK_SIZE,
+                BLOCK_SIZE
+            );
+        });
+
+        this.container.add(graphics);
+
+        this.scene.tweens.add({
+            targets: graphics,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => {
+                graphics.destroy();
+            }
+        });
     }
 }

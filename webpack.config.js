@@ -3,7 +3,7 @@ const pathToPhaser = path.join(__dirname, '/node_modules/phaser/');
 const phaser = path.join(pathToPhaser, 'dist/phaser.js');
 
 module.exports = (env, argv) => {
-    const isProduction = argv.mode === 'production';
+    const isProduction = argv.mode !== 'development';
 
     return {
         entry: './src/tetris/game.ts',
@@ -28,7 +28,7 @@ module.exports = (env, argv) => {
                 phaser: phaser
             }
         },
-        devtool: isProduction ? 'source-map' : 'inline-source-map',
+        devtool: isProduction ? 'source-map' : 'inline-source-map', // source-map for production
         module: {
             rules: [
                 {

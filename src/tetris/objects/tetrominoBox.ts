@@ -10,22 +10,24 @@ export class TetrominoBox extends ObjectBase {
 
     public container: Phaser.GameObjects.Container;
 
-    constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number) {
+    constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number, hasBackground: boolean = true) {
         super(scene);
         this.container = scene.add.container(x, y);
         this.container.width = width;
         this.container.height = height;
 
-        // Create background.
-        let background = scene.add.graphics();
-        // Set background color.
-        background.fillStyle(0x000000, 0.2);
-        background.fillRect(0, 0, this.container.width, this.container.height);
-        // Set background border
-        background.lineStyle(1, 0xEEEEEE, 1.0);
-        background.strokeRect(0, 0, this.container.width, this.container.height);
-        // Add background graphic to container.
-        this.container.add(background);
+        if (hasBackground) {
+            // Create background.
+            let background = scene.add.graphics();
+            // Set background color.
+            background.fillStyle(0x000000, 0.2);
+            background.fillRect(0, 0, this.container.width, this.container.height);
+            // Set background border
+            background.lineStyle(1, 0xEEEEEE, 1.0);
+            background.strokeRect(0, 0, this.container.width, this.container.height);
+            // Add background graphic to container.
+            this.container.add(background);
+        }
     }
 
     /**

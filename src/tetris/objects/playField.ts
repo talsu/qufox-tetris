@@ -337,6 +337,15 @@ export class PlayField extends ObjectBase {
             this.activeTetromino.setBlockedPositions(this.getInactiveBlocks());
             this.activeTetromino.drawGhostBlocks();
         }
+
+        // Check Top Out.
+        // This Game Over Condition occurs when an opponent’s Line Attack forces your Blocks past the top of the 20-line Buffer Zone.
+        const topOut = this.inactiveTetrominos.some(tetromino =>
+            tetromino.getBlocks().some(block => block[1] < -CONST.PLAY_FIELD.ROW_COUNT)
+        );
+        if (topOut) {
+            this.emit('gameOver', 'Top Out');
+        }
     }
 
     /**

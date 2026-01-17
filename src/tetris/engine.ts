@@ -14,6 +14,7 @@ export class Engine {
     private queue: TetrominoBoxQueue;
     private levelIndicator: LevelIndicator;
     private scoreSystem: ScoreSystem;
+    private gameTime: number = 0;
 
     private onAttack: (count: number) => void;
 
@@ -49,6 +50,9 @@ export class Engine {
     start() {
         // Clear stats.
         this.clear();
+        this.gameTime = 0;
+        this.scoreSystem.start();
+
         // Clear tetromino hold box.
         this.holdBox.clear();
         // Clear next tetromino queue.
@@ -60,13 +64,17 @@ export class Engine {
         // Clear level indicator.
         this.levelIndicator.clear();
 
-        // Set level indicator.
-        this.levelIndicator.setLevel(this.scoreSystem.getLevel());
-        this.levelIndicator.setLine(0, this.scoreSystem.getNextLevelRequireClearedLines());
-        this.levelIndicator.setScore(this.scoreSystem.getScore());
-
         // Spawn tetromino.
         this.playField.spawnTetromino();
+    }
+
+    /**
+     * Update loop
+     */
+    update(time: number, delta: number) {
+        this.gameTime += delta;
+        const stats = this.scoreSystem.getStats(this.gameTime);
+        this.levelIndicator.updateStats(stats);
     }
 
     /**
@@ -133,10 +141,13 @@ export class Engine {
         // Update indicator.
         if (result.actionName) this.levelIndicator.setAction(result.actionName);
         this.levelIndicator.setCombo(result.combo);
+        // this.levelIndicator.setLevel(result.level);
+        // this.levelIndicator.setLine(this.scoreSystem.getClearedLines(), this.scoreSystem.getNextLevelRequireClearedLines());
+        // this.levelIndicator.setScore(this.scoreSystem.getScore());
         
-        this.levelIndicator.setLevel(result.level);
-        this.levelIndicator.setLine(this.scoreSystem.getClearedLines(), this.scoreSystem.getNextLevelRequireClearedLines());
-        this.levelIndicator.setScore(this.scoreSystem.getScore());
+        // Immediate update stats
+        const stats = this.scoreSystem.getStats(this.gameTime);
+        this.levelIndicator.updateStats(stats);
 
         // Update drop delay
         this.playField.autoDropDelay = this.scoreSystem.getAutoDropDelay();

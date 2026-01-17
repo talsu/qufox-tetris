@@ -9,30 +9,61 @@ export class TetrominoBoxQueue extends ObjectBase {
     private randomBag: TetrominoType[] = [];
     private typeQueue: TetrominoType[] = [];
 
+    // Layout Constants
+    private readonly BOX_WIDTH = 6 * BLOCK_SIZE;
+    private readonly NEXT_BOX_HEIGHT = 4 * BLOCK_SIZE;
+    private readonly QUEUE_BOX_HEIGHT = 3 * BLOCK_SIZE;
+    private readonly BOX_X = 1 * BLOCK_SIZE;
+
     constructor(scene: Phaser.Scene, x: number, y: number, queueSize: number) {
         super(scene);
         // Create container.
         this.container = scene.add.container(x, y);
+        this.initUI(queueSize);
+    }
 
+    private initUI(queueSize: number) {
         let currentY = BLOCK_SIZE;
-        // Create tetromino boxes with queue size.
-        for (let i = 0; i < queueSize; ++i) {
-            let scale = i === 0 ? 1.0 : 0.6;
-            let width = 6 * BLOCK_SIZE;
-            let height = 4 * BLOCK_SIZE;
-            
-            // Align all boxes to the left, matching the first box's position.
-            // The first box starts at 1 * BLOCK_SIZE (relative to container).
-            let boxX = 1 * BLOCK_SIZE;
-            
-            let box = new TetrominoBox(this.scene, boxX, currentY, width, height);
-            box.container.setScale(scale);
-            
-            this.boxes.push(box);
-            this.container.add(box.container);
-            
-            currentY += (height * scale) + (0.25 * BLOCK_SIZE);
+
+        // 1. First Item (Next Piece)
+        if (queueSize > 0) {
+            this.createBox(this.BOX_X, currentY, this.BOX_WIDTH, this.NEXT_BOX_HEIGHT, true);
+            currentY += this.NEXT_BOX_HEIGHT + BLOCK_SIZE * 0.5;
         }
+
+        // 2. Remaining Items (Queue)
+        if (queueSize > 1) {
+            const remainingCount = queueSize - 1;
+            
+            // Create shared background for the queue
+            const bgHeight = this.QUEUE_BOX_HEIGHT * remainingCount + BLOCK_SIZE * 0.5;
+            this.createBackground(this.BOX_X, currentY, this.BOX_WIDTH, bgHeight);
+
+            // Create boxes for queue items
+            for (let i = 0; i < remainingCount; ++i) {
+                this.createBox(this.BOX_X, currentY, this.BOX_WIDTH, this.QUEUE_BOX_HEIGHT, false);
+                // Adjust spacing for queue items
+                currentY += this.QUEUE_BOX_HEIGHT - (0.11 * BLOCK_SIZE);
+            }
+        }
+    }
+
+    private createBackground(x: number, y: number, width: number, height: number) {
+        const background = this.scene.add.graphics();
+        background.fillStyle(0x000000, 0.2);
+        background.fillRect(0, 0, width, height);
+        background.lineStyle(1, 0xEEEEEE, 1.0);
+        background.strokeRect(0, 0, width, height);
+        
+        background.x = x;
+        background.y = y;
+        this.container.add(background);
+    }
+
+    private createBox(x: number, y: number, width: number, height: number, hasBackground: boolean) {
+        const box = new TetrominoBox(this.scene, x, y, width, height, hasBackground);
+        this.boxes.push(box);
+        this.container.add(box.container);
     }
 
     /**

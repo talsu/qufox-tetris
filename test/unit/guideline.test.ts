@@ -171,7 +171,15 @@ describe('2009 Tetris Guideline Compliance', () => {
             playField = new PlayField(scene, 0, 0, 300, 600);
             holdBox = { clear: jest.fn(), hold: jest.fn() };
             queue = new TetrominoBoxQueue(scene, 0, 0, 5);
-            levelIndicator = { clear: jest.fn(), setLevel: jest.fn(), setLine: jest.fn(), setScore: jest.fn(), setAction: jest.fn(), setCombo: jest.fn() };
+            levelIndicator = {
+                clear: jest.fn(),
+                setLevel: jest.fn(),
+                setLine: jest.fn(),
+                setScore: jest.fn(),
+                setAction: jest.fn(),
+                setCombo: jest.fn(),
+                updateStats: jest.fn()
+            };
 
             engine = new Engine(playField, holdBox, queue, levelIndicator);
         });

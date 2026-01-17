@@ -380,7 +380,7 @@ export class PlayScene extends Phaser.Scene {
 
         // Game Info (Left, Below Hold Queue)
         const infoX = holdX;
-        const infoY = holdY + HOLD_HEIGHT + GAP;
+        const infoY = holdY + HOLD_HEIGHT + GAP * 0.5;
         const levelIndicator = new LevelIndicator(this, infoX, infoY);
 
         // Next Queue (Top-Right)
@@ -530,6 +530,11 @@ export class PlayScene extends Phaser.Scene {
         }
 
         if (!this.isGameRunning || this.isPause) return;
+
+        // Update Engine (Score, Time, etc)
+        if (this.engine) {
+            this.engine.update(time, delta);
+        }
 
         // Charge DAS with key pressed state.
         this.chargeDAS("left", this.keys.LEFT.isDown, delta);

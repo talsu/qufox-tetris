@@ -53,6 +53,8 @@ export class PlayScene extends Phaser.Scene {
 
     private menuButtons: Phaser.GameObjects.Text[] = [];
     private selectedMenuIndex: number = 0;
+    private endGameButtons: Phaser.GameObjects.Text[] = [];
+    private selectedEndGameButtonIndex: number = 0;
     private enterKey: Phaser.Input.Keyboard.Key;
     private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
 
@@ -126,7 +128,8 @@ export class PlayScene extends Phaser.Scene {
                  });
 
                  this.socket.on('opponent_game_over', () => {
-                    this.showEndGameMessage('YOU WIN!', '#00ff00');
+                    const score = this.engine ? this.engine.getScore() : 0;
+                    this.showEndGameMessage('YOU WIN!', '#00ff00', score);
                  });
 
                  this.socket.on('restart_signal', () => {
@@ -311,7 +314,7 @@ export class PlayScene extends Phaser.Scene {
         }
 
         // Restart Button
-        const restartBtn = this.add.text(centerX, centerY + 50, "RESTART (ENTER)", { fontSize: '36px', color: '#fff' }).setOrigin(0.5).setInteractive();
+        const restartBtn = this.add.text(centerX, centerY + 50, "RESTART", { fontSize: '36px', color: '#fff' }).setOrigin(0.5).setInteractive();
         restartBtn.on('pointerdown', () => {
              if (this.mode === 'single') {
                  this.scene.restart({ mode: 'single' });
@@ -319,21 +322,30 @@ export class PlayScene extends Phaser.Scene {
                  this.socket.emit('request_restart', { roomId: this.roomId });
              }
         });
-        restartBtn.on('pointerover', () => restartBtn.setStyle({ color: '#ff0' }));
-        restartBtn.on('pointerout', () => restartBtn.setStyle({ color: '#fff' }));
+        restartBtn.on('pointerover', () => {
+            this.selectedEndGameButtonIndex = 0;
+            this.updateEndGameMenuAppearance();
+        });
 
         // Exit Button
-        const exitBtn = this.add.text(centerX, centerY + 130, "EXIT (SPACE)", { fontSize: '36px', color: '#f00' }).setOrigin(0.5).setInteractive();
+        const exitBtn = this.add.text(centerX, centerY + 130, "EXIT", { fontSize: '36px', color: '#fff' }).setOrigin(0.5).setInteractive();
         exitBtn.on('pointerdown', () => {
             this.exitGame();
         });
-        exitBtn.on('pointerover', () => exitBtn.setStyle({ color: '#ff8888' }));
-        exitBtn.on('pointerout', () => exitBtn.setStyle({ color: '#f00' }));
+        exitBtn.on('pointerover', () => {
+            this.selectedEndGameButtonIndex = 1;
+            this.updateEndGameMenuAppearance();
+        });
 
         const elements = [dim, panel, titleText, restartBtn, exitBtn];
         if (scoreTextObj) elements.push(scoreTextObj);
 
         gameOverContainer.add(elements);
+
+        // Setup navigation
+        this.endGameButtons = [restartBtn, exitBtn];
+        this.selectedEndGameButtonIndex = 0;
+        this.updateEndGameMenuAppearance();
     }
 
     startGame() {
@@ -408,6 +420,32 @@ export class PlayScene extends Phaser.Scene {
         }
     }
 
+    changeEndGameSelection(change: number) {
+        let newIndex = this.selectedEndGameButtonIndex + change;
+        if (newIndex < 0) newIndex = this.endGameButtons.length - 1;
+        if (newIndex >= this.endGameButtons.length) newIndex = 0;
+
+        this.selectedEndGameButtonIndex = newIndex;
+        this.updateEndGameMenuAppearance();
+    }
+
+    updateEndGameMenuAppearance() {
+        this.endGameButtons.forEach((btn, index) => {
+            if (index === this.selectedEndGameButtonIndex) {
+                btn.setStyle({ color: '#ff0' });
+            } else {
+                btn.setStyle({ color: '#fff' });
+            }
+        });
+    }
+
+    triggerEndGameSelection() {
+        if (this.endGameButtons.length > 0) {
+            const btn = this.endGameButtons[this.selectedEndGameButtonIndex];
+            btn.emit('pointerdown');
+        }
+    }
+
     private setBackgroundImage() {
         // Add background Image.
         const backgroundImage = this.textures.get('background').getSourceImage();
@@ -464,14 +502,12 @@ export class PlayScene extends Phaser.Scene {
         }
 
         if (this.isGameEnded) {
-            if (Phaser.Input.Keyboard.JustDown(this.keys.SPACE)) {
-                this.exitGame();
-            } else if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
-                if (this.mode === 'single') {
-                    this.scene.restart({ mode: 'single' });
-                } else if (this.mode === 'multi' && this.socket) {
-                    this.socket.emit('request_restart', { roomId: this.roomId });
-                }
+            if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+                this.changeEndGameSelection(-1);
+            } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
+                this.changeEndGameSelection(1);
+            } else if (Phaser.Input.Keyboard.JustDown(this.enterKey) || Phaser.Input.Keyboard.JustDown(this.keys.SPACE)) {
+                this.triggerEndGameSelection();
             }
             return;
         }

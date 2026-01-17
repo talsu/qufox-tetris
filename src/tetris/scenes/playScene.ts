@@ -189,6 +189,9 @@ export class PlayScene extends Phaser.Scene {
     setupTouchControls() {
         this.input.addPointer(1);
 
+        // Prevent default browser touch actions (scrolling, zooming) to ensure pointermove fires correctly
+        this.game.canvas.style.touchAction = 'none';
+
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (!this.isGameRunning || this.isPause || this.isMenuOpen || this.isGameEnded) return;
 
@@ -223,11 +226,15 @@ export class PlayScene extends Phaser.Scene {
              }
 
              // Vertical Move (Soft Drop)
-             const deltaY = pointer.worldY - this.touchStartY;
-             if (deltaY > BLOCK_SIZE && !this.isTap) {
-                 this.onInput('softDrop', InputState.PRESS);
-             } else {
-                 this.onInput('softDrop', InputState.RELEASE);
+             const deltaY = pointer.worldY - this.lastPointerY;
+             if (Math.abs(deltaY) > BLOCK_SIZE && !this.isTap) {
+                if (deltaY > 0) {
+                    this.onInput('softDrop', InputState.PRESS);
+                    this.time.delayedCall(50, () => this.onInput('softDrop', InputState.RELEASE)) ;
+                } else {
+
+                }
+                this.lastPointerY = pointer.worldY;
              }
         });
 

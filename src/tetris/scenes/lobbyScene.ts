@@ -1,7 +1,8 @@
 
 import { io, Socket } from "socket.io-client";
+import { BaseScene } from "./baseScene";
 
-export class LobbyScene extends Phaser.Scene {
+export class LobbyScene extends BaseScene {
     private socket: Socket;
     private roomContainer: Phaser.GameObjects.Container;
     private roomList: any[] = [];
@@ -11,13 +12,13 @@ export class LobbyScene extends Phaser.Scene {
     private selectedNavIndex: number = 0;
     private createBtn: Phaser.GameObjects.Text;
     private backBtn: Phaser.GameObjects.Text;
-    
-    // Logical base resolution
-    private readonly GAME_WIDTH = 1920;
-    private readonly GAME_HEIGHT = 1080;
 
     constructor() {
         super({ key: "LobbyScene" });
+    }
+
+    init() {
+        this.handleResolution();
     }
 
     create(): void {
@@ -29,7 +30,7 @@ export class LobbyScene extends Phaser.Scene {
         this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
 
         // Background
-        this.add.rectangle(this.GAME_WIDTH/2, this.GAME_HEIGHT/2, this.GAME_WIDTH, this.GAME_HEIGHT, 0x111111);
+        this.add.rectangle(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, this.GAME_WIDTH, this.GAME_HEIGHT, 0x111111);
 
         this.add.text(100, 50, "MULTIPLAYER LOBBY", { fontSize: "40px", color: "#ffffff" });
 
@@ -47,17 +48,17 @@ export class LobbyScene extends Phaser.Scene {
                 this.socket.emit('create_room', roomName);
             }
         });
-        
+
         this.backBtn = this.add.text(100, 200, "BACK", {
-             fontSize: "30px",
+            fontSize: "30px",
             color: "#ffffff",
             backgroundColor: "#aa0000",
             padding: { x: 10, y: 5 }
         }).setInteractive();
-        
+
         this.backBtn.on('pointerdown', () => {
-             if (this.socket) this.socket.disconnect();
-             this.scene.start("MenuScene");
+            if (this.socket) this.socket.disconnect();
+            this.scene.start("MenuScene");
         });
 
         // Hover effects for static buttons to support mouse
@@ -118,15 +119,15 @@ export class LobbyScene extends Phaser.Scene {
         let newIndex = this.selectedNavIndex + change;
         if (newIndex < 0) newIndex = this.navItems.length - 1;
         if (newIndex >= this.navItems.length) newIndex = 0;
-        
+
         this.selectedNavIndex = newIndex;
         this.updateNavAppearance();
     }
 
     triggerSelection() {
         if (this.navItems.length > 0) {
-             const btn = this.navItems[this.selectedNavIndex];
-             btn.emit('pointerdown');
+            const btn = this.navItems[this.selectedNavIndex];
+            btn.emit('pointerdown');
         }
     }
 
@@ -142,7 +143,7 @@ export class LobbyScene extends Phaser.Scene {
 
     refreshRoomList() {
         this.roomContainer.removeAll(true);
-        
+
         // Reset nav items to static buttons first
         this.navItems = [this.createBtn, this.backBtn];
 
@@ -150,13 +151,13 @@ export class LobbyScene extends Phaser.Scene {
         this.roomList.forEach((room, index) => {
             const bg = this.add.rectangle(0, y, 600, 50, 0x333333).setOrigin(0);
             const text = this.add.text(10, y + 10, `${room.name} (${room.players}/2)`, { fontSize: '24px', color: '#ffffff' });
-            
+
             const joinBtn = this.add.text(500, y + 10, "JOIN", { fontSize: '24px', color: '#00ffff' }).setInteractive();
-            
+
             joinBtn.on('pointerdown', () => {
                 this.socket.emit('join_room', room.id);
             });
-            
+
             joinBtn.on('pointerover', () => {
                 // Find current index of this join button
                 const idx = this.navItems.indexOf(joinBtn);
@@ -176,26 +177,6 @@ export class LobbyScene extends Phaser.Scene {
             this.selectedNavIndex = 0;
         }
         this.updateNavAppearance();
-    }
-
-    resize (gameSize, baseSize?, displaySize?, resolution?)
-    {
-        // Check if cameras are available
-        if (!this.cameras || !this.cameras.main) {
-            return;
-        }
-
-        const width = (typeof gameSize === 'number') ? gameSize : gameSize.width;
-        const height = (typeof gameSize === 'number') ? baseSize : gameSize.height;
-
-        this.cameras.resize(width, height);
-
-        const zoomX = width / this.GAME_WIDTH;
-        const zoomY = height / this.GAME_HEIGHT;
-        const zoom = Math.min(zoomX, zoomY);
-
-        this.cameras.main.setZoom(zoom);
-        this.cameras.main.centerOn(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2);
     }
 
     shutdown() {

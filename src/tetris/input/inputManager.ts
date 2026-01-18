@@ -1,5 +1,5 @@
 
-import {CONST, InputState, getBlockSize} from "../const/const";
+import { CONST, InputState, getBlockSize } from "../const/const";
 
 /**
  * Manages Keyboard and Touch input for the Tetris game.
@@ -20,6 +20,7 @@ export class InputManager {
         Z: Phaser.Input.Keyboard.Key;
         X: Phaser.Input.Keyboard.Key;
         C: Phaser.Input.Keyboard.Key;
+        SHIFT: Phaser.Input.Keyboard.Key;
         ESC: Phaser.Input.Keyboard.Key;
     };
     public escKey: Phaser.Input.Keyboard.Key; // Public for Menu toggling
@@ -62,6 +63,7 @@ export class InputManager {
             Z: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
             X: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X),
             C: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C),
+            SHIFT: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
             ESC: this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC)
         };
         this.escKey = this.keys.ESC;
@@ -84,35 +86,35 @@ export class InputManager {
         });
 
         this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-             if (!this.isEnabled || !pointer.isDown) return;
+            if (!this.isEnabled || !pointer.isDown) return;
 
-             const dist = Phaser.Math.Distance.Between(this.touchStartX, this.touchStartY, pointer.worldX, pointer.worldY);
-             if (dist > 10) {
-                 this.isTap = false;
-             }
+            const dist = Phaser.Math.Distance.Between(this.touchStartX, this.touchStartY, pointer.worldX, pointer.worldY);
+            if (dist > 10) {
+                this.isTap = false;
+            }
 
-             // Horizontal Move
-             const deltaX = pointer.worldX - this.lastPointerX;
-             if (Math.abs(deltaX) > (this.BLOCK_SIZE * this.DRAG_THRESHOLD_SCALE)) {
-                 if (deltaX > 0) {
-                     this.emitInput('right', InputState.PRESS);
-                     this.scene.time.delayedCall(50, () => this.emitInput('right', InputState.RELEASE));
-                 } else {
-                     this.emitInput('left', InputState.PRESS);
-                     this.scene.time.delayedCall(50, () => this.emitInput('left', InputState.RELEASE));
-                 }
-                 this.lastPointerX = pointer.worldX;
-             }
+            // Horizontal Move
+            const deltaX = pointer.worldX - this.lastPointerX;
+            if (Math.abs(deltaX) > (this.BLOCK_SIZE * this.DRAG_THRESHOLD_SCALE)) {
+                if (deltaX > 0) {
+                    this.emitInput('right', InputState.PRESS);
+                    this.scene.time.delayedCall(50, () => this.emitInput('right', InputState.RELEASE));
+                } else {
+                    this.emitInput('left', InputState.PRESS);
+                    this.scene.time.delayedCall(50, () => this.emitInput('left', InputState.RELEASE));
+                }
+                this.lastPointerX = pointer.worldX;
+            }
 
-             // Vertical Move (Soft Drop)
-             const deltaY = pointer.worldY - this.lastPointerY;
-             if (Math.abs(deltaY) > (this.BLOCK_SIZE * this.DRAG_THRESHOLD_SCALE) && !this.isTap) {
+            // Vertical Move (Soft Drop)
+            const deltaY = pointer.worldY - this.lastPointerY;
+            if (Math.abs(deltaY) > (this.BLOCK_SIZE * this.DRAG_THRESHOLD_SCALE) && !this.isTap) {
                 if (deltaY > 0) {
                     this.emitInput('softDrop', InputState.PRESS);
-                    this.scene.time.delayedCall(50, () => this.emitInput('softDrop', InputState.RELEASE)) ;
+                    this.scene.time.delayedCall(50, () => this.emitInput('softDrop', InputState.RELEASE));
                 }
                 this.lastPointerY = pointer.worldY;
-             }
+            }
         });
 
         this.scene.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
@@ -174,7 +176,7 @@ export class InputManager {
         this.chargeDAS("hardDrop", this.keys.SPACE.isDown, delta);
         this.chargeDAS("anticlockwise", this.keys.Z.isDown || this.keys.CTRL.isDown, delta);
         this.chargeDAS("clockwise", this.keys.X.isDown || this.keys.UP.isDown, delta);
-        this.chargeDAS("hold", this.keys.C.isDown, delta);
+        this.chargeDAS("hold", this.keys.C.isDown || this.keys.SHIFT.isDown, delta);
     }
 
     /*
@@ -220,7 +222,7 @@ export class InputManager {
         this.chargeDAS("hardDrop", this.keys.SPACE.isDown, delta);
         this.chargeDAS("anticlockwise", this.keys.Z.isDown || this.keys.CTRL.isDown, delta);
         this.chargeDAS("clockwise", this.keys.X.isDown || this.keys.UP.isDown, delta);
-        this.chargeDAS("hold", this.keys.C.isDown, delta);
+        this.chargeDAS("hold", this.keys.C.isDown || this.keys.SHIFT.isDown, delta);
     }
 
     public setDragThresholdScale(scale: number) {

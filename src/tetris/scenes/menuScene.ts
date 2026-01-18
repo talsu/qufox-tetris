@@ -1,6 +1,7 @@
 import { CONST } from "../const/const";
+import { BaseScene } from "./baseScene";
 
-export class MenuScene extends Phaser.Scene {
+export class MenuScene extends BaseScene {
     private startKey: Phaser.Input.Keyboard.Key;
     private bitmapTexts: Phaser.GameObjects.BitmapText[] = [];
     private backgroundImage: Phaser.GameObjects.Image;
@@ -8,10 +9,6 @@ export class MenuScene extends Phaser.Scene {
     private selectedButtonIndex: number = 0;
     private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
     private enterKey: Phaser.Input.Keyboard.Key;
-    
-    // Logical base resolution
-    private readonly GAME_WIDTH = 1920;
-    private readonly GAME_HEIGHT = 1080;
 
     constructor() {
         super({
@@ -20,6 +17,8 @@ export class MenuScene extends Phaser.Scene {
     }
 
     init(): void {
+        this.handleResolution();
+
         this.startKey = this.input.keyboard.addKey(
             Phaser.Input.Keyboard.KeyCodes.S
         );
@@ -31,7 +30,7 @@ export class MenuScene extends Phaser.Scene {
     preload(): void {
         this.load.image('background', 'assets/image/bongtalk-background-default.jpg');
         // Preload game assets to avoid delay in MainScene
-        this.load.spritesheet('blockSheet', 'assets/image/PPTdefaultMinoOnly.png', {frameHeight:CONST.SCREEN.BLOCK_IMAGE_SIZE, frameWidth:CONST.SCREEN.BLOCK_IMAGE_SIZE, margin:4, spacing:8});
+        this.load.spritesheet('blockSheet', 'assets/image/PPTdefaultMinoOnly.png', { frameHeight: CONST.SCREEN.BLOCK_IMAGE_SIZE, frameWidth: CONST.SCREEN.BLOCK_IMAGE_SIZE, margin: 4, spacing: 8 });
     }
 
     create(): void {
@@ -47,7 +46,7 @@ export class MenuScene extends Phaser.Scene {
         const scaleX = this.GAME_WIDTH / bgImg.width;
         const scaleY = this.GAME_HEIGHT / bgImg.height;
         const scale = Math.max(scaleX, scaleY);
-        
+
         this.backgroundImage = this.add.image(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'background')
             .setOrigin(0.5)
             .setScale(scale);
@@ -91,12 +90,12 @@ export class MenuScene extends Phaser.Scene {
         });
 
         multiPlayerBtn.on('pointerover', () => {
-             if (this.selectedButtonIndex !== 1) {
+            if (this.selectedButtonIndex !== 1) {
                 this.selectedButtonIndex = 1;
                 this.updateButtonAppearance();
             }
         });
-        
+
         this.buttons.push(singlePlayerBtn);
         this.buttons.push(multiPlayerBtn);
 
@@ -118,7 +117,7 @@ export class MenuScene extends Phaser.Scene {
         let newIndex = this.selectedButtonIndex + change;
         if (newIndex < 0) newIndex = this.buttons.length - 1;
         if (newIndex >= this.buttons.length) newIndex = 0;
-        
+
         this.selectedButtonIndex = newIndex;
         this.updateButtonAppearance();
     }
@@ -137,26 +136,6 @@ export class MenuScene extends Phaser.Scene {
                 btn.setStyle({ color: '#ffffff' });
             }
         });
-    }
-
-    resize (gameSize, baseSize?, displaySize?, resolution?)
-    {
-        // Check if cameras are available
-        if (!this.cameras || !this.cameras.main) {
-            return;
-        }
-
-        const width = (typeof gameSize === 'number') ? gameSize : gameSize.width;
-        const height = (typeof gameSize === 'number') ? baseSize : gameSize.height;
-
-        this.cameras.resize(width, height);
-
-        const zoomX = width / this.GAME_WIDTH;
-        const zoomY = height / this.GAME_HEIGHT;
-        const zoom = Math.min(zoomX, zoomY);
-
-        this.cameras.main.setZoom(zoom);
-        this.cameras.main.centerOn(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2);
     }
 
     shutdown() {

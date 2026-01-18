@@ -4,22 +4,23 @@
  * @license      MIT
  */
 
-import {PlayField} from '../objects/playField';
-import {CONST, getBlockSize, InputState} from "../const/const";
-import {TetrominoBox} from "../objects/tetrominoBox";
-import {TetrominoBoxQueue} from "../objects/tetrominoBoxQueue";
-import {LevelIndicator} from '../objects/levelIndicator';
-import {Engine} from '../engine';
+import { PlayField } from '../objects/playField';
+import { CONST, getBlockSize, InputState } from "../const/const";
+import { TetrominoBox } from "../objects/tetrominoBox";
+import { TetrominoBoxQueue } from "../objects/tetrominoBoxQueue";
+import { LevelIndicator } from '../objects/levelIndicator';
+import { Engine } from '../engine';
 import { io, Socket } from "socket.io-client";
-import {InputManager} from "../input/inputManager";
-import {InGameMenu} from "../ui/inGameMenu";
+import { InputManager } from "../input/inputManager";
+import { InGameMenu } from "../ui/inGameMenu";
+import { BaseScene } from "./baseScene";
 
 let BLOCK_SIZE = getBlockSize();
 
 /**
  * Play scene
  */
-export class PlayScene extends Phaser.Scene {
+export class PlayScene extends BaseScene {
     private playField: PlayField;
     private opponentPlayField: PlayField;
     private engine: Engine;
@@ -41,10 +42,6 @@ export class PlayScene extends Phaser.Scene {
     // Configurable Scales
     private readonly MAIN_SCALE = 2;
     private readonly SIDE_SCALE = 0.85;
-    
-    // Logical base resolution
-    private GAME_WIDTH: number;
-    private GAME_HEIGHT: number;
 
     private holdBox: TetrominoBox;
 
@@ -54,27 +51,18 @@ export class PlayScene extends Phaser.Scene {
     private spaceKey: Phaser.Input.Keyboard.Key; // For Menu Enter substitute
 
     constructor() {
-        super({key: "PlayScene", mapAdd: {game: 'game'}});
-        this.GAME_WIDTH = 1920;
-        this.GAME_HEIGHT = 1080;
+        super({ key: "PlayScene", mapAdd: { game: 'game' } });
     }
 
     init(data: any): void {
-        // Detect Mobile Portrait
-        if (window.innerWidth < window.innerHeight) {
-            this.GAME_WIDTH = 1080;
-            this.GAME_HEIGHT = 1920;
-        } else {
-            this.GAME_WIDTH = 1920;
-            this.GAME_HEIGHT = 1080;
-        }
+        this.handleResolution();
 
         this.mode = data.mode || 'single';
         if (this.mode === 'multi') {
             this.socket = data.socket;
             this.roomId = data.roomId;
         }
-        
+
         // Reset state
         this.isPause = false;
         this.isGameRunning = false;
@@ -86,17 +74,24 @@ export class PlayScene extends Phaser.Scene {
         if (this.mode === 'single') {
             this.load.image('background', 'assets/image/background.png');
         } else {
-             this.load.image('background', 'assets/image/background_multi.png');
+            this.load.image('background', 'assets/image/background_multi.png');
         }
     }
 
     create(): void {
         this.setBackgroundImage();
-        
+
         // Setup Navigation Keys for Menu
         this.cursors = this.input.keyboard.createCursorKeys();
         this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
         this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+        // Pause Toggle
+        this.input.keyboard.on('keydown-ESC', () => {
+            if (!this.isGameEnded) {
+                this.toggleMenu();
+            }
+        });
 
         this.scale.on('resize', this.resize, this);
         this.resize(window.innerWidth, window.innerHeight);
@@ -120,9 +115,9 @@ export class PlayScene extends Phaser.Scene {
         });
 
         if (this.mode === 'single') {
-             this.startGame();
+            this.startGame();
         } else {
-             this.setupMultiplayer();
+            this.setupMultiplayer();
         }
 
         this.events.on('shutdown', this.shutdown, this);
@@ -133,26 +128,26 @@ export class PlayScene extends Phaser.Scene {
 
         if (this.socket) {
             this.socket.on('game_start', (data) => {
-               this.statusText.setVisible(false);
-               this.startGame();
+                this.statusText.setVisible(false);
+                this.startGame();
             });
 
             this.socket.on('opponent_state_update', (data) => {
-               if (this.opponentPlayField) {
-                   this.opponentPlayField.deserialize(data.board);
-               }
+                if (this.opponentPlayField) {
+                    this.opponentPlayField.deserialize(data.board);
+                }
             });
 
             this.socket.on('receive_garbage', (data) => {
-               if (this.playField) {
-                   this.playField.insertGarbage(data.count);
-                   this.cameras.main.shake(200, 0.01);
-               }
+                if (this.playField) {
+                    this.playField.insertGarbage(data.count);
+                    this.cameras.main.shake(200, 0.01);
+                }
             });
 
             this.socket.on('opponent_game_over', () => {
-               const score = this.engine ? this.engine.getScore() : 0;
-               this.showEndGameMessage('YOU WIN!', '#00ff00', score);
+                const score = this.engine ? this.engine.getScore() : 0;
+                this.showEndGameMessage('YOU WIN!', '#00ff00', score);
             });
 
             this.socket.on('restart_signal', () => {
@@ -183,7 +178,7 @@ export class PlayScene extends Phaser.Scene {
 
     toggleMenu() {
         this.inGameMenu.togglePauseMenu();
-        
+
         const isOpen = this.inGameMenu.isMenuOpen;
 
         // In Single Player, pause the game
@@ -216,7 +211,7 @@ export class PlayScene extends Phaser.Scene {
         if (this.socket) {
             this.socket.disconnect();
         }
-        
+
         if (this.mode === 'single') {
             this.scene.start("MenuScene");
         } else {
@@ -225,11 +220,11 @@ export class PlayScene extends Phaser.Scene {
     }
 
     restartGame() {
-         if (this.mode === 'single') {
-             this.scene.restart({ mode: 'single' });
-         } else if (this.mode === 'multi' && this.socket) {
-             this.socket.emit('request_restart', { roomId: this.roomId });
-         }
+        if (this.mode === 'single') {
+            this.scene.restart({ mode: 'single' });
+        } else if (this.mode === 'multi' && this.socket) {
+            this.socket.emit('request_restart', { roomId: this.roomId });
+        }
     }
 
     showEndGameMessage(mainText: string, color: string, score?: number) {
@@ -245,17 +240,17 @@ export class PlayScene extends Phaser.Scene {
     startGame() {
         this.isGameRunning = true;
         this.inputManager.isEnabled = true;
-        
+
         // Calculate dimensions (Unscaled)
         const rawPlayFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
         const rawPlayFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
-        
+
         // Determine Scales
         const currentMainScale = (this.mode === 'single') ? this.MAIN_SCALE : 1;
         const currentSideScale = (this.mode === 'single') ? this.SIDE_SCALE : 1;
 
         let p1X, p1Y;
-        
+
         if (this.mode === 'single') {
             // Center for Single Player (Account for Scale)
             p1X = (this.GAME_WIDTH - (rawPlayFieldWidth * currentMainScale)) / 2;
@@ -276,7 +271,7 @@ export class PlayScene extends Phaser.Scene {
         const holdY = p1Y;
         this.holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT);
         this.holdBox.container.setScale(currentSideScale);
-        
+
         // Hold Touch Zone
         const holdZone = this.add.zone(holdX, holdY, HOLD_WIDTH * currentSideScale, HOLD_HEIGHT * currentSideScale).setOrigin(0);
         holdZone.setInteractive();
@@ -295,18 +290,18 @@ export class PlayScene extends Phaser.Scene {
         const queueY = p1Y - (BLOCK_SIZE * currentSideScale);
         const tetrominoQueue = new TetrominoBoxQueue(this, queueX, queueY, 6);
         tetrominoQueue.container.setScale(currentSideScale);
-        
+
         this.playField = new PlayField(this, p1X, p1Y, rawPlayFieldWidth, rawPlayFieldHeight);
         this.playField.setScale(currentMainScale);
-        
+
         this.engine = new Engine(this.playField, this.holdBox, tetrominoQueue, levelIndicator);
-        
+
         this.engine.setAttackHandler((count) => {
             if (this.mode === 'multi' && this.socket) {
                 this.socket.emit('send_garbage', { roomId: this.roomId, count });
             }
         });
-        
+
         this.playField.on('gameOver', () => {
             if (this.mode === 'multi' && this.socket) {
                 this.socket.emit('game_over', { roomId: this.roomId });
@@ -331,35 +326,13 @@ export class PlayScene extends Phaser.Scene {
         const scaleX = this.GAME_WIDTH / backgroundImage.width;
         const scaleY = this.GAME_HEIGHT / backgroundImage.height;
         const scale = Math.max(scaleX, scaleY);
-        
+
         this.backgroundImage = this.add.image(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'background')
             .setOrigin(0.5)
             .setScale(scale);
     }
 
-    resize (gameSize, baseSize?, displaySize?, resolution?)
-    {
-        if (!this.cameras || !this.cameras.main) {
-            return;
-        }
-
-        const width = (typeof gameSize === 'number') ? gameSize : gameSize.width;
-        const height = (typeof gameSize === 'number') ? baseSize : gameSize.height;
-
-        this.cameras.resize(width, height);
-
-        const zoomX = width / this.GAME_WIDTH;
-        const zoomY = height / this.GAME_HEIGHT;
-        const zoom = Math.min(zoomX, zoomY);
-
-        this.cameras.main.setZoom(zoom);
-        this.cameras.main.centerOn(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2);
-    }
-
     update(time: number, delta: number): void {
-        if (Phaser.Input.Keyboard.JustDown(this.inputManager.escKey)) {
-            this.toggleMenu();
-        }
 
         // Menu Navigation
         if (this.inGameMenu.isMenuOpen || this.isGameEnded) {
@@ -381,7 +354,7 @@ export class PlayScene extends Phaser.Scene {
 
         const softDropSpeed = this.playField ? (this.playField.autoDropDelay / 20) : CONST.PLAY_FIELD.AR_MS;
         this.inputManager.updateCustom(time, delta, softDropSpeed, softDropSpeed);
-        
+
         // Network Sync
         if (this.mode === 'multi' && time - this.lastUpdateSend > 100) { // 10Hz sync
             this.lastUpdateSend = time;

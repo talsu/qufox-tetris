@@ -174,6 +174,9 @@ export class PlayScene extends BaseScene {
             this.socket.off('restart_signal');
             this.socket.off('opponent_disconnected');
         }
+        if (this.inGameMenu) {
+            this.inGameMenu.destroy();
+        }
     }
 
     toggleMenu() {
@@ -199,11 +202,11 @@ export class PlayScene extends BaseScene {
         }
     }
 
-    toggleBackground(btn: Phaser.GameObjects.Text) {
+    toggleBackground(btn: HTMLElement) {
         const isVisible = this.backgroundImage.visible;
         this.backgroundImage.setVisible(!isVisible);
-        btn.setText(`Background: ${!isVisible ? 'ON' : 'OFF'}`);
-        btn.setColor(!isVisible ? '#fff' : '#aaa');
+        btn.innerText = `Background: ${!isVisible ? 'ON' : 'OFF'}`;
+        // btn.setColor(!isVisible ? '#fff' : '#aaa'); // HTML element style update handled by class or just text
     }
 
     exitGame() {
@@ -336,13 +339,6 @@ export class PlayScene extends BaseScene {
 
         // Menu Navigation
         if (this.inGameMenu.isMenuOpen || this.isGameEnded) {
-            if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
-                this.inGameMenu.onKey('up');
-            } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
-                this.inGameMenu.onKey('down');
-            } else if (Phaser.Input.Keyboard.JustDown(this.enterKey) || Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-                this.inGameMenu.onKey('enter');
-            }
             return;
         }
 

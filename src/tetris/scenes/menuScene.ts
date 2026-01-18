@@ -1,14 +1,9 @@
 import { CONST } from "../const/const";
 import { BaseScene } from "./baseScene";
 
+
 export class MenuScene extends BaseScene {
-    private startKey: Phaser.Input.Keyboard.Key;
-    private bitmapTexts: Phaser.GameObjects.BitmapText[] = [];
-    private backgroundImage: Phaser.GameObjects.Image;
-    private buttons: Phaser.GameObjects.Text[] = [];
-    private selectedButtonIndex: number = 0;
-    private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
-    private enterKey: Phaser.Input.Keyboard.Key;
+    private menuContainer: Phaser.GameObjects.DOMElement;
 
     constructor() {
         super({
@@ -18,13 +13,6 @@ export class MenuScene extends BaseScene {
 
     init(): void {
         this.handleResolution();
-
-        this.startKey = this.input.keyboard.addKey(
-            Phaser.Input.Keyboard.KeyCodes.S
-        );
-        this.startKey.isDown = false;
-        this.selectedButtonIndex = 0;
-        this.buttons = [];
     }
 
     preload(): void {
@@ -38,107 +26,59 @@ export class MenuScene extends BaseScene {
         this.scale.on('resize', this.resize, this);
         this.events.on('shutdown', this.shutdown, this);
 
-        this.cursors = this.input.keyboard.createCursorKeys();
-        this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
-
         // Background
         const bgImg = this.textures.get('background').getSourceImage();
         const scaleX = this.GAME_WIDTH / bgImg.width;
         const scaleY = this.GAME_HEIGHT / bgImg.height;
         const scale = Math.max(scaleX, scaleY);
 
-        this.backgroundImage = this.add.image(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'background')
+        this.add.image(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'background')
             .setOrigin(0.5)
-            .setScale(scale);
+            .setScale(scale)
+            .setScrollFactor(0); // Fixed background
 
-        // Title
-        this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 3, "QUFOX TETRIS", {
-            fontSize: "80px",
-            color: "#ffffff",
-            stroke: "#000000",
-            strokeThickness: 8
-        }).setOrigin(0.5);
-
-        // Buttons
-        const singlePlayerBtn = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, "SINGLE PLAYER", {
-            fontSize: "40px",
-            color: this.selectedButtonIndex === 0 ? "#ffff00" : "#ffffff",
-            backgroundColor: "#000000",
-            padding: { x: 20, y: 10 }
-        }).setOrigin(0.5).setInteractive();
-
-        const multiPlayerBtn = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2 + 100, "MULTIPLAYER", {
-            fontSize: "40px",
-            color: this.selectedButtonIndex === 1 ? "#ffff00" : "#ffffff",
-            backgroundColor: "#000000",
-            padding: { x: 20, y: 10 }
-        }).setOrigin(0.5).setInteractive();
-
-        singlePlayerBtn.on('pointerdown', () => {
-            this.scene.start("PlayScene", { mode: 'single' });
-        });
-
-        multiPlayerBtn.on('pointerdown', () => {
-            this.scene.start("LobbyScene");
-        });
-
-        singlePlayerBtn.on('pointerover', () => {
-            if (this.selectedButtonIndex !== 0) {
-                this.selectedButtonIndex = 0;
-                this.updateButtonAppearance();
-            }
-        });
-
-        multiPlayerBtn.on('pointerover', () => {
-            if (this.selectedButtonIndex !== 1) {
-                this.selectedButtonIndex = 1;
-                this.updateButtonAppearance();
-            }
-        });
-
-        this.buttons.push(singlePlayerBtn);
-        this.buttons.push(multiPlayerBtn);
+        this.createDOMUI();
 
         // Initial resize
         this.resize(window.innerWidth, window.innerHeight);
     }
 
-    update(time: number, delta: number): void {
-        if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
-            this.changeSelection(-1);
-        } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
-            this.changeSelection(1);
-        } else if (Phaser.Input.Keyboard.JustDown(this.enterKey) || Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
-            this.triggerSelection();
+    createDOMUI() {
+        const html = `
+        <div class="menu-container">
+            <h1 class="game-title">QUFOX<br>TETRIS</h1>
+            <button class="puyo-btn accent" id="singleBtn">Single Player</button>
+            <button class="puyo-btn" id="multiBtn">Multiplayer</button>
+        </div>
+        `;
+
+        this.menuContainer = this.add.dom(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2).createFromHTML(html);
+        this.menuContainer.setPerspective(800);
+
+        const singleBtn = this.menuContainer.getChildByID('singleBtn') as HTMLElement;
+        const multiBtn = this.menuContainer.getChildByID('multiBtn') as HTMLElement;
+
+        if (singleBtn) {
+            singleBtn.addEventListener('click', () => {
+                this.scene.start("PlayScene", { mode: 'single' });
+            });
+        }
+
+        if (multiBtn) {
+            multiBtn.addEventListener('click', () => {
+                this.scene.start("LobbyScene");
+            });
         }
     }
 
-    changeSelection(change: number) {
-        let newIndex = this.selectedButtonIndex + change;
-        if (newIndex < 0) newIndex = this.buttons.length - 1;
-        if (newIndex >= this.buttons.length) newIndex = 0;
 
-        this.selectedButtonIndex = newIndex;
-        this.updateButtonAppearance();
-    }
-
-    triggerSelection() {
-        const btn = this.buttons[this.selectedButtonIndex];
-        // Trigger pointerdown event manually or call logic
-        btn.emit('pointerdown');
-    }
-
-    updateButtonAppearance() {
-        this.buttons.forEach((btn, index) => {
-            if (index === this.selectedButtonIndex) {
-                btn.setStyle({ color: '#ffff00' });
-            } else {
-                btn.setStyle({ color: '#ffffff' });
-            }
-        });
+    update(time: number, delta: number): void {
     }
 
     shutdown() {
+        if (this.menuContainer) {
+            this.menuContainer.destroy();
+        }
         this.scale.off('resize', this.resize, this);
     }
 }

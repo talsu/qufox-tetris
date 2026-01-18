@@ -1,5 +1,5 @@
-import {ObjectBase} from "./objectBase";
-import {getBlockSize} from "../const/const";
+import { ObjectBase } from "./objectBase";
+import { getBlockSize } from "../const/const";
 const BLOCK_SIZE = getBlockSize();
 
 export class LevelIndicator extends ObjectBase {
@@ -18,7 +18,7 @@ export class LevelIndicator extends ObjectBase {
     private combosValueText: Phaser.GameObjects.Text;
     private tpmValueText: Phaser.GameObjects.Text;
     private lpmValueText: Phaser.GameObjects.Text;
-    
+
     private actionText: Phaser.GameObjects.Text;
     private actionTextShowEvent: Phaser.Time.TimerEvent;
     private comboText: Phaser.GameObjects.Text;
@@ -32,8 +32,8 @@ export class LevelIndicator extends ObjectBase {
 
     private createUI() {
         // Match TetrominoBox dimensions and style
-        const bgWidth = BLOCK_SIZE * 6;
-        const bgHeight = BLOCK_SIZE * 15.5;
+        const bgWidth = BLOCK_SIZE * 5;
+        const bgHeight = BLOCK_SIZE * 16.5;
 
         // Add Background Panel
         // Use Graphics for exact matching with TetrominoBox style (fillRect/strokeRect)
@@ -52,31 +52,31 @@ export class LevelIndicator extends ObjectBase {
         const commonShadow = { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, stroke: true, fill: true };
 
         const headerStyle = {
-             fontFamily: "Arial Black",
-             fontSize: `${BLOCK_SIZE * 0.7}px`,
-             color: "#ffffff",
-             align: 'left'
+            fontFamily: "Arial Black",
+            fontSize: `${BLOCK_SIZE * 0.7}px`,
+            color: "#ffffff",
+            align: 'left'
         };
 
         const valueLargeStyle = {
-             fontFamily: "Arial Black",
-             fontSize: `${BLOCK_SIZE * 0.8}px`,
-             color: "#ffffff",
-             align: 'left'
+            fontFamily: "Arial Black",
+            fontSize: `${BLOCK_SIZE * 0.8}px`,
+            color: "#ffffff",
+            align: 'left'
         };
 
         const labelStyle = {
-             fontFamily: "Arial Black",
-             fontSize: `${BLOCK_SIZE * 0.5}px`,
-             color: "#ffffff",
-             align: 'left'
+            fontFamily: "Arial Black",
+            fontSize: `${BLOCK_SIZE * 0.5}px`,
+            color: "#ffffff",
+            align: 'left'
         };
 
         const valueSmallStyle = {
-             fontFamily: "Arial Black",
-             fontSize: `${BLOCK_SIZE * 0.5}px`,
-             color: "#ffffff",
-             align: 'right',
+            fontFamily: "Arial Black",
+            fontSize: `${BLOCK_SIZE * 0.5}px`,
+            color: "#ffffff",
+            align: 'right',
         };
 
         // Padding for content inside the box
@@ -141,10 +141,10 @@ export class LevelIndicator extends ObjectBase {
         // Action Text (Bottom)
         currentY += BLOCK_SIZE * 1.0;
         const actionStyle = {
-             fontFamily: "Arial Black",
-             fontSize: `${BLOCK_SIZE * 0.8}px`,
-             color: "#ffff00",
-             align: 'center'
+            fontFamily: "Arial Black",
+            fontSize: `${BLOCK_SIZE * 0.8}px`,
+            color: "#ffff00",
+            align: 'center'
         };
         this.actionText = this.scene.add.text(bgWidth / 2, currentY, "", actionStyle).setOrigin(0.5, 0);
         applyVisibility(this.actionText);
@@ -153,10 +153,10 @@ export class LevelIndicator extends ObjectBase {
         // Combo Text (Below Action)
         currentY += BLOCK_SIZE * 1.0;
         const comboStyle = {
-             fontFamily: "Arial Black",
-             fontSize: `${BLOCK_SIZE * 0.5}px`,
-             color: "#00ffff",
-             align: 'center'
+            fontFamily: "Arial Black",
+            fontSize: `${BLOCK_SIZE * 0.5}px`,
+            color: "#00ffff",
+            align: 'center'
         };
         this.comboText = this.scene.add.text(bgWidth / 2, currentY, "", comboStyle).setOrigin(0.5, 0);
         applyVisibility(this.comboText);
@@ -193,7 +193,7 @@ export class LevelIndicator extends ObjectBase {
     setLevel(level: number) { }
     setLine(cleared, nextGoal) { }
     setScore(score: number) { }
-    setAction(action?: string) {         
+    setAction(action?: string) {
         this.actionTextShowEvent?.destroy();
         this.actionTextShowEvent = null;
 

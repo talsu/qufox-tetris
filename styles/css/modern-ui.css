@@ -30,6 +30,14 @@
     pointer-events: auto;
 }
 
+.main-menu-wrapper {
+    width: 95%;
+    max-width: 700px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
 /* Pause & Game Over Menus */
 .overlay-container {
     position: fixed;
@@ -128,7 +136,7 @@
     background: linear-gradient(180deg, var(--secondary-color) 0%, #0056b3 100%);
     border: 4px solid #ffffff;
     border-radius: 50px;
-    padding: 15px 60px;
+    padding: 15px 50px;
     font-family: var(--font-main);
     font-weight: 900;
     font-size: 36px;
@@ -175,7 +183,8 @@
 
 /* Lobby Styling */
 .lobby-container {
-    width: 90%;
+    width: 95%;
+    max-width: 700px;
     height: 90%;
     background: var(--glass-bg);
     backdrop-filter: blur(10px);
@@ -267,24 +276,4 @@
 .room-list::-webkit-scrollbar-thumb {
     background: var(--primary-color);
     border-radius: 5px;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .game-title {
-        font-size: 70px;
-        -webkit-text-stroke: 2px white;
-    }
-
-    .puyo-btn {
-        font-size: 24px;
-        padding: 12px 30px;
-        min-width: 200px;
-    }
-
-    .lobby-container {
-        width: 100%;
-        height: 100%;
-        border-radius: 0;
-    }
 }

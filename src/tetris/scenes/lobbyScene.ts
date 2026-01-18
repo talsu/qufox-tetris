@@ -16,6 +16,9 @@ export class LobbyScene extends BaseScene {
 
     init() {
         this.handleResolution();
+
+        this.GAME_WIDTH = 500;
+        this.GAME_HEIGHT = 1000;
     }
 
     preload(): void {
@@ -23,6 +26,7 @@ export class LobbyScene extends BaseScene {
 
     create(): void {
         // Register resize handler
+        this.scale.on('resize', this.resize, this);
         this.createBackground();
 
         // Create DOM UI
@@ -164,6 +168,13 @@ export class LobbyScene extends BaseScene {
             this.lobbyDOM.destroy();
         }
         this.scale.off('resize', this.resize, this);
+    }
+
+    resize(gameSize, baseSize?, displaySize?, resolution?) {
+        super.resize(gameSize, baseSize, displaySize, resolution);
+        if (this.lobbyDOM) {
+            this.lobbyDOM.setScale(this.cameras.main.zoom);
+        }
     }
 }
 

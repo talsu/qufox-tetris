@@ -13,6 +13,9 @@ export class MenuScene extends BaseScene {
 
     init(): void {
         this.handleResolution();
+
+        this.GAME_WIDTH = 500;
+        this.GAME_HEIGHT = 1000;
     }
 
     preload(): void {
@@ -35,9 +38,11 @@ export class MenuScene extends BaseScene {
     createDOMUI() {
         const html = `
         <div class="menu-container">
-            <h1 class="game-title">QUFOX<br>TETRIS</h1>
-            <button class="puyo-btn accent" id="singleBtn">Single Player</button>
-            <button class="puyo-btn" id="multiBtn">Multiplayer</button>
+            <div class="main-menu-wrapper">
+                <h1 class="game-title">QUFOX<br>TETRIS</h1>
+                <button class="puyo-btn accent" id="singleBtn">Single Player</button>
+                <button class="puyo-btn" id="multiBtn">Multiplayer</button>
+            </div>
         </div>
         `;
 
@@ -57,6 +62,13 @@ export class MenuScene extends BaseScene {
             multiBtn.addEventListener('click', () => {
                 this.scene.start("LobbyScene");
             });
+        }
+    }
+
+    resize(gameSize, baseSize?, displaySize?, resolution?) {
+        super.resize(gameSize, baseSize, displaySize, resolution);
+        if (this.menuContainer) {
+            this.menuContainer.setScale(this.cameras.main.zoom);
         }
     }
 

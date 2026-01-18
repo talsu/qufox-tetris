@@ -15,7 +15,7 @@ import { InputManager } from "../input/inputManager";
 import { InGameMenu } from "../ui/inGameMenu";
 import { BaseScene } from "./baseScene";
 
-let BLOCK_SIZE = getBlockSize();
+const BLOCK_SIZE = getBlockSize();
 
 /**
  * Play scene
@@ -40,8 +40,8 @@ export class PlayScene extends BaseScene {
     private isGameEnded: boolean = false;
 
     // Configurable Scales
-    private readonly MAIN_SCALE = 2;
-    private readonly SIDE_SCALE = 0.85;
+    private readonly MAIN_SCALE = 1; // 2;
+    private readonly SIDE_SCALE = 1; // 0.85;
 
     private holdBox: TetrominoBox;
 
@@ -56,6 +56,9 @@ export class PlayScene extends BaseScene {
 
     init(data: any): void {
         this.handleResolution();
+
+        this.GAME_WIDTH = BLOCK_SIZE * 22;
+        this.GAME_HEIGHT = BLOCK_SIZE * 22;
 
         this.mode = data.mode || 'single';
         if (this.mode === 'multi') {
@@ -261,14 +264,14 @@ export class PlayScene extends BaseScene {
         }
 
         // --- Layout Constants ---
-        const GAP = BLOCK_SIZE;
-        const HOLD_WIDTH = BLOCK_SIZE * 6;
-        const HOLD_HEIGHT = BLOCK_SIZE * 4;
+        const GAP = BLOCK_SIZE * 0.5;
+        const HOLD_WIDTH = BLOCK_SIZE * 5;
+        const HOLD_HEIGHT = BLOCK_SIZE * 3;
 
         // --- Player 1 Setup ---
         const holdX = p1X - GAP - (HOLD_WIDTH * currentSideScale);
         const holdY = p1Y;
-        this.holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT);
+        this.holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT, "HOLD");
         this.holdBox.container.setScale(currentSideScale);
 
         // Hold Touch Zone
@@ -281,7 +284,7 @@ export class PlayScene extends BaseScene {
         });
 
         const infoX = holdX;
-        const infoY = holdY + (HOLD_HEIGHT * currentSideScale) + (GAP * 0.5);
+        const infoY = holdY + (HOLD_HEIGHT * currentSideScale) + (GAP);
         const levelIndicator = new LevelIndicator(this, infoX, infoY);
         levelIndicator.container.setScale(currentSideScale);
 

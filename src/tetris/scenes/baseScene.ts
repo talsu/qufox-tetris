@@ -3,6 +3,7 @@ export abstract class BaseScene extends Phaser.Scene {
     // Logical base resolution
     protected GAME_WIDTH: number = 1920;
     protected GAME_HEIGHT: number = 1080;
+    protected isMobile: boolean = false;
 
     constructor(config: string | Phaser.Types.Scenes.SettingsConfig) {
         super(config);
@@ -11,11 +12,13 @@ export abstract class BaseScene extends Phaser.Scene {
     protected handleResolution(): void {
         // Detect Mobile Portrait
         if (window.innerWidth < window.innerHeight) {
-            this.GAME_WIDTH = 1080;
-            this.GAME_HEIGHT = 1920;
+            this.GAME_WIDTH = 800;
+            this.GAME_HEIGHT = 1200;
+            this.isMobile = true;
         } else {
             this.GAME_WIDTH = 1920;
             this.GAME_HEIGHT = 1080;
+            this.isMobile = false;
         }
     }
 
@@ -78,43 +81,6 @@ export abstract class BaseScene extends Phaser.Scene {
 
         this.backgroundGraphics.fillRect(drawX, drawY, drawW, drawH);
 
-        this.backgroundGraphics.setDepth(-100);
-    }
-    protected updateBackground2() {
-        if (!this.backgroundGraphics || !this.cameras.main) return;
-
-        const width = this.scale.width;
-        const height = this.scale.height;
-
-        // Reset
-        this.backgroundGraphics.clear();
-        this.backgroundGraphics.setScrollFactor(1);
-
-        // We want to cover the entire VISIBLE area.
-        // Let's calculate the visible area size in world units.
-        const zoom = this.cameras.main.zoom;
-        const visibleWidth = width / zoom;
-        const visibleHeight = height / zoom;
-
-        // Colors: "Deep Space" Gradient
-        // Top: Dark Blue/Black (#0f0c29) -> Bottom: Purple/Blue (#302b63 -> #24243e)
-        // Let's use a nice vertical gradient.
-        const colorTop = 0x0f0c29;
-        const colorBottom = 0x24243e;
-
-        this.backgroundGraphics.fillGradientStyle(colorTop, colorTop, colorBottom, colorBottom, 1);
-
-        // Draw centered on the logical game size
-        // The camera is centered on (GAME_WIDTH/2, GAME_HEIGHT/2)
-        const safety = 100;
-        this.backgroundGraphics.fillRect(
-            (this.GAME_WIDTH - visibleWidth) / 2 - safety,
-            (this.GAME_HEIGHT - visibleHeight) / 2 - safety,
-            visibleWidth + safety * 2,
-            visibleHeight + safety * 2
-        );
-
-        // Ensure it's behind everything
         this.backgroundGraphics.setDepth(-100);
     }
 }

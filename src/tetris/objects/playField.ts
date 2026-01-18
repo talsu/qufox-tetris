@@ -2,6 +2,7 @@ import {CONST, TetrominoType, ColRow, InputState, RotateType, getBlockSize} from
 import {ObjectBase} from './objectBase';
 import {Tetromino} from "./tetromino";
 import {PlayFieldEffects} from "../view/playFieldEffects";
+import {GarbageGenerator} from "../logic/garbageGenerator";
 
 const BLOCK_SIZE = getBlockSize();
 /**
@@ -287,10 +288,6 @@ export class PlayField extends ObjectBase {
         }
 
         // Generate garbage lines (Broken Lines per 2009 Guideline)
-        // A broken line is a row with one empty cell.
-        // The column of the hole is usually determined by the attack.
-        // For this implementation, we pick one random hole for the batch.
-        
         // Find previous garbage hole index to avoid same column (Guideline: hole should change)
         let previousHoleIndex = -1;
         for (let i = this.inactiveTetrominos.length - 1; i >= 0; i--) {
@@ -307,28 +304,11 @@ export class PlayField extends ObjectBase {
                 break;
             }
         }
-
-        let holeIndex;
-        if (previousHoleIndex !== -1) {
-            // Ensure different hole
-            const shift = Phaser.Math.Between(1, CONST.PLAY_FIELD.COL_COUNT - 1);
-            holeIndex = (previousHoleIndex + shift) % CONST.PLAY_FIELD.COL_COUNT;
-        } else {
-            holeIndex = Phaser.Math.Between(0, CONST.PLAY_FIELD.COL_COUNT - 1);
-        }
         
-        for (let i = 0; i < count; i++) {
-            const blocks: any[] = [];
-            // Fill bottom-most rows. 
-            const targetRow = CONST.PLAY_FIELD.ROW_COUNT - 1 - i;
+        // Use Logic Class
+        const { lines } = GarbageGenerator.generate(count, previousHoleIndex);
             
-            for (let col = 0; col < CONST.PLAY_FIELD.COL_COUNT; col++) {
-                if (col !== holeIndex) {
-                    // Push block with explicit GARBAGE type
-                    blocks.push({ col: col, row: targetRow, type: TetrominoType.GARBAGE });
-                }
-            }
-            
+        lines.forEach(blocks => {
             // Create a garbage tetromino container
             // We use Type I as a placeholder for the class constructor, but setInactiveBlocks overwrites visuals.
             // Initialize at (0, 0) to prevent offset.
@@ -338,7 +318,7 @@ export class PlayField extends ObjectBase {
             
             this.inactiveTetrominos.push(garbageTetromino);
             this.container.add(garbageTetromino.container);
-        }
+        });
 
         // Update active tetromino's blocked positions map and ghost block
         if (this.activeTetromino) {

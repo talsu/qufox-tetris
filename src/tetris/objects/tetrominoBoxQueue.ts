@@ -1,6 +1,6 @@
-import {CONST, getBlockSize, TetrominoType} from "../const/const";
-import {ObjectBase} from './objectBase';
-import {TetrominoBox} from "./tetrominoBox";
+import { CONST, getBlockSize, TetrominoType } from "../const/const";
+import { ObjectBase } from './objectBase';
+import { TetrominoBox } from "./tetrominoBox";
 const BLOCK_SIZE = getBlockSize();
 
 export class TetrominoBoxQueue extends ObjectBase {
@@ -10,10 +10,11 @@ export class TetrominoBoxQueue extends ObjectBase {
     private typeQueue: TetrominoType[] = [];
 
     // Layout Constants
-    private readonly BOX_WIDTH = 6 * BLOCK_SIZE;
-    private readonly NEXT_BOX_HEIGHT = 4 * BLOCK_SIZE;
+    private readonly BOX_WIDTH = 5 * BLOCK_SIZE;
+    private readonly NEXT_BOX_HEIGHT = 3 * BLOCK_SIZE;
     private readonly QUEUE_BOX_HEIGHT = 3 * BLOCK_SIZE;
     private readonly BOX_X = 1 * BLOCK_SIZE;
+    private readonly GAP = 0.4 * BLOCK_SIZE;
 
     constructor(scene: Phaser.Scene, x: number, y: number, queueSize: number) {
         super(scene);
@@ -27,23 +28,23 @@ export class TetrominoBoxQueue extends ObjectBase {
 
         // 1. First Item (Next Piece)
         if (queueSize > 0) {
-            this.createBox(this.BOX_X, currentY, this.BOX_WIDTH, this.NEXT_BOX_HEIGHT, true);
-            currentY += this.NEXT_BOX_HEIGHT + BLOCK_SIZE * 0.5;
+            this.createBox(this.BOX_X, currentY, this.BOX_WIDTH, this.NEXT_BOX_HEIGHT, "NEXT");
+            currentY += this.NEXT_BOX_HEIGHT + this.GAP;
         }
 
         // 2. Remaining Items (Queue)
         if (queueSize > 1) {
             const remainingCount = queueSize - 1;
-            
-            // Create shared background for the queue
-            const bgHeight = this.QUEUE_BOX_HEIGHT * remainingCount + BLOCK_SIZE * 0.5;
-            this.createBackground(this.BOX_X, currentY, this.BOX_WIDTH, bgHeight);
+
+            // // Create shared background for the queue
+            // const bgHeight = this.QUEUE_BOX_HEIGHT * remainingCount;
+            // this.createBackground(this.BOX_X, currentY, this.BOX_WIDTH, bgHeight);
 
             // Create boxes for queue items
             for (let i = 0; i < remainingCount; ++i) {
-                this.createBox(this.BOX_X, currentY, this.BOX_WIDTH, this.QUEUE_BOX_HEIGHT, false);
+                this.createBox(this.BOX_X, currentY, this.BOX_WIDTH, this.QUEUE_BOX_HEIGHT);
                 // Adjust spacing for queue items
-                currentY += this.QUEUE_BOX_HEIGHT - (0.11 * BLOCK_SIZE);
+                currentY += this.QUEUE_BOX_HEIGHT + this.GAP;
             }
         }
     }
@@ -54,14 +55,14 @@ export class TetrominoBoxQueue extends ObjectBase {
         background.fillRect(0, 0, width, height);
         background.lineStyle(1, 0xEEEEEE, 1.0);
         background.strokeRect(0, 0, width, height);
-        
+
         background.x = x;
         background.y = y;
         this.container.add(background);
     }
 
-    private createBox(x: number, y: number, width: number, height: number, hasBackground: boolean) {
-        const box = new TetrominoBox(this.scene, x, y, width, height, hasBackground);
+    private createBox(x: number, y: number, width: number, height: number, header: string = "") {
+        const box = new TetrominoBox(this.scene, x, y, width, height, header);
         this.boxes.push(box);
         this.container.add(box.container);
     }

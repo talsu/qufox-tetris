@@ -5,10 +5,10 @@
  */
 
 import "phaser";
-import {PlayScene} from "./scenes/playScene";
-import {MenuScene} from "./scenes/menuScene";
-import {LobbyScene} from "./scenes/lobbyScene";
-import {CONST, getBlockSize} from "./const/const";
+import { PlayScene } from "./scenes/playScene";
+import { MenuScene } from "./scenes/menuScene";
+import { LobbyScene } from "./scenes/lobbyScene";
+import { CONST, getBlockSize } from "./const/const";
 
 // main game configuration
 const config: Phaser.Types.Core.GameConfig = {
@@ -21,11 +21,14 @@ const config: Phaser.Types.Core.GameConfig = {
         autoCenter: Phaser.Scale.NO_CENTER
     },
     parent: "game",
+    dom: {
+        createContainer: true
+    },
     scene: [MenuScene, LobbyScene, PlayScene],
     physics: {
         default: "arcade",
         arcade: {
-            gravity: {x: 0, y: 200}
+            gravity: { x: 0, y: 200 }
         }
     }
 };

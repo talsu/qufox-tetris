@@ -15,7 +15,7 @@ import { InputManager } from "../input/inputManager";
 import { InGameMenu } from "../ui/inGameMenu";
 import { BaseScene } from "./baseScene";
 
-let BLOCK_SIZE = getBlockSize();
+const BLOCK_SIZE = getBlockSize();
 
 /**
  * Play scene
@@ -36,12 +36,12 @@ export class PlayScene extends BaseScene {
     private lastUpdateSend: number = 0;
     private isGameRunning: boolean = false;
     private mode: string = 'single';
-    private backgroundImage: Phaser.GameObjects.Image;
+    // private backgroundGraphics: Phaser.GameObjects.Graphics; // Inherited
     private isGameEnded: boolean = false;
 
     // Configurable Scales
-    private readonly MAIN_SCALE = 2;
-    private readonly SIDE_SCALE = 0.85;
+    private readonly MAIN_SCALE = 1; // 2;
+    private readonly SIDE_SCALE = 1; // 0.85;
 
     private holdBox: TetrominoBox;
 
@@ -57,6 +57,9 @@ export class PlayScene extends BaseScene {
     init(data: any): void {
         this.handleResolution();
 
+        this.GAME_WIDTH = BLOCK_SIZE * 22;
+        this.GAME_HEIGHT = BLOCK_SIZE * 22;
+
         this.mode = data.mode || 'single';
         if (this.mode === 'multi') {
             this.socket = data.socket;
@@ -71,15 +74,11 @@ export class PlayScene extends BaseScene {
     }
 
     preload(): void {
-        if (this.mode === 'single') {
-            this.load.image('background', 'assets/image/background.png');
-        } else {
-            this.load.image('background', 'assets/image/background_multi.png');
-        }
+        // No image loading needed for background
     }
 
     create(): void {
-        this.setBackgroundImage();
+        this.createBackground();
 
         // Setup Navigation Keys for Menu
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -174,6 +173,9 @@ export class PlayScene extends BaseScene {
             this.socket.off('restart_signal');
             this.socket.off('opponent_disconnected');
         }
+        if (this.inGameMenu) {
+            this.inGameMenu.destroy();
+        }
     }
 
     toggleMenu() {
@@ -199,11 +201,11 @@ export class PlayScene extends BaseScene {
         }
     }
 
-    toggleBackground(btn: Phaser.GameObjects.Text) {
-        const isVisible = this.backgroundImage.visible;
-        this.backgroundImage.setVisible(!isVisible);
-        btn.setText(`Background: ${!isVisible ? 'ON' : 'OFF'}`);
-        btn.setColor(!isVisible ? '#fff' : '#aaa');
+    toggleBackground(btn: HTMLElement) {
+        const isVisible = this.backgroundGraphics.visible;
+        this.backgroundGraphics.setVisible(!isVisible);
+        btn.innerText = `Background: ${!isVisible ? 'ON' : 'OFF'}`;
+        // btn.setColor(!isVisible ? '#fff' : '#aaa'); // HTML element style update handled by class or just text
     }
 
     exitGame() {
@@ -262,14 +264,14 @@ export class PlayScene extends BaseScene {
         }
 
         // --- Layout Constants ---
-        const GAP = BLOCK_SIZE;
-        const HOLD_WIDTH = BLOCK_SIZE * 6;
-        const HOLD_HEIGHT = BLOCK_SIZE * 4;
+        const GAP = BLOCK_SIZE * 0.5;
+        const HOLD_WIDTH = BLOCK_SIZE * 5;
+        const HOLD_HEIGHT = BLOCK_SIZE * 3;
 
         // --- Player 1 Setup ---
         const holdX = p1X - GAP - (HOLD_WIDTH * currentSideScale);
         const holdY = p1Y;
-        this.holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT);
+        this.holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT, "HOLD");
         this.holdBox.container.setScale(currentSideScale);
 
         // Hold Touch Zone
@@ -282,7 +284,7 @@ export class PlayScene extends BaseScene {
         });
 
         const infoX = holdX;
-        const infoY = holdY + (HOLD_HEIGHT * currentSideScale) + (GAP * 0.5);
+        const infoY = holdY + (HOLD_HEIGHT * currentSideScale) + (GAP);
         const levelIndicator = new LevelIndicator(this, infoX, infoY);
         levelIndicator.container.setScale(currentSideScale);
 
@@ -321,28 +323,10 @@ export class PlayScene extends BaseScene {
         }
     }
 
-    private setBackgroundImage() {
-        const backgroundImage = this.textures.get('background').getSourceImage();
-        const scaleX = this.GAME_WIDTH / backgroundImage.width;
-        const scaleY = this.GAME_HEIGHT / backgroundImage.height;
-        const scale = Math.max(scaleX, scaleY);
-
-        this.backgroundImage = this.add.image(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'background')
-            .setOrigin(0.5)
-            .setScale(scale);
-    }
-
     update(time: number, delta: number): void {
 
         // Menu Navigation
         if (this.inGameMenu.isMenuOpen || this.isGameEnded) {
-            if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
-                this.inGameMenu.onKey('up');
-            } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
-                this.inGameMenu.onKey('down');
-            } else if (Phaser.Input.Keyboard.JustDown(this.enterKey) || Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-                this.inGameMenu.onKey('enter');
-            }
             return;
         }
 

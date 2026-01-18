@@ -33,6 +33,8 @@ module.exports = (env, argv) => {
             },
             host: '127.0.0.1',
             port: 8080,
+            allowedHosts: 'all',
+            open: true,
             devMiddleware: {
                 publicPath: '/build/'
             }

@@ -3,6 +3,7 @@ export abstract class BaseScene extends Phaser.Scene {
     // Logical base resolution
     protected GAME_WIDTH: number = 1920;
     protected GAME_HEIGHT: number = 1080;
+    protected isMobile: boolean = false;
 
     constructor(config: string | Phaser.Types.Scenes.SettingsConfig) {
         super(config);
@@ -11,13 +12,17 @@ export abstract class BaseScene extends Phaser.Scene {
     protected handleResolution(): void {
         // Detect Mobile Portrait
         if (window.innerWidth < window.innerHeight) {
-            this.GAME_WIDTH = 1080;
-            this.GAME_HEIGHT = 1920;
+            this.GAME_WIDTH = 800;
+            this.GAME_HEIGHT = 1200;
+            this.isMobile = true;
         } else {
             this.GAME_WIDTH = 1920;
             this.GAME_HEIGHT = 1080;
+            this.isMobile = false;
         }
     }
+
+    protected backgroundGraphics: Phaser.GameObjects.Graphics;
 
     protected resize(gameSize, baseSize?, displaySize?, resolution?) {
         if (!this.cameras || !this.cameras.main) {
@@ -35,5 +40,47 @@ export abstract class BaseScene extends Phaser.Scene {
 
         this.cameras.main.setZoom(zoom);
         this.cameras.main.centerOn(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2);
+
+        this.updateBackground();
+    }
+
+    protected createBackground() {
+        this.backgroundGraphics = this.add.graphics();
+        this.updateBackground();
+    }
+
+    protected updateBackground() {
+        if (!this.backgroundGraphics || !this.cameras.main) return;
+
+        const width = this.scale.width;
+        const height = this.scale.height;
+
+        this.backgroundGraphics.clear();
+        this.backgroundGraphics.setScrollFactor(1);
+
+        const zoom = this.cameras.main.zoom;
+        const visibleWidth = width / zoom;
+        const visibleHeight = height / zoom;
+
+        const colorStart = 0xfefdcd;
+        const colorEnd = 0xa3e6ff;
+
+        this.backgroundGraphics.fillGradientStyle(
+            colorStart, // Top-Left
+            colorEnd,   // Top-Right
+            colorStart, // Bottom-Left
+            colorEnd,   // Bottom-Right
+            1           // Alpha
+        );
+
+        const safety = 100;
+        const drawX = (this.GAME_WIDTH - visibleWidth) / 2 - safety;
+        const drawY = (this.GAME_HEIGHT - visibleHeight) / 2 - safety;
+        const drawW = visibleWidth + safety * 2;
+        const drawH = visibleHeight + safety * 2;
+
+        this.backgroundGraphics.fillRect(drawX, drawY, drawW, drawH);
+
+        this.backgroundGraphics.setDepth(-100);
     }
 }

@@ -1,0 +1,279 @@
+/* Modern Puyo Puyo Tetris inspired UI */
+:root {
+    --primary-color: #FF006E;
+    --secondary-color: #3A86FF;
+    --accent-color: #FFBE0B;
+    --text-color: #ffffff;
+    --bg-overlay: rgba(0, 0, 0, 0.4);
+    --glass-bg: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --shadow-color: rgba(0, 0, 0, 0.5);
+
+    --font-main: 'M PLUS Rounded 1c', sans-serif;
+    --font-title: 'Fredoka One', cursive;
+}
+
+/* Global Container Setup for Phaser DOM */
+#game {
+    font-family: var(--font-main);
+    user-select: none;
+}
+
+/* Menu Container */
+.menu-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    pointer-events: auto;
+}
+
+.main-menu-wrapper {
+    width: 95%;
+    max-width: 700px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Pause & Game Over Menus */
+.overlay-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.85);
+    /* Darker for better contrast */
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+    z-index: 10000;
+    /* Ensure it's on top of everything */
+}
+
+.menu-panel {
+    background: var(--glass-bg);
+    border: 4px solid var(--primary-color);
+    border-radius: 40px;
+    padding: 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(255, 255, 255, 0.1);
+    transform: scale(0.9);
+    opacity: 0;
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    /* Bouncier pop */
+    gap: 25px;
+    min-width: 500px;
+}
+
+@keyframes popIn {
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.menu-title {
+    font-family: var(--font-title);
+    font-size: 80px;
+    color: var(--accent-color);
+    -webkit-text-stroke: 4px var(--primary-color);
+    text-shadow: 6px 6px 0px rgba(0, 0, 0, 0.5);
+    margin-bottom: 20px;
+    letter-spacing: 2px;
+}
+
+.menu-score {
+    font-family: var(--font-main);
+    font-size: 50px;
+    color: #ffffff;
+    margin-bottom: 30px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px 30px;
+    border-radius: 20px;
+}
+
+/* Title Styling */
+.game-title {
+    font-family: var(--font-title);
+    font-size: 120px;
+    color: var(--accent-color);
+    text-shadow:
+        4px 4px 0px var(--primary-color),
+        8px 8px 0px #000000;
+    margin-bottom: 50px;
+    transform: rotate(-3deg);
+    animation: floating 3s ease-in-out infinite;
+    letter-spacing: 2px;
+    text-align: center;
+    -webkit-text-stroke: 3px white;
+}
+
+@keyframes floating {
+    0% {
+        transform: rotate(-3deg) translateY(0px);
+    }
+
+    50% {
+        transform: rotate(-3deg) translateY(-20px);
+    }
+
+    100% {
+        transform: rotate(-3deg) translateY(0px);
+    }
+}
+
+/* Button Styling */
+.puyo-btn {
+    background: linear-gradient(180deg, var(--secondary-color) 0%, #0056b3 100%);
+    border: 4px solid #ffffff;
+    border-radius: 50px;
+    padding: 15px 50px;
+    font-family: var(--font-main);
+    font-weight: 900;
+    font-size: 36px;
+    color: white;
+    margin: 15px;
+    cursor: pointer;
+    box-shadow: 0 10px 0 rgba(0, 0, 0, 0.3);
+    transition: all 0.1s ease;
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+    min-width: 300px;
+    text-align: center;
+    display: block;
+    /* Ensure it takes full width in column flex if needed, or behaves as block */
+}
+
+.puyo-btn:hover,
+.puyo-btn.selected {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 0 rgba(0, 0, 0, 0.3);
+    filter: brightness(1.1);
+    outline: 4px solid #ffffff;
+    /* Extra visibility for keyboard nav */
+}
+
+.puyo-btn:active,
+.puyo-btn:active.selected {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.puyo-btn.accent {
+    background: linear-gradient(180deg, var(--primary-color) 0%, #c40055 100%);
+}
+
+.puyo-btn.green {
+    background: linear-gradient(180deg, #38b000 0%, #008000 100%);
+}
+
+.puyo-btn.red {
+    background: linear-gradient(180deg, #d00000 0%, #a00000 100%);
+}
+
+/* Lobby Styling */
+.lobby-container {
+    width: 95%;
+    max-width: 700px;
+    height: 90%;
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 2px solid var(--glass-border);
+    border-radius: 30px;
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    color: white;
+}
+
+.lobby-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--glass-border);
+    padding-bottom: 10px;
+}
+
+.lobby-title {
+    font-family: var(--font-title);
+    font-size: 48px;
+    color: var(--accent-color);
+    -webkit-text-stroke: 2px var(--primary-color);
+}
+
+.room-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 10px;
+}
+
+.room-item {
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 15px;
+    padding: 15px 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.room-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.room-name {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.room-players {
+    font-size: 18px;
+    color: #aaaaaa;
+    margin-right: 20px;
+}
+
+.join-btn {
+    background: var(--secondary-color);
+    border: none;
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-family: var(--font-main);
+    font-weight: 700;
+    color: white;
+    cursor: pointer;
+}
+
+.join-btn:hover,
+.join-btn.selected {
+    filter: brightness(1.2);
+    box-shadow: 0 0 10px var(--secondary-color);
+}
+
+/* Scrollbar Styling */
+.room-list::-webkit-scrollbar {
+    width: 10px;
+}
+
+.room-list::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.room-list::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 5px;
+}

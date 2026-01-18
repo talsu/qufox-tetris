@@ -36,7 +36,7 @@ export class PlayScene extends BaseScene {
     private lastUpdateSend: number = 0;
     private isGameRunning: boolean = false;
     private mode: string = 'single';
-    private backgroundImage: Phaser.GameObjects.Image;
+    // private backgroundGraphics: Phaser.GameObjects.Graphics; // Inherited
     private isGameEnded: boolean = false;
 
     // Configurable Scales
@@ -71,15 +71,11 @@ export class PlayScene extends BaseScene {
     }
 
     preload(): void {
-        if (this.mode === 'single') {
-            this.load.image('background', 'assets/image/background.png');
-        } else {
-            this.load.image('background', 'assets/image/background_multi.png');
-        }
+        // No image loading needed for background
     }
 
     create(): void {
-        this.setBackgroundImage();
+        this.createBackground();
 
         // Setup Navigation Keys for Menu
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -203,8 +199,8 @@ export class PlayScene extends BaseScene {
     }
 
     toggleBackground(btn: HTMLElement) {
-        const isVisible = this.backgroundImage.visible;
-        this.backgroundImage.setVisible(!isVisible);
+        const isVisible = this.backgroundGraphics.visible;
+        this.backgroundGraphics.setVisible(!isVisible);
         btn.innerText = `Background: ${!isVisible ? 'ON' : 'OFF'}`;
         // btn.setColor(!isVisible ? '#fff' : '#aaa'); // HTML element style update handled by class or just text
     }
@@ -322,17 +318,6 @@ export class PlayScene extends BaseScene {
             this.opponentPlayField = new PlayField(this, p2X, p2Y, rawPlayFieldWidth, rawPlayFieldHeight);
             this.add.text(p2X, p2Y - 30, 'Opponent', { fontSize: '20px', color: '#ffffff' });
         }
-    }
-
-    private setBackgroundImage() {
-        const backgroundImage = this.textures.get('background').getSourceImage();
-        const scaleX = this.GAME_WIDTH / backgroundImage.width;
-        const scaleY = this.GAME_HEIGHT / backgroundImage.height;
-        const scale = Math.max(scaleX, scaleY);
-
-        this.backgroundImage = this.add.image(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'background')
-            .setOrigin(0.5)
-            .setScale(scale);
     }
 
     update(time: number, delta: number): void {

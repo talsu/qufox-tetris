@@ -19,24 +19,11 @@ export class LobbyScene extends BaseScene {
     }
 
     preload(): void {
-        this.load.image('background', 'assets/image/bongtalk-background-default.jpg');
     }
 
     create(): void {
         // Register resize handler
-        this.scale.on('resize', this.resize, this);
-        this.events.on('shutdown', this.shutdown, this);
-
-        // Background
-        const bgImg = this.textures.get('background').getSourceImage();
-        const scaleX = this.GAME_WIDTH / bgImg.width;
-        const scaleY = this.GAME_HEIGHT / bgImg.height;
-        const scale = Math.max(scaleX, scaleY);
-
-        this.add.image(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'background')
-            .setOrigin(0.5)
-            .setScale(scale)
-            .setScrollFactor(0); // Fixed background
+        this.createBackground();
 
         // Create DOM UI
         this.createDOMUI();

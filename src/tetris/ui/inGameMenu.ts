@@ -16,7 +16,7 @@ export class InGameMenu {
     private scene: Phaser.Scene;
     private callbacks: MenuCallbacks;
 
-    private menuDOM: Phaser.GameObjects.DOMElement;
+    private menuContainer: HTMLElement | null = null;
 
     public isMenuOpen: boolean = false;
     public isGameEnded: boolean = false;
@@ -42,24 +42,19 @@ export class InGameMenu {
         this.hideMenu(); // Clear existing
 
         const html = `
-        <div class="overlay-container">
             <div class="menu-panel">
                 <div class="menu-title">PAUSED</div>
                 <button class="puyo-btn" id="resumeBtn">RESUME</button>
                 <button class="puyo-btn" id="bgBtn">Background: ON</button>
                 <button class="puyo-btn red" id="exitBtn">EXIT GAME</button>
             </div>
-        </div>
         `;
 
-        this.menuDOM = this.scene.add.dom(0, 0).createFromHTML(html);
-        this.menuDOM.setOrigin(0);
-        this.menuDOM.setScrollFactor(0);
-        this.menuDOM.setPerspective(800);
+        this.createMenuOverlay(html);
 
-        const resumeBtn = this.menuDOM.getChildByID('resumeBtn') as HTMLElement;
-        const bgBtn = this.menuDOM.getChildByID('bgBtn') as HTMLElement;
-        const exitBtn = this.menuDOM.getChildByID('exitBtn') as HTMLElement;
+        const resumeBtn = document.getElementById('resumeBtn');
+        const bgBtn = document.getElementById('bgBtn');
+        const exitBtn = document.getElementById('exitBtn');
 
         if (resumeBtn) resumeBtn.onclick = () => this.callbacks.onResume();
         if (bgBtn) bgBtn.onclick = () => this.callbacks.onToggleBackground(bgBtn);
@@ -72,31 +67,36 @@ export class InGameMenu {
         this.hideMenu();
 
         const html = `
-        <div class="overlay-container">
             <div class="menu-panel">
                 <div class="menu-title" style="-webkit-text-stroke-color: ${color}">${mainText}</div>
                 ${score !== undefined ? `<div class="menu-score">SCORE: ${score}</div>` : ''}
                 <button class="puyo-btn green" id="restartBtn">RESTART</button>
                 <button class="puyo-btn red" id="exitBtn">EXIT</button>
             </div>
-        </div>
         `;
 
-        this.menuDOM = this.scene.add.dom(0, 0).createFromHTML(html);
-        this.menuDOM.setOrigin(0);
-        this.menuDOM.setScrollFactor(0);
+        this.createMenuOverlay(html);
 
-        const restartBtn = this.menuDOM.getChildByID('restartBtn') as HTMLElement;
-        const exitBtn = this.menuDOM.getChildByID('exitBtn') as HTMLElement;
+        const restartBtn = document.getElementById('restartBtn');
+        const exitBtn = document.getElementById('exitBtn');
 
         if (restartBtn) restartBtn.onclick = () => this.callbacks.onRestart();
         if (exitBtn) exitBtn.onclick = () => this.callbacks.onExit();
     }
 
+    private createMenuOverlay(innerHtml: string) {
+        this.menuContainer = document.createElement('div');
+        this.menuContainer.className = 'overlay-container';
+        this.menuContainer.innerHTML = innerHtml;
+        document.body.appendChild(this.menuContainer);
+    }
+
     public hideMenu() {
-        if (this.menuDOM) {
-            this.menuDOM.destroy();
-            this.menuDOM = null;
+        if (this.menuContainer) {
+            if (this.menuContainer.parentNode) {
+                this.menuContainer.parentNode.removeChild(this.menuContainer);
+            }
+            this.menuContainer = null;
         }
     }
 

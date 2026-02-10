@@ -20,7 +20,7 @@ export class MenuScene extends BaseScene {
     }
 
     preload(): void {
-        this.load.spritesheet('blockSheet', 'assets/image/PPTdefaultMinoOnly.png', { frameHeight: CONST.SCREEN.BLOCK_IMAGE_SIZE, frameWidth: CONST.SCREEN.BLOCK_IMAGE_SIZE, margin: 4, spacing: 8 });
+        this.load.spritesheet('blockSheet', '/assets/image/PPTdefaultMinoOnly.png', { frameHeight: CONST.SCREEN.BLOCK_IMAGE_SIZE, frameWidth: CONST.SCREEN.BLOCK_IMAGE_SIZE, margin: 4, spacing: 8 });
     }
 
     create(): void {

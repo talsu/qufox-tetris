@@ -168,6 +168,13 @@ export class NMultiPlayScene extends BaseScene {
                 this.updateLeaderboard();
             }
         });
+
+        this.socket.on('nmulti_receive_garbage', (data: any) => {
+            if (this.playField && this.isGameRunning && !this.isGameEnded) {
+                this.playField.insertGarbage(data.count);
+                this.cameras.main.shake(200, 0.01);
+            }
+        });
     }
 
     private addMiniField(id: string, name: string) {
@@ -257,6 +264,7 @@ export class NMultiPlayScene extends BaseScene {
             this.socket.off('nmulti_snapshot');
             this.socket.off('nmulti_player_joined');
             this.socket.off('nmulti_player_left');
+            this.socket.off('nmulti_receive_garbage');
         }
         if (this.inGameMenu) {
             this.inGameMenu.destroy();
@@ -369,7 +377,24 @@ export class NMultiPlayScene extends BaseScene {
         this.playField = new PlayField(this, p1X, p1Y, rawPlayFieldWidth, rawPlayFieldHeight);
 
         this.engine = new Engine(this.playField, this.holdBox, tetrominoQueue, levelIndicator);
-        // No attack handler - no garbage in N-Multi
+
+        // Send garbage to a random alive opponent
+        this.engine.setAttackHandler((count) => {
+            if (!this.socket) return;
+            const aliveOpponents: string[] = [];
+            for (const [id, p] of Object.entries(this.snapshotPlayers) as [string, any][]) {
+                if (p.isAlive !== false) {
+                    aliveOpponents.push(id);
+                }
+            }
+            if (aliveOpponents.length === 0) return;
+            const targetId = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
+            this.socket.emit('nmulti_send_garbage', {
+                roomId: this.roomId,
+                targetId,
+                count
+            });
+        });
 
         this.playField.on('gameOver', () => {
             const score = this.engine ? this.engine.getScore() : 0;

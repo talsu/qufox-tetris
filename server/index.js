@@ -225,6 +225,17 @@ io.on('connection', (socket) => {
         if (data.board !== undefined) player.board = data.board;
     });
 
+    socket.on('nmulti_send_garbage', (data) => {
+        if (!data || !data.roomId || !data.targetId || !data.count) return;
+        const room = nMultiRooms[data.roomId];
+        if (!room || !room.players[socket.id]) return;
+        if (!room.players[data.targetId]) return;
+        io.to(data.targetId).emit('nmulti_receive_garbage', {
+            count: data.count,
+            fromId: socket.id
+        });
+    });
+
     socket.on('nmulti_game_over', (data) => {
         if (!data || !data.roomId) return;
         const room = nMultiRooms[data.roomId];

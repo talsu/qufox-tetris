@@ -14,11 +14,16 @@ const TYPE_COLORS: Record<string, number> = {
     'GARBAGE': 0x888888
 };
 
+const COMMON_STROKE = '#000000';
+const COMMON_SHADOW = { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, stroke: true, fill: true };
+
 export class MiniPlayField {
     private scene: Phaser.Scene;
     private graphics: Phaser.GameObjects.Graphics;
     private nameText: Phaser.GameObjects.Text;
     private scoreText: Phaser.GameObjects.Text;
+    private gameOverText: Phaser.GameObjects.Text;
+    private gameOverScoreText: Phaser.GameObjects.Text;
     private container: Phaser.GameObjects.Container;
 
     private _x: number = 0;
@@ -26,6 +31,7 @@ export class MiniPlayField {
     private _cellSize: number = 4;
     private _isAlive: boolean = true;
     private _board: string | null = null;
+    private _score: number = 0;
 
     public playerId: string;
     public playerName: string;
@@ -43,27 +49,57 @@ export class MiniPlayField {
         this.nameText = scene.add.text(0, 0, playerName, {
             fontSize: '12px',
             color: '#ffffff',
-            fontFamily: 'Arial',
-            stroke: '#000000',
-            strokeThickness: 2
+            fontFamily: 'Arial Black',
         }).setOrigin(0, 1);
+        this.applyTextStyle(this.nameText, 3);
         this.container.add(this.nameText);
 
         this.scoreText = scene.add.text(0, 0, '0', {
             fontSize: '10px',
-            color: '#ffff00',
-            fontFamily: 'Arial',
-            stroke: '#000000',
-            strokeThickness: 1
+            color: '#ffffff',
+            fontFamily: 'Arial Black',
         }).setOrigin(0, 0);
+        this.applyTextStyle(this.scoreText, 2);
         this.container.add(this.scoreText);
+
+        // Game over overlay texts (hidden by default)
+        this.gameOverText = scene.add.text(0, 0, 'GAME OVER', {
+            fontSize: '12px',
+            color: '#ff0000',
+            fontFamily: 'Arial Black',
+            align: 'center'
+        }).setOrigin(0.5, 0.5);
+        this.applyTextStyle(this.gameOverText, 3);
+        this.gameOverText.setVisible(false);
+        this.container.add(this.gameOverText);
+
+        this.gameOverScoreText = scene.add.text(0, 0, '', {
+            fontSize: '10px',
+            color: '#ffff00',
+            fontFamily: 'Arial Black',
+            align: 'center'
+        }).setOrigin(0.5, 0.5);
+        this.applyTextStyle(this.gameOverScoreText, 2);
+        this.gameOverScoreText.setVisible(false);
+        this.container.add(this.gameOverScoreText);
+    }
+
+    private applyTextStyle(textObj: Phaser.GameObjects.Text, strokeThickness: number) {
+        textObj.setStroke(COMMON_STROKE, strokeThickness);
+        textObj.setShadow(
+            COMMON_SHADOW.offsetX, COMMON_SHADOW.offsetY,
+            COMMON_SHADOW.color, COMMON_SHADOW.blur,
+            COMMON_SHADOW.stroke, COMMON_SHADOW.fill
+        );
     }
 
     updateState(board: string | null, score: number, isAlive: boolean) {
         this._board = board;
         this._isAlive = isAlive;
+        this._score = score;
         this.scoreText.setText(score.toString());
         this.redraw();
+        this.updateGameOverOverlay();
     }
 
     setPosition(x: number, y: number) {
@@ -75,6 +111,7 @@ export class MiniPlayField {
     resize(cellSize: number) {
         this._cellSize = cellSize;
         const fieldWidth = cellSize * COLS;
+        const fieldHeight = cellSize * ROWS;
 
         const fontSize = Math.max(8, Math.floor(cellSize * 2.5));
         const scoreFontSize = Math.max(6, Math.floor(cellSize * 2));
@@ -83,9 +120,28 @@ export class MiniPlayField {
         this.nameText.setPosition(0, -2);
 
         this.scoreText.setFontSize(scoreFontSize);
-        this.scoreText.setPosition(0, cellSize * ROWS + 2);
+        this.scoreText.setPosition(0, fieldHeight + 2);
+
+        // Game over text sizing and positioning
+        const goFontSize = Math.max(8, Math.floor(cellSize * 2));
+        const goScoreFontSize = Math.max(6, Math.floor(cellSize * 1.5));
+        this.gameOverText.setFontSize(goFontSize);
+        this.gameOverText.setPosition(fieldWidth / 2, fieldHeight / 2 - goFontSize * 0.6);
+        this.gameOverScoreText.setFontSize(goScoreFontSize);
+        this.gameOverScoreText.setPosition(fieldWidth / 2, fieldHeight / 2 + goFontSize * 0.6);
 
         this.redraw();
+    }
+
+    private updateGameOverOverlay() {
+        if (!this._isAlive) {
+            this.gameOverText.setVisible(true);
+            this.gameOverScoreText.setText(this._score.toString());
+            this.gameOverScoreText.setVisible(true);
+        } else {
+            this.gameOverText.setVisible(false);
+            this.gameOverScoreText.setVisible(false);
+        }
     }
 
     private redraw() {

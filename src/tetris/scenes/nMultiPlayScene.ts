@@ -47,7 +47,7 @@ export class NMultiPlayScene extends BaseScene {
     init(data: any): void {
         this.handleResolution();
 
-        this.GAME_WIDTH = BLOCK_SIZE * 22;
+        this.GAME_WIDTH = BLOCK_SIZE * 36;
         this.GAME_HEIGHT = BLOCK_SIZE * 22;
 
         this.socket = data.socket;
@@ -168,6 +168,13 @@ export class NMultiPlayScene extends BaseScene {
                 this.updateLeaderboard();
             }
         });
+
+        this.socket.on('nmulti_receive_garbage', (data: any) => {
+            if (this.playField && this.isGameRunning && !this.isGameEnded) {
+                this.playField.insertGarbage(data.count);
+                this.cameras.main.shake(200, 0.01);
+            }
+        });
     }
 
     private addMiniField(id: string, name: string) {
@@ -181,13 +188,11 @@ export class NMultiPlayScene extends BaseScene {
         const count = this.miniFields.size;
         if (count === 0) return;
 
-        // Right 60% area
-        const areaX = this.GAME_WIDTH * 0.42;
+        // Opponent area: right portion after the player area (starts at block 23.5)
+        const areaX = BLOCK_SIZE * 23.5;
         const areaY = BLOCK_SIZE * 1;
-        const areaWidth = this.GAME_WIDTH * 0.56;
-        // Reserve top space for leaderboard
-        const lbHeight = 0; // leaderboard is DOM-based, outside phaser canvas
-        const areaHeight = this.GAME_HEIGHT - BLOCK_SIZE * 2 - lbHeight;
+        const areaWidth = this.GAME_WIDTH - areaX - BLOCK_SIZE * 0.5;
+        const areaHeight = this.GAME_HEIGHT - BLOCK_SIZE * 2;
 
         const textHeight = 24; // name + score text height
 
@@ -259,6 +264,7 @@ export class NMultiPlayScene extends BaseScene {
             this.socket.off('nmulti_snapshot');
             this.socket.off('nmulti_player_joined');
             this.socket.off('nmulti_player_left');
+            this.socket.off('nmulti_receive_garbage');
         }
         if (this.inGameMenu) {
             this.inGameMenu.destroy();
@@ -336,8 +342,10 @@ export class NMultiPlayScene extends BaseScene {
         const rawPlayFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
         const rawPlayFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
 
-        // Left 40% area - center the field there
-        const leftArea = this.GAME_WIDTH * 0.4;
+        // Player area (hold + playfield + queue) is ~21 blocks wide.
+        // Center it in the left 23-block portion, leaving right side for opponents.
+        const PLAYER_AREA_BLOCKS = 23;
+        const leftArea = BLOCK_SIZE * PLAYER_AREA_BLOCKS;
         const p1X = (leftArea - rawPlayFieldWidth) / 2;
         const p1Y = (this.GAME_HEIGHT - rawPlayFieldHeight) / 2;
 
@@ -369,7 +377,24 @@ export class NMultiPlayScene extends BaseScene {
         this.playField = new PlayField(this, p1X, p1Y, rawPlayFieldWidth, rawPlayFieldHeight);
 
         this.engine = new Engine(this.playField, this.holdBox, tetrominoQueue, levelIndicator);
-        // No attack handler - no garbage in N-Multi
+
+        // Send garbage to a random alive opponent
+        this.engine.setAttackHandler((count) => {
+            if (!this.socket) return;
+            const aliveOpponents: string[] = [];
+            for (const [id, p] of Object.entries(this.snapshotPlayers) as [string, any][]) {
+                if (p.isAlive !== false) {
+                    aliveOpponents.push(id);
+                }
+            }
+            if (aliveOpponents.length === 0) return;
+            const targetId = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
+            this.socket.emit('nmulti_send_garbage', {
+                roomId: this.roomId,
+                targetId,
+                count
+            });
+        });
 
         this.playField.on('gameOver', () => {
             const score = this.engine ? this.engine.getScore() : 0;

@@ -1,17 +1,19 @@
+import { CONST } from "../const/const";
 import { BoardCodec } from "../net/boardCodec";
 
 const COLS = 10;
 const ROWS = 20;
+const BLOCK_IMAGE_SIZE = CONST.SCREEN.BLOCK_IMAGE_SIZE;
 
-const TYPE_COLORS: Record<string, number> = {
-    'I': 0x1cd6ff,
-    'J': 0x126fc4,
-    'L': 0xdf9a00,
-    'O': 0xede40b,
-    'S': 0x26a723,
-    'T': 0x9826c7,
-    'Z': 0xc92323,
-    'GARBAGE': 0x888888
+const SPRITE_FRAMES: Record<string, number> = {
+    'I': CONST.TETROMINO.SPRITE_IMAGE_FRAME.I,
+    'J': CONST.TETROMINO.SPRITE_IMAGE_FRAME.J,
+    'L': CONST.TETROMINO.SPRITE_IMAGE_FRAME.L,
+    'O': CONST.TETROMINO.SPRITE_IMAGE_FRAME.O,
+    'S': CONST.TETROMINO.SPRITE_IMAGE_FRAME.S,
+    'T': CONST.TETROMINO.SPRITE_IMAGE_FRAME.T,
+    'Z': CONST.TETROMINO.SPRITE_IMAGE_FRAME.Z,
+    'GARBAGE': 7
 };
 
 const COMMON_STROKE = '#000000';
@@ -19,7 +21,9 @@ const COMMON_SHADOW = { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, strok
 
 export class MiniPlayField {
     private scene: Phaser.Scene;
-    private graphics: Phaser.GameObjects.Graphics;
+    private bgGraphics: Phaser.GameObjects.Graphics;
+    private blockContainer: Phaser.GameObjects.Container;
+    private dimGraphics: Phaser.GameObjects.Graphics;
     private nameText: Phaser.GameObjects.Text;
     private scoreText: Phaser.GameObjects.Text;
     private gameOverText: Phaser.GameObjects.Text;
@@ -43,8 +47,18 @@ export class MiniPlayField {
 
         this.container = scene.add.container(0, 0);
 
-        this.graphics = scene.add.graphics();
-        this.container.add(this.graphics);
+        // Background and border
+        this.bgGraphics = scene.add.graphics();
+        this.container.add(this.bgGraphics);
+
+        // Block images container (renders between background and dim overlay)
+        this.blockContainer = scene.add.container(0, 0);
+        this.container.add(this.blockContainer);
+
+        // Dim overlay for game over (on top of blocks)
+        this.dimGraphics = scene.add.graphics();
+        this.dimGraphics.setVisible(false);
+        this.container.add(this.dimGraphics);
 
         this.nameText = scene.add.text(0, 0, playerName, {
             fontSize: '12px',
@@ -134,50 +148,56 @@ export class MiniPlayField {
     }
 
     private updateGameOverOverlay() {
+        const cellSize = this._cellSize;
+        const fieldWidth = cellSize * COLS;
+        const fieldHeight = cellSize * ROWS;
+
         if (!this._isAlive) {
+            this.dimGraphics.clear();
+            this.dimGraphics.fillStyle(0x000000, 0.6);
+            this.dimGraphics.fillRect(0, 0, fieldWidth, fieldHeight);
+            this.dimGraphics.setVisible(true);
             this.gameOverText.setVisible(true);
             this.gameOverScoreText.setText(this._score.toString());
             this.gameOverScoreText.setVisible(true);
         } else {
+            this.dimGraphics.setVisible(false);
             this.gameOverText.setVisible(false);
             this.gameOverScoreText.setVisible(false);
         }
     }
 
     private redraw() {
-        this.graphics.clear();
-
         const cellSize = this._cellSize;
         const fieldWidth = cellSize * COLS;
         const fieldHeight = cellSize * ROWS;
+        const blockScale = cellSize / BLOCK_IMAGE_SIZE;
 
         // Background
-        this.graphics.fillStyle(0x000000, 0.5);
-        this.graphics.fillRect(0, 0, fieldWidth, fieldHeight);
+        this.bgGraphics.clear();
+        this.bgGraphics.fillStyle(0x000000, 0.5);
+        this.bgGraphics.fillRect(0, 0, fieldWidth, fieldHeight);
+        this.bgGraphics.lineStyle(1, 0xaaaaaa, 0.5);
+        this.bgGraphics.strokeRect(0, 0, fieldWidth, fieldHeight);
 
-        // Border
-        this.graphics.lineStyle(1, 0xaaaaaa, 0.5);
-        this.graphics.strokeRect(0, 0, fieldWidth, fieldHeight);
+        // Clear old block images
+        this.blockContainer.removeAll(true);
 
-        // Draw blocks
+        // Draw blocks using sprite images
         if (this._board) {
             const blocks = BoardCodec.decode(this._board);
             for (const b of blocks) {
-                const color = TYPE_COLORS[b.type] || 0xffffff;
-                this.graphics.fillStyle(color, 1);
-                this.graphics.fillRect(
+                const frame = SPRITE_FRAMES[b.type] ?? 7;
+                const img = this.scene.add.image(
                     b.col * cellSize,
                     b.row * cellSize,
-                    cellSize - 0.5,
-                    cellSize - 0.5
+                    'blockSheet',
+                    frame
                 );
+                img.setOrigin(0);
+                img.setScale(blockScale);
+                this.blockContainer.add(img);
             }
-        }
-
-        // Game over overlay
-        if (!this._isAlive) {
-            this.graphics.fillStyle(0x000000, 0.6);
-            this.graphics.fillRect(0, 0, fieldWidth, fieldHeight);
         }
     }
 

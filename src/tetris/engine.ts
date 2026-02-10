@@ -174,6 +174,13 @@ export class Engine {
     }
 
     /**
+     * Get current game stats (score, level, lines, etc.)
+     */
+    public getStats(): any {
+        return this.scoreSystem.getStats(this.gameTime);
+    }
+
+    /**
      * Game over. emit from play field, when can not create tetromino anymore.
      */
     gameOver(gameOverType) {

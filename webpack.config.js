@@ -35,6 +35,7 @@ module.exports = (env, argv) => {
             port: 8080,
             allowedHosts: 'all',
             open: true,
+            historyApiFallback: true,
             devMiddleware: {
                 publicPath: '/build/'
             }

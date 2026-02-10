@@ -16,8 +16,22 @@ const io = new Server(server, {
 
 app.use(express.static(path.join(__dirname, '../dist')));
 
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
 // rooms = { roomId: { id, name, p1: socketId, p2: socketId, status: 'waiting'|'playing' } }
 let rooms = {};
+
+// N-Multi rooms
+let nMultiRooms = {};
+// nMultiRooms[roomId] = {
+//   id: string,
+//   name: string,
+//   playerCounter: number,
+//   players: { [socketId]: { name, score, level, lines, board, isAlive } },
+//   _broadcastInterval: NodeJS.Timer
+// }
 
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
@@ -100,14 +114,237 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ===== N-Multi Events =====
+
+    socket.on('nmulti_get_rooms', () => {
+        socket.emit('nmulti_room_list', getNMultiRoomList());
+    });
+
+    socket.on('nmulti_create_room', (data) => {
+        const roomName = (data && data.roomName) || 'Room';
+        const roomId = crypto.randomUUID();
+        const playerName = 'Player1';
+
+        nMultiRooms[roomId] = {
+            id: roomId,
+            name: roomName,
+            playerCounter: 1,
+            players: {
+                [socket.id]: {
+                    name: playerName,
+                    score: 0,
+                    level: 1,
+                    lines: 0,
+                    board: null,
+                    isAlive: true
+                }
+            },
+            _broadcastInterval: null
+        };
+
+        socket.join(roomId);
+
+        // Start broadcast interval
+        nMultiRooms[roomId]._broadcastInterval = setInterval(() => {
+            broadcastNMultiSnapshot(roomId);
+        }, 500);
+
+        const room = nMultiRooms[roomId];
+        socket.emit('nmulti_room_joined', {
+            roomId,
+            playerId: socket.id,
+            playerName,
+            players: getPlayersMap(room)
+        });
+
+        io.emit('nmulti_room_list', getNMultiRoomList());
+        console.log(`N-Multi room created: ${roomName} (${roomId})`);
+    });
+
+    socket.on('nmulti_join_room', (data) => {
+        const roomId = data && data.roomId;
+        const room = nMultiRooms[roomId];
+        if (!room) {
+            socket.emit('nmulti_room_error', 'Room does not exist.');
+            return;
+        }
+        const playerCount = Object.keys(room.players).length;
+        if (playerCount >= 100) {
+            socket.emit('nmulti_room_error', 'Room is full (100 players max).');
+            return;
+        }
+        if (room.players[socket.id]) {
+            socket.emit('nmulti_room_error', 'Already in this room.');
+            return;
+        }
+
+        room.playerCounter++;
+        const playerName = 'Player' + room.playerCounter;
+
+        room.players[socket.id] = {
+            name: playerName,
+            score: 0,
+            level: 1,
+            lines: 0,
+            board: null,
+            isAlive: true
+        };
+
+        socket.join(roomId);
+
+        socket.emit('nmulti_room_joined', {
+            roomId,
+            playerId: socket.id,
+            playerName,
+            players: getPlayersMap(room)
+        });
+
+        // Notify others
+        socket.to(roomId).emit('nmulti_player_joined', {
+            playerId: socket.id,
+            playerName
+        });
+
+        io.emit('nmulti_room_list', getNMultiRoomList());
+    });
+
+    socket.on('nmulti_leave_room', (data) => {
+        const roomId = data && data.roomId;
+        removeFromNMultiRoom(socket, roomId);
+    });
+
+    socket.on('nmulti_update_state', (data) => {
+        if (!data || !data.roomId) return;
+        const room = nMultiRooms[data.roomId];
+        if (!room || !room.players[socket.id]) return;
+
+        const player = room.players[socket.id];
+        if (data.score !== undefined) player.score = data.score;
+        if (data.level !== undefined) player.level = data.level;
+        if (data.lines !== undefined) player.lines = data.lines;
+        if (data.board !== undefined) player.board = data.board;
+    });
+
+    socket.on('nmulti_game_over', (data) => {
+        if (!data || !data.roomId) return;
+        const room = nMultiRooms[data.roomId];
+        if (!room || !room.players[socket.id]) return;
+        room.players[socket.id].isAlive = false;
+    });
+
+    socket.on('nmulti_join_or_create', (data) => {
+        const roomName = (data && data.roomName) || 'Room';
+
+        // Find existing room by name
+        let existingRoomId = null;
+        for (const roomId in nMultiRooms) {
+            if (nMultiRooms[roomId].name === roomName) {
+                existingRoomId = roomId;
+                break;
+            }
+        }
+
+        if (existingRoomId) {
+            // Join existing room
+            const room = nMultiRooms[existingRoomId];
+            const playerCount = Object.keys(room.players).length;
+            if (playerCount >= 100) {
+                socket.emit('nmulti_room_error', 'Room is full (100 players max).');
+                return;
+            }
+            if (room.players[socket.id]) {
+                socket.emit('nmulti_room_error', 'Already in this room.');
+                return;
+            }
+
+            room.playerCounter++;
+            const playerName = 'Player' + room.playerCounter;
+
+            room.players[socket.id] = {
+                name: playerName,
+                score: 0,
+                level: 1,
+                lines: 0,
+                board: null,
+                isAlive: true
+            };
+
+            socket.join(existingRoomId);
+
+            socket.emit('nmulti_room_joined', {
+                roomId: existingRoomId,
+                playerId: socket.id,
+                playerName,
+                players: getPlayersMap(room)
+            });
+
+            socket.to(existingRoomId).emit('nmulti_player_joined', {
+                playerId: socket.id,
+                playerName
+            });
+
+            io.emit('nmulti_room_list', getNMultiRoomList());
+        } else {
+            // Create new room
+            const roomId = crypto.randomUUID();
+            const playerName = 'Player1';
+
+            nMultiRooms[roomId] = {
+                id: roomId,
+                name: roomName,
+                playerCounter: 1,
+                players: {
+                    [socket.id]: {
+                        name: playerName,
+                        score: 0,
+                        level: 1,
+                        lines: 0,
+                        board: null,
+                        isAlive: true
+                    }
+                },
+                _broadcastInterval: null
+            };
+
+            socket.join(roomId);
+
+            nMultiRooms[roomId]._broadcastInterval = setInterval(() => {
+                broadcastNMultiSnapshot(roomId);
+            }, 500);
+
+            socket.emit('nmulti_room_joined', {
+                roomId,
+                playerId: socket.id,
+                playerName,
+                players: getPlayersMap(nMultiRooms[roomId])
+            });
+
+            io.emit('nmulti_room_list', getNMultiRoomList());
+            console.log(`N-Multi room created via join_or_create: ${roomName} (${roomId})`);
+        }
+    });
+
+    socket.on('nmulti_restart', (data) => {
+        if (!data || !data.roomId) return;
+        const room = nMultiRooms[data.roomId];
+        if (!room || !room.players[socket.id]) return;
+        const player = room.players[socket.id];
+        player.score = 0;
+        player.level = 1;
+        player.lines = 0;
+        player.board = null;
+        player.isAlive = true;
+    });
+
+    // ===== Disconnect =====
+
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
-        // Clean up rooms where this user was a player
+        // Clean up 1v1 rooms
         let roomChanged = false;
         for (const roomId in rooms) {
             const room = rooms[roomId];
             if (room.p1 === socket.id || room.p2 === socket.id) {
-                // For simplicity, if a player leaves, close the room
                 io.to(roomId).emit('opponent_disconnected');
                 delete rooms[roomId];
                 roomChanged = true;
@@ -116,8 +353,100 @@ io.on('connection', (socket) => {
         if (roomChanged) {
             io.emit('room_list', getRoomList());
         }
+
+        // Clean up N-Multi rooms
+        let nMultiChanged = false;
+        for (const roomId in nMultiRooms) {
+            const room = nMultiRooms[roomId];
+            if (room.players[socket.id]) {
+                removeFromNMultiRoom(socket, roomId);
+                nMultiChanged = true;
+            }
+        }
     });
 });
+
+// ===== N-Multi Helper Functions =====
+
+function getNMultiRoomList() {
+    return Object.values(nMultiRooms).map(r => ({
+        id: r.id,
+        name: r.name,
+        playerCount: Object.keys(r.players).length
+    }));
+}
+
+function getPlayersMap(room) {
+    const map = {};
+    for (const [sid, p] of Object.entries(room.players)) {
+        map[sid] = {
+            name: p.name,
+            score: p.score,
+            level: p.level,
+            lines: p.lines,
+            board: p.board,
+            isAlive: p.isAlive
+        };
+    }
+    return map;
+}
+
+function broadcastNMultiSnapshot(roomId) {
+    const room = nMultiRooms[roomId];
+    if (!room) return;
+
+    const playerIds = Object.keys(room.players);
+    if (playerIds.length === 0) return;
+
+    // Build full snapshot
+    const allPlayers = {};
+    for (const sid of playerIds) {
+        const p = room.players[sid];
+        allPlayers[sid] = {
+            name: p.name,
+            score: p.score,
+            level: p.level,
+            lines: p.lines,
+            board: p.board,
+            isAlive: p.isAlive
+        };
+    }
+
+    // Send to each client excluding themselves
+    for (const sid of playerIds) {
+        const snapshot = {};
+        for (const otherId of playerIds) {
+            if (otherId !== sid) {
+                snapshot[otherId] = allPlayers[otherId];
+            }
+        }
+        io.to(sid).emit('nmulti_snapshot', { players: snapshot });
+    }
+}
+
+function removeFromNMultiRoom(socket, roomId) {
+    const room = nMultiRooms[roomId];
+    if (!room || !room.players[socket.id]) return;
+
+    delete room.players[socket.id];
+    socket.leave(roomId);
+
+    const remaining = Object.keys(room.players).length;
+    if (remaining === 0) {
+        // Room empty, clean up
+        if (room._broadcastInterval) {
+            clearInterval(room._broadcastInterval);
+        }
+        delete nMultiRooms[roomId];
+    } else {
+        // Notify remaining players
+        socket.to(roomId).emit('nmulti_player_left', { playerId: socket.id });
+    }
+
+    io.emit('nmulti_room_list', getNMultiRoomList());
+}
+
+// ===== 1v1 Helper Functions =====
 
 function getRoomList() {
     return Object.values(rooms).map(r => ({

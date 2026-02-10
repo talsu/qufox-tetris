@@ -47,7 +47,7 @@ export class NMultiPlayScene extends BaseScene {
     init(data: any): void {
         this.handleResolution();
 
-        this.GAME_WIDTH = BLOCK_SIZE * 22;
+        this.GAME_WIDTH = BLOCK_SIZE * 36;
         this.GAME_HEIGHT = BLOCK_SIZE * 22;
 
         this.socket = data.socket;
@@ -181,13 +181,11 @@ export class NMultiPlayScene extends BaseScene {
         const count = this.miniFields.size;
         if (count === 0) return;
 
-        // Right 60% area
-        const areaX = this.GAME_WIDTH * 0.42;
+        // Opponent area: right portion after the player area (starts at block 23.5)
+        const areaX = BLOCK_SIZE * 23.5;
         const areaY = BLOCK_SIZE * 1;
-        const areaWidth = this.GAME_WIDTH * 0.56;
-        // Reserve top space for leaderboard
-        const lbHeight = 0; // leaderboard is DOM-based, outside phaser canvas
-        const areaHeight = this.GAME_HEIGHT - BLOCK_SIZE * 2 - lbHeight;
+        const areaWidth = this.GAME_WIDTH - areaX - BLOCK_SIZE * 0.5;
+        const areaHeight = this.GAME_HEIGHT - BLOCK_SIZE * 2;
 
         const textHeight = 24; // name + score text height
 
@@ -336,8 +334,10 @@ export class NMultiPlayScene extends BaseScene {
         const rawPlayFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
         const rawPlayFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
 
-        // Left 40% area - center the field there
-        const leftArea = this.GAME_WIDTH * 0.4;
+        // Player area (hold + playfield + queue) is ~21 blocks wide.
+        // Center it in the left 23-block portion, leaving right side for opponents.
+        const PLAYER_AREA_BLOCKS = 23;
+        const leftArea = BLOCK_SIZE * PLAYER_AREA_BLOCKS;
         const p1X = (leftArea - rawPlayFieldWidth) / 2;
         const p1Y = (this.GAME_HEIGHT - rawPlayFieldHeight) / 2;
 

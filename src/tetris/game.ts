@@ -8,6 +8,8 @@ import "phaser";
 import { PlayScene } from "./scenes/playScene";
 import { MenuScene } from "./scenes/menuScene";
 import { LobbyScene } from "./scenes/lobbyScene";
+import { NMultiLobbyScene } from "./scenes/nMultiLobbyScene";
+import { NMultiPlayScene } from "./scenes/nMultiPlayScene";
 import { CONST, getBlockSize } from "./const/const";
 
 // main game configuration
@@ -24,7 +26,7 @@ const config: Phaser.Types.Core.GameConfig = {
     dom: {
         createContainer: true
     },
-    scene: [MenuScene, LobbyScene, PlayScene],
+    scene: [MenuScene, LobbyScene, PlayScene, NMultiLobbyScene, NMultiPlayScene],
     physics: {
         default: "arcade",
         arcade: {

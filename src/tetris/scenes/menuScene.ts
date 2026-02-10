@@ -1,5 +1,6 @@
 import { CONST } from "../const/const";
 import { BaseScene } from "./baseScene";
+import { io, Socket } from "socket.io-client";
 
 
 export class MenuScene extends BaseScene {
@@ -19,7 +20,7 @@ export class MenuScene extends BaseScene {
     }
 
     preload(): void {
-        this.load.spritesheet('blockSheet', 'assets/image/PPTdefaultMinoOnly.png', { frameHeight: CONST.SCREEN.BLOCK_IMAGE_SIZE, frameWidth: CONST.SCREEN.BLOCK_IMAGE_SIZE, margin: 4, spacing: 8 });
+        this.load.spritesheet('blockSheet', '/assets/image/PPTdefaultMinoOnly.png', { frameHeight: CONST.SCREEN.BLOCK_IMAGE_SIZE, frameWidth: CONST.SCREEN.BLOCK_IMAGE_SIZE, margin: 4, spacing: 8 });
     }
 
     create(): void {
@@ -29,10 +30,65 @@ export class MenuScene extends BaseScene {
 
         this.createBackground();
 
+        // Check for /n-multi/{roomName} URL pattern
+        const nMultiMatch = window.location.pathname.match(/^\/n-multi\/(.+)$/);
+        if (nMultiMatch) {
+            const roomName = decodeURIComponent(nMultiMatch[1]);
+            history.replaceState(null, '', '/');
+            this.joinRoomByUrl(roomName);
+            return;
+        }
+
         this.createDOMUI();
 
         // Initial resize
         this.resize(window.innerWidth, window.innerHeight);
+    }
+
+    private joinRoomByUrl(roomName: string): void {
+        // Show connecting text
+        const connectingText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'Connecting...', {
+            fontSize: '32px',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const socketUrl = isLocal ? 'http://localhost:3031' : window.location.origin;
+
+        const socket: Socket = io(socketUrl, { path: '/server' });
+
+        socket.on('connect', () => {
+            socket.emit('nmulti_join_or_create', { roomName });
+        });
+
+        socket.on('nmulti_room_joined', (data: any) => {
+            connectingText.destroy();
+            this.scene.start("NMultiPlayScene", {
+                socket,
+                roomId: data.roomId,
+                playerId: data.playerId,
+                playerName: data.playerName,
+                initialPlayers: data.players
+            });
+        });
+
+        socket.on('nmulti_room_error', (msg: string) => {
+            connectingText.destroy();
+            socket.disconnect();
+            alert('Failed to join room: ' + msg);
+            this.createDOMUI();
+            this.resize(window.innerWidth, window.innerHeight);
+        });
+
+        socket.on('connect_error', () => {
+            connectingText.destroy();
+            socket.disconnect();
+            alert('Failed to connect to server.');
+            this.createDOMUI();
+            this.resize(window.innerWidth, window.innerHeight);
+        });
     }
 
     createDOMUI() {
@@ -42,6 +98,7 @@ export class MenuScene extends BaseScene {
                 <h1 class="game-title">QUFOX<br>TETRIS</h1>
                 <button class="puyo-btn accent" id="singleBtn">Single Player</button>
                 <button class="puyo-btn" id="multiBtn">Multiplayer</button>
+                <button class="puyo-btn green" id="nMultiBtn">N-Multiplay</button>
             </div>
         </div>
         `;
@@ -61,6 +118,13 @@ export class MenuScene extends BaseScene {
         if (multiBtn) {
             multiBtn.addEventListener('click', () => {
                 this.scene.start("LobbyScene");
+            });
+        }
+
+        const nMultiBtn = this.menuContainer.getChildByID('nMultiBtn') as HTMLElement;
+        if (nMultiBtn) {
+            nMultiBtn.addEventListener('click', () => {
+                this.scene.start("NMultiLobbyScene");
             });
         }
     }

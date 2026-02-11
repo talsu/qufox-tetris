@@ -61,6 +61,9 @@ export class GameObjectFactory {
     image(x: number, y: number, key: string, frame?: string | number): Image {
         return new Image(x, y, key, frame);
     }
+    text(x: number, y: number, content: string, style?: any): Text {
+        return new Text(x, y, content, style);
+    }
     tween(config: any): Tween {
         const tween = new Tween(config);
         if (config.onComplete) {
@@ -169,6 +172,39 @@ export class Image {
     }
     destroy() {}
     setSize(w, h) {}
+}
+
+export class Text {
+    x: number;
+    y: number;
+    text: string;
+    style: any;
+    originX: number = 0.5;
+    originY: number = 0.5;
+    visible: boolean = true;
+
+    constructor(x: number, y: number, content: string, style?: any) {
+        this.x = x;
+        this.y = y;
+        this.text = content;
+        this.style = style || {};
+    }
+
+    setOrigin(x: number, y?: number) {
+        this.originX = x;
+        this.originY = y !== undefined ? y : x;
+        return this;
+    }
+    setText(value: string) {
+        this.text = value;
+        return this;
+    }
+    setStroke(color: string, thickness: number) { return this; }
+    setShadow(offsetX: number, offsetY: number, color: string, blur: number, stroke: boolean, fill: boolean) { return this; }
+    setFontSize(size: number) { return this; }
+    setPosition(x: number, y: number) { this.x = x; this.y = y; return this; }
+    setVisible(visible: boolean) { this.visible = visible; return this; }
+    destroy() {}
 }
 
 export class TimeManager {

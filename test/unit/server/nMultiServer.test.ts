@@ -532,4 +532,106 @@ describe('N-Multi Server Logic', () => {
             expect(nMultiRooms['room1']).toBeUndefined();
         });
     });
+
+    describe('Room Response Data (roomName)', () => {
+        function buildRoomJoinedResponse(room: any, socketId: string, playerName: string) {
+            return {
+                roomId: room.id,
+                playerId: socketId,
+                playerName,
+                roomName: room.name,
+                players: getPlayersMap(room)
+            };
+        }
+
+        test('nmulti_create_room response includes roomName', () => {
+            const roomId = 'room-1';
+            const socketId = 'socket1';
+            nMultiRooms[roomId] = {
+                id: roomId,
+                name: 'Created Room',
+                playerCounter: 1,
+                players: {
+                    [socketId]: { name: 'Player1', score: 0, level: 1, lines: 0, board: null, isAlive: true }
+                }
+            };
+
+            const response = buildRoomJoinedResponse(nMultiRooms[roomId], socketId, 'Player1');
+            expect(response.roomName).toBe('Created Room');
+            expect(response.roomId).toBe(roomId);
+            expect(response.playerId).toBe(socketId);
+        });
+
+        test('nmulti_join_room response includes roomName', () => {
+            const roomId = 'room-1';
+            nMultiRooms[roomId] = {
+                id: roomId,
+                name: 'Existing Room',
+                playerCounter: 2,
+                players: {
+                    'socket1': { name: 'Player1', score: 0, level: 1, lines: 0, board: null, isAlive: true },
+                    'socket2': { name: 'Player2', score: 0, level: 1, lines: 0, board: null, isAlive: true }
+                }
+            };
+
+            const response = buildRoomJoinedResponse(nMultiRooms[roomId], 'socket2', 'Player2');
+            expect(response.roomName).toBe('Existing Room');
+        });
+
+        test('nmulti_join_or_create response includes roomName on create', () => {
+            const roomName = 'New JoC Room';
+            const roomId = 'room-joc';
+            const socketId = 'socket1';
+
+            // No existing room found, create new
+            nMultiRooms[roomId] = {
+                id: roomId,
+                name: roomName,
+                playerCounter: 1,
+                players: {
+                    [socketId]: { name: 'Player1', score: 0, level: 1, lines: 0, board: null, isAlive: true }
+                }
+            };
+
+            const response = buildRoomJoinedResponse(nMultiRooms[roomId], socketId, 'Player1');
+            expect(response.roomName).toBe(roomName);
+        });
+
+        test('nmulti_join_or_create response includes roomName on join', () => {
+            const roomId = 'existing-room';
+            nMultiRooms[roomId] = {
+                id: roomId,
+                name: 'Popular Room',
+                playerCounter: 1,
+                players: {
+                    'socket1': { name: 'Player1', score: 0, level: 1, lines: 0, board: null, isAlive: true }
+                }
+            };
+
+            // Simulate join_or_create finding existing room
+            const room = nMultiRooms[roomId];
+            room.playerCounter++;
+            room.players['socket2'] = { name: 'Player2', score: 0, level: 1, lines: 0, board: null, isAlive: true };
+
+            const response = buildRoomJoinedResponse(room, 'socket2', 'Player2');
+            expect(response.roomName).toBe('Popular Room');
+            expect(response.players).toBeDefined();
+            expect(Object.keys(response.players)).toHaveLength(2);
+        });
+
+        test('roomName with special characters is preserved', () => {
+            const roomId = 'room-special';
+            nMultiRooms[roomId] = {
+                id: roomId,
+                name: '테스트 방 #1',
+                playerCounter: 1,
+                players: {
+                    'socket1': { name: 'Player1', score: 0, level: 1, lines: 0, board: null, isAlive: true }
+                }
+            };
+
+            const response = buildRoomJoinedResponse(nMultiRooms[roomId], 'socket1', 'Player1');
+            expect(response.roomName).toBe('테스트 방 #1');
+        });
+    });
 });

@@ -52,7 +52,7 @@ io.on('connection', (socket) => {
         };
         
         socket.join(roomId);
-        socket.emit('room_joined', { roomId, isHost: true });
+        socket.emit('room_joined', { roomId, isHost: true, roomName });
         io.emit('room_list', getRoomList()); // Broadcast update
         console.log(`Room created: ${roomName} (${roomId})`);
     });
@@ -62,9 +62,9 @@ io.on('connection', (socket) => {
         if (room && room.status === 'waiting' && !room.p2) {
             room.p2 = socket.id;
             room.status = 'playing';
-            
+
             socket.join(roomId);
-            socket.emit('room_joined', { roomId, isHost: false });
+            socket.emit('room_joined', { roomId, isHost: false, roomName: room.name });
             
             // Notify P1 (host)
             io.to(room.p1).emit('opponent_joined', { opponentId: socket.id });
@@ -114,6 +114,49 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('join_or_create', (data) => {
+        const roomName = (data && data.roomName) || 'Room';
+
+        // Find existing waiting room by name
+        let existingRoomId = null;
+        for (const roomId in rooms) {
+            if (rooms[roomId].name === roomName && rooms[roomId].status === 'waiting') {
+                existingRoomId = roomId;
+                break;
+            }
+        }
+
+        if (existingRoomId) {
+            // Join existing room as p2
+            const room = rooms[existingRoomId];
+            room.p2 = socket.id;
+            room.status = 'playing';
+
+            socket.join(existingRoomId);
+            socket.emit('room_joined', { roomId: existingRoomId, isHost: false, roomName: room.name });
+
+            io.to(room.p1).emit('opponent_joined', { opponentId: socket.id });
+            socket.emit('opponent_joined', { opponentId: room.p1 });
+
+            io.emit('room_list', getRoomList());
+        } else {
+            // Create new room
+            const roomId = crypto.randomUUID();
+            rooms[roomId] = {
+                id: roomId,
+                name: roomName,
+                p1: socket.id,
+                p2: null,
+                status: 'waiting'
+            };
+
+            socket.join(roomId);
+            socket.emit('room_joined', { roomId, isHost: true, roomName });
+            io.emit('room_list', getRoomList());
+            console.log(`Room created via join_or_create: ${roomName} (${roomId})`);
+        }
+    });
+
     // ===== N-Multi Events =====
 
     socket.on('nmulti_get_rooms', () => {
@@ -154,6 +197,7 @@ io.on('connection', (socket) => {
             roomId,
             playerId: socket.id,
             playerName,
+            roomName: room.name,
             players: getPlayersMap(room)
         });
 
@@ -196,6 +240,7 @@ io.on('connection', (socket) => {
             roomId,
             playerId: socket.id,
             playerName,
+            roomName: room.name,
             players: getPlayersMap(room)
         });
 
@@ -286,6 +331,7 @@ io.on('connection', (socket) => {
                 roomId: existingRoomId,
                 playerId: socket.id,
                 playerName,
+                roomName: room.name,
                 players: getPlayersMap(room)
             });
 
@@ -327,6 +373,7 @@ io.on('connection', (socket) => {
                 roomId,
                 playerId: socket.id,
                 playerName,
+                roomName,
                 players: getPlayersMap(nMultiRooms[roomId])
             });
 

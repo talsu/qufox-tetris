@@ -21,6 +21,7 @@ export class NMultiPlayScene extends BaseScene {
     private isPause: boolean = false;
     private socket: Socket;
     private roomId: string;
+    private roomName: string;
     private playerId: string;
     private playerName: string;
     private statusText: Phaser.GameObjects.Text;
@@ -48,6 +49,7 @@ export class NMultiPlayScene extends BaseScene {
 
         this.socket = data.socket;
         this.roomId = data.roomId;
+        this.roomName = data.roomName;
         this.playerId = data.playerId;
         this.playerName = data.playerName;
 
@@ -277,6 +279,7 @@ export class NMultiPlayScene extends BaseScene {
         if (this.socket) {
             this.socket.emit('nmulti_leave_room', { roomId: this.roomId });
         }
+        history.replaceState(null, '', '/');
         this.scene.start("NMultiLobbyScene");
     }
 
@@ -296,6 +299,7 @@ export class NMultiPlayScene extends BaseScene {
         this.scene.restart({
             socket: this.socket,
             roomId: this.roomId,
+            roomName: this.roomName,
             playerId: this.playerId,
             playerName: this.playerName,
             initialPlayers: this.snapshotPlayers

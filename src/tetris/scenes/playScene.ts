@@ -37,6 +37,7 @@ export class PlayScene extends BaseScene {
     private lastUpdateSend: number = 0;
     private isGameRunning: boolean = false;
     private mode: string = 'single';
+    private roomName: string;
     private isGameEnded: boolean = false;
 
     // Configurable Scales
@@ -54,6 +55,7 @@ export class PlayScene extends BaseScene {
         this.GAME_HEIGHT = BLOCK_SIZE * 22;
 
         this.mode = data.mode || 'single';
+        this.roomName = data.roomName;
         if (this.mode === 'multi') {
             this.socket = data.socket;
             this.roomId = data.roomId;
@@ -133,10 +135,11 @@ export class PlayScene extends BaseScene {
             });
 
             this.socket.on('restart_signal', () => {
-                this.scene.restart({ mode: 'multi', socket: this.socket, roomId: this.roomId });
+                this.scene.restart({ mode: 'multi', socket: this.socket, roomId: this.roomId, roomName: this.roomName });
             });
 
             this.socket.on('opponent_disconnected', () => {
+                history.replaceState(null, '', '/');
                 alert('Opponent disconnected!');
                 this.scene.start('LobbyScene');
             });
@@ -193,6 +196,10 @@ export class PlayScene extends BaseScene {
         this.time.paused = false;
         if (this.socket) {
             this.socket.disconnect();
+        }
+
+        if (this.mode === 'multi') {
+            history.replaceState(null, '', '/');
         }
 
         if (this.mode === 'single') {

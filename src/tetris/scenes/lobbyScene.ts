@@ -10,6 +10,7 @@ interface LobbyConfig {
     title: string;
     playScene: string;
     maxPlayers: number;
+    urlPrefix: string;
     events: {
         getRooms: string;
         roomList: string;
@@ -26,6 +27,7 @@ const MULTI_CONFIG: LobbyConfig = {
     title: 'LOBBY',
     playScene: 'PlayScene',
     maxPlayers: 2,
+    urlPrefix: '/multi',
     events: {
         getRooms: 'get_rooms',
         roomList: 'room_list',
@@ -39,6 +41,7 @@ const MULTI_CONFIG: LobbyConfig = {
         socket,
         roomId: data.roomId,
         isHost: data.isHost,
+        roomName: data.roomName,
     }),
 };
 
@@ -47,6 +50,7 @@ const NMULTI_CONFIG: LobbyConfig = {
     title: 'N-MULTI',
     playScene: 'NMultiPlayScene',
     maxPlayers: 100,
+    urlPrefix: '/n-multi',
     events: {
         getRooms: 'nmulti_get_rooms',
         roomList: 'nmulti_room_list',
@@ -61,6 +65,7 @@ const NMULTI_CONFIG: LobbyConfig = {
         playerId: data.playerId,
         playerName: data.playerName,
         initialPlayers: data.players,
+        roomName: data.roomName,
     }),
 };
 
@@ -115,6 +120,9 @@ class BaseLobbyScene extends BaseScene {
         });
 
         this.socket.on(events.roomJoined, (data: any) => {
+            if (data.roomName) {
+                history.replaceState(null, '', this.lobbyConfig.urlPrefix + '/' + encodeURIComponent(data.roomName));
+            }
             this.scene.start(this.lobbyConfig.playScene, this.lobbyConfig.buildSceneData(this.socket, data));
         });
 

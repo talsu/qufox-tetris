@@ -8,7 +8,7 @@ import "phaser";
 import { PlayScene } from "./scenes/playScene";
 import { MenuScene } from "./scenes/menuScene";
 import { LobbyScene } from "./scenes/lobbyScene";
-import { NMultiLobbyScene } from "./scenes/nMultiLobbyScene";
+import { NMultiLobbyScene } from "./scenes/lobbyScene";
 import { NMultiPlayScene } from "./scenes/nMultiPlayScene";
 import { CONST, getBlockSize } from "./const/const";
 

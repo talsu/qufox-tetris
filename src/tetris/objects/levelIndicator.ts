@@ -1,24 +1,42 @@
 import { ObjectBase } from "./objectBase";
 import { getBlockSize } from "../const/const";
+import {
+    TextStyles,
+    drawPanelBackground,
+    createStyledText,
+    createStatRow,
+} from "../ui/uiStyles";
+
 const BLOCK_SIZE = getBlockSize();
+
+// Layout constants
+const BG_WIDTH = BLOCK_SIZE * 5;
+const BG_HEIGHT = BLOCK_SIZE * 16.5;
+const PADDING_LEFT = BLOCK_SIZE * 0.5;
+const ROW_HEIGHT = BLOCK_SIZE * 0.8;
+const SECTION_GAP = BLOCK_SIZE * 1.5;
+const HEADER_ROW_HEIGHT = BLOCK_SIZE;
+const VALUE_ROW_HEIGHT = BLOCK_SIZE * 1.5;
+const TEMP_TEXT_DURATION = 3000;
 
 export class LevelIndicator extends ObjectBase {
     public container: Phaser.GameObjects.Container;
 
-    // UI Elements
+    // Large value displays
     private scoreValueText: Phaser.GameObjects.Text;
     private timeValueText: Phaser.GameObjects.Text;
 
+    // Stat row values
     private linesValueText: Phaser.GameObjects.Text;
     private levelValueText: Phaser.GameObjects.Text;
     private goalValueText: Phaser.GameObjects.Text;
-
     private tetrisesValueText: Phaser.GameObjects.Text;
     private tSpinsValueText: Phaser.GameObjects.Text;
     private combosValueText: Phaser.GameObjects.Text;
     private tpmValueText: Phaser.GameObjects.Text;
     private lpmValueText: Phaser.GameObjects.Text;
 
+    // Temporary feedback texts
     private actionText: Phaser.GameObjects.Text;
     private actionTextShowEvent: Phaser.Time.TimerEvent;
     private comboText: Phaser.GameObjects.Text;
@@ -31,148 +49,77 @@ export class LevelIndicator extends ObjectBase {
     }
 
     private createUI() {
-        // Match TetrominoBox dimensions and style
-        const bgWidth = BLOCK_SIZE * 5;
-        const bgHeight = BLOCK_SIZE * 16.5;
-
-        // Add Background Panel
-        // Use Graphics for exact matching with TetrominoBox style (fillRect/strokeRect)
-        // TetrominoBox uses: fill 0x000000 0.2, line 1 0xEEEEEE 1.0
+        // Background panel
         const bg = this.scene.add.graphics();
-        bg.fillStyle(0x000000, 0.2);
-        bg.fillRect(0, 0, bgWidth, bgHeight);
-        bg.lineStyle(1, 0xEEEEEE, 1.0);
-        bg.strokeRect(0, 0, bgWidth, bgHeight);
-
+        drawPanelBackground(bg, BG_WIDTH, BG_HEIGHT);
         this.container.add(bg);
 
-        // Text Styles
-        const commonStroke = '#000000';
-        const commonThickness = 4;
-        const commonShadow = { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, stroke: true, fill: true };
+        let y = PADDING_LEFT; // top padding
 
-        const headerStyle = {
-            fontFamily: "Arial Black",
-            fontSize: `${BLOCK_SIZE * 0.7}px`,
-            color: "#ffffff",
-            align: 'left'
-        };
+        // SCORE section
+        y = this.createLargeValueSection(y, 'SCORE', '0', (text) => { this.scoreValueText = text; });
 
-        const valueLargeStyle = {
-            fontFamily: "Arial Black",
-            fontSize: `${BLOCK_SIZE * 0.8}px`,
-            color: "#ffffff",
-            align: 'left'
-        };
-
-        const labelStyle = {
-            fontFamily: "Arial Black",
-            fontSize: `${BLOCK_SIZE * 0.5}px`,
-            color: "#ffffff",
-            align: 'left'
-        };
-
-        const valueSmallStyle = {
-            fontFamily: "Arial Black",
-            fontSize: `${BLOCK_SIZE * 0.5}px`,
-            color: "#ffffff",
-            align: 'right',
-        };
-
-        // Padding for content inside the box
-        const paddingLeft = BLOCK_SIZE * 0.5;
-        let currentY = BLOCK_SIZE * 0.5; // Top padding
-
-        // Helper to apply visibility styles
-        const applyVisibility = (textObj: Phaser.GameObjects.Text, thickness: number = commonThickness) => {
-            textObj.setStroke(commonStroke, thickness);
-            textObj.setShadow(commonShadow.offsetX, commonShadow.offsetY, commonShadow.color, commonShadow.blur, commonShadow.stroke, commonShadow.fill);
-            return textObj;
-        };
-
-        const applySmallVisibility = (textObj: Phaser.GameObjects.Text) => applyVisibility(textObj, 3);
-
-        // SCORE
-        const scoreLabel = this.scene.add.text(paddingLeft, currentY, "SCORE", headerStyle);
-        applyVisibility(scoreLabel);
-        this.container.add(scoreLabel);
-        currentY += BLOCK_SIZE;
-
-        this.scoreValueText = this.scene.add.text(paddingLeft, currentY, "0", valueLargeStyle);
-        applyVisibility(this.scoreValueText);
-        this.container.add(this.scoreValueText);
-        currentY += BLOCK_SIZE * 1.5;
-
-        // TIME
-        const timeLabel = this.scene.add.text(paddingLeft, currentY, "TIME", headerStyle);
-        applyVisibility(timeLabel);
-        this.container.add(timeLabel);
-        currentY += BLOCK_SIZE;
-
-        this.timeValueText = this.scene.add.text(paddingLeft, currentY, "00:00.00", valueLargeStyle);
-        applyVisibility(this.timeValueText);
-        this.container.add(this.timeValueText);
-        currentY += BLOCK_SIZE * 1.5;
+        // TIME section
+        y = this.createLargeValueSection(y, 'TIME', '00:00.00', (text) => { this.timeValueText = text; });
 
         // Spacer
-        currentY += BLOCK_SIZE * 0.5;
+        y += PADDING_LEFT;
 
         // Stats Block 1: Lines, Level, Goal
-        this.linesValueText = this.createStatRow(currentY, "LINES", labelStyle, valueSmallStyle, applySmallVisibility, paddingLeft, bgWidth - paddingLeft);
-        currentY += BLOCK_SIZE * 0.8;
-        this.levelValueText = this.createStatRow(currentY, "LEVEL", labelStyle, valueSmallStyle, applySmallVisibility, paddingLeft, bgWidth - paddingLeft);
-        currentY += BLOCK_SIZE * 0.8;
-        this.goalValueText = this.createStatRow(currentY, "GOAL", labelStyle, valueSmallStyle, applySmallVisibility, paddingLeft, bgWidth - paddingLeft);
-
-        // Spacer
-        currentY += BLOCK_SIZE * 1.5;
+        const rightX = BG_WIDTH - PADDING_LEFT;
+        this.linesValueText = createStatRow(this.scene, this.container, y, 'LINES', PADDING_LEFT, rightX);
+        y += ROW_HEIGHT;
+        this.levelValueText = createStatRow(this.scene, this.container, y, 'LEVEL', PADDING_LEFT, rightX);
+        y += ROW_HEIGHT;
+        this.goalValueText = createStatRow(this.scene, this.container, y, 'GOAL', PADDING_LEFT, rightX);
+        y += SECTION_GAP;
 
         // Stats Block 2: Tetrises, T-Spins, Combos, TPM, LPM
-        this.tetrisesValueText = this.createStatRow(currentY, "TETRISES", labelStyle, valueSmallStyle, applySmallVisibility, paddingLeft, bgWidth - paddingLeft);
-        currentY += BLOCK_SIZE * 0.8;
-        this.tSpinsValueText = this.createStatRow(currentY, "T-SPINS", labelStyle, valueSmallStyle, applySmallVisibility, paddingLeft, bgWidth - paddingLeft);
-        currentY += BLOCK_SIZE * 0.8;
-        this.combosValueText = this.createStatRow(currentY, "COMBOS", labelStyle, valueSmallStyle, applySmallVisibility, paddingLeft, bgWidth - paddingLeft);
-        currentY += BLOCK_SIZE * 0.8;
-        this.tpmValueText = this.createStatRow(currentY, "TPM", labelStyle, valueSmallStyle, applySmallVisibility, paddingLeft, bgWidth - paddingLeft);
-        currentY += BLOCK_SIZE * 0.8;
-        this.lpmValueText = this.createStatRow(currentY, "LPM", labelStyle, valueSmallStyle, applySmallVisibility, paddingLeft, bgWidth - paddingLeft);
+        this.tetrisesValueText = createStatRow(this.scene, this.container, y, 'TETRISES', PADDING_LEFT, rightX);
+        y += ROW_HEIGHT;
+        this.tSpinsValueText = createStatRow(this.scene, this.container, y, 'T-SPINS', PADDING_LEFT, rightX);
+        y += ROW_HEIGHT;
+        this.combosValueText = createStatRow(this.scene, this.container, y, 'COMBOS', PADDING_LEFT, rightX);
+        y += ROW_HEIGHT;
+        this.tpmValueText = createStatRow(this.scene, this.container, y, 'TPM', PADDING_LEFT, rightX);
+        y += ROW_HEIGHT;
+        this.lpmValueText = createStatRow(this.scene, this.container, y, 'LPM', PADDING_LEFT, rightX);
+        y += BLOCK_SIZE;
 
-        // Action Text (Bottom)
-        currentY += BLOCK_SIZE * 1.0;
-        const actionStyle = {
-            fontFamily: "Arial Black",
-            fontSize: `${BLOCK_SIZE * 0.8}px`,
-            color: "#ffff00",
-            align: 'center'
-        };
-        this.actionText = this.scene.add.text(bgWidth / 2, currentY, "", actionStyle).setOrigin(0.5, 0);
-        applyVisibility(this.actionText);
-        this.container.add(this.actionText);
+        // Action Text (temporary feedback)
+        this.actionText = createStyledText(
+            this.scene, this.container,
+            BG_WIDTH / 2, y, '', TextStyles.action,
+        );
+        this.actionText.setOrigin(0.5, 0);
+        y += BLOCK_SIZE;
 
-        // Combo Text (Below Action)
-        currentY += BLOCK_SIZE * 1.0;
-        const comboStyle = {
-            fontFamily: "Arial Black",
-            fontSize: `${BLOCK_SIZE * 0.5}px`,
-            color: "#00ffff",
-            align: 'center'
-        };
-        this.comboText = this.scene.add.text(bgWidth / 2, currentY, "", comboStyle).setOrigin(0.5, 0);
-        applyVisibility(this.comboText);
-        this.container.add(this.comboText);
+        // Combo Text (temporary feedback)
+        this.comboText = createStyledText(
+            this.scene, this.container,
+            BG_WIDTH / 2, y, '', TextStyles.combo,
+        );
+        this.comboText.setOrigin(0.5, 0);
     }
 
-    private createStatRow(y: number, label: string, labelStyle: any, valueStyle: any, styleApplicator: (t: Phaser.GameObjects.Text) => void, xLeft: number, xRight: number): Phaser.GameObjects.Text {
-        const labelText = this.scene.add.text(xLeft, y, label, labelStyle);
-        styleApplicator(labelText);
+    /**
+     * Create a header label + large value text pair.
+     * Returns the next Y position after the section.
+     */
+    private createLargeValueSection(
+        y: number,
+        label: string,
+        initialValue: string,
+        onCreated: (text: Phaser.GameObjects.Text) => void,
+    ): number {
+        createStyledText(this.scene, this.container, PADDING_LEFT, y, label, TextStyles.header);
+        y += HEADER_ROW_HEIGHT;
 
-        const valueText = this.scene.add.text(xRight, y, "0", valueStyle).setOrigin(1, 0); // Right align origin
-        styleApplicator(valueText);
+        const valueText = createStyledText(this.scene, this.container, PADDING_LEFT, y, initialValue, TextStyles.valueLarge);
+        onCreated(valueText);
+        y += VALUE_ROW_HEIGHT;
 
-        this.container.add(labelText);
-        this.container.add(valueText);
-        return valueText;
+        return y;
     }
 
     updateStats(stats: any) {
@@ -189,10 +136,10 @@ export class LevelIndicator extends ObjectBase {
         this.lpmValueText.setText(stats.lpm.toString());
     }
 
-    // Deprecated/Compatibility methods
     setLevel(level: number) { }
     setLine(cleared, nextGoal) { }
     setScore(score: number) { }
+
     setAction(action?: string) {
         this.actionTextShowEvent?.destroy();
         this.actionTextShowEvent = null;
@@ -200,14 +147,13 @@ export class LevelIndicator extends ObjectBase {
         this.actionText.setText(action || '');
         if (action) {
             this.actionTextShowEvent = this.scene.time.addEvent({
-                delay: 3000,
-                callback: () => {
-                    this.actionText.setText('');
-                },
-                callbackScope: this
+                delay: TEMP_TEXT_DURATION,
+                callback: () => this.actionText.setText(''),
+                callbackScope: this,
             });
         }
     }
+
     setCombo(combo: number = -1) {
         this.comboTextShowEvent?.destroy();
         this.comboTextShowEvent = null;
@@ -215,20 +161,19 @@ export class LevelIndicator extends ObjectBase {
         if (combo > 0) {
             this.comboText.setText(combo + ' COMBO');
             this.comboTextShowEvent = this.scene.time.addEvent({
-                delay: 3000,
-                callback: () => {
-                    this.comboText.setText('');
-                },
-                callbackScope: this
+                delay: TEMP_TEXT_DURATION,
+                callback: () => this.comboText.setText(''),
+                callbackScope: this,
             });
         } else {
             this.comboText.setText('');
         }
     }
+
     clear() {
         this.updateStats({
             score: 0,
-            time: "00:00.00",
+            time: '00:00.00',
             lines: 0,
             level: 1,
             goal: 5,
@@ -236,7 +181,7 @@ export class LevelIndicator extends ObjectBase {
             tspins: 0,
             combos: 0,
             tpm: 0,
-            lpm: 0
+            lpm: 0,
         });
     }
 }

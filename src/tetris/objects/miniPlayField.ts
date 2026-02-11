@@ -1,5 +1,6 @@
 import { CONST } from "../const/const";
 import { BoardCodec } from "../net/boardCodec";
+import { applyTextEffect } from "../ui/uiStyles";
 
 const COLS = 10;
 const ROWS = 20;
@@ -13,11 +14,8 @@ const SPRITE_FRAMES: Record<string, number> = {
     'S': CONST.TETROMINO.SPRITE_IMAGE_FRAME.S,
     'T': CONST.TETROMINO.SPRITE_IMAGE_FRAME.T,
     'Z': CONST.TETROMINO.SPRITE_IMAGE_FRAME.Z,
-    'GARBAGE': 7
+    'GARBAGE': 7,
 };
-
-const COMMON_STROKE = '#000000';
-const COMMON_SHADOW = { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, stroke: true, fill: true };
 
 export class MiniPlayField {
     private scene: Phaser.Scene;
@@ -30,8 +28,6 @@ export class MiniPlayField {
     private gameOverScoreText: Phaser.GameObjects.Text;
     private container: Phaser.GameObjects.Container;
 
-    private _x: number = 0;
-    private _y: number = 0;
     private _cellSize: number = 4;
     private _isAlive: boolean = true;
     private _board: string | null = null;
@@ -51,60 +47,41 @@ export class MiniPlayField {
         this.bgGraphics = scene.add.graphics();
         this.container.add(this.bgGraphics);
 
-        // Block images container (renders between background and dim overlay)
+        // Block images container
         this.blockContainer = scene.add.container(0, 0);
         this.container.add(this.blockContainer);
 
-        // Dim overlay for game over (on top of blocks)
+        // Dim overlay for game over
         this.dimGraphics = scene.add.graphics();
         this.dimGraphics.setVisible(false);
         this.container.add(this.dimGraphics);
 
-        this.nameText = scene.add.text(0, 0, playerName, {
-            fontSize: '12px',
-            color: '#ffffff',
-            fontFamily: 'Arial Black',
-        }).setOrigin(0, 1);
-        this.applyTextStyle(this.nameText, 3);
-        this.container.add(this.nameText);
+        // Info texts
+        this.nameText = this.createText(playerName, { fontSize: '12px', color: '#ffffff' }, 3);
+        this.nameText.setOrigin(0, 1);
 
-        this.scoreText = scene.add.text(0, 0, '0', {
-            fontSize: '10px',
-            color: '#ffffff',
-            fontFamily: 'Arial Black',
-        }).setOrigin(0, 0);
-        this.applyTextStyle(this.scoreText, 2);
-        this.container.add(this.scoreText);
+        this.scoreText = this.createText('0', { fontSize: '10px', color: '#ffffff' }, 2);
 
         // Game over overlay texts (hidden by default)
-        this.gameOverText = scene.add.text(0, 0, 'GAME OVER', {
-            fontSize: '12px',
-            color: '#ff0000',
-            fontFamily: 'Arial Black',
-            align: 'center'
-        }).setOrigin(0.5, 0.5);
-        this.applyTextStyle(this.gameOverText, 3);
-        this.gameOverText.setVisible(false);
-        this.container.add(this.gameOverText);
+        this.gameOverText = this.createText('GAME OVER', { fontSize: '12px', color: '#ff0000', align: 'center' }, 3);
+        this.gameOverText.setOrigin(0.5, 0.5).setVisible(false);
 
-        this.gameOverScoreText = scene.add.text(0, 0, '', {
-            fontSize: '10px',
-            color: '#ffff00',
-            fontFamily: 'Arial Black',
-            align: 'center'
-        }).setOrigin(0.5, 0.5);
-        this.applyTextStyle(this.gameOverScoreText, 2);
-        this.gameOverScoreText.setVisible(false);
-        this.container.add(this.gameOverScoreText);
+        this.gameOverScoreText = this.createText('', { fontSize: '10px', color: '#ffff00', align: 'center' }, 2);
+        this.gameOverScoreText.setOrigin(0.5, 0.5).setVisible(false);
     }
 
-    private applyTextStyle(textObj: Phaser.GameObjects.Text, strokeThickness: number) {
-        textObj.setStroke(COMMON_STROKE, strokeThickness);
-        textObj.setShadow(
-            COMMON_SHADOW.offsetX, COMMON_SHADOW.offsetY,
-            COMMON_SHADOW.color, COMMON_SHADOW.blur,
-            COMMON_SHADOW.stroke, COMMON_SHADOW.fill
-        );
+    private createText(
+        content: string,
+        style: Partial<Phaser.Types.GameObjects.Text.TextStyle>,
+        strokeThickness: number,
+    ): Phaser.GameObjects.Text {
+        const text = this.scene.add.text(0, 0, content, {
+            fontFamily: 'Arial Black',
+            ...style,
+        });
+        applyTextEffect(text, strokeThickness);
+        this.container.add(text);
+        return text;
     }
 
     updateState(board: string | null, score: number, isAlive: boolean) {
@@ -117,8 +94,6 @@ export class MiniPlayField {
     }
 
     setPosition(x: number, y: number) {
-        this._x = x;
-        this._y = y;
         this.container.setPosition(x, y);
     }
 
@@ -136,7 +111,7 @@ export class MiniPlayField {
         this.scoreText.setFontSize(scoreFontSize);
         this.scoreText.setPosition(0, fieldHeight + 2);
 
-        // Game over text sizing and positioning
+        // Game over text sizing
         const goFontSize = Math.max(8, Math.floor(cellSize * 2));
         const goScoreFontSize = Math.max(6, Math.floor(cellSize * 1.5));
         this.gameOverText.setFontSize(goFontSize);
@@ -148,9 +123,8 @@ export class MiniPlayField {
     }
 
     private updateGameOverOverlay() {
-        const cellSize = this._cellSize;
-        const fieldWidth = cellSize * COLS;
-        const fieldHeight = cellSize * ROWS;
+        const fieldWidth = this._cellSize * COLS;
+        const fieldHeight = this._cellSize * ROWS;
 
         if (!this._isAlive) {
             this.dimGraphics.clear();
@@ -183,7 +157,7 @@ export class MiniPlayField {
         // Clear old block images
         this.blockContainer.removeAll(true);
 
-        // Draw blocks using sprite images
+        // Draw blocks
         if (this._board) {
             const blocks = BoardCodec.decode(this._board);
             for (const b of blocks) {

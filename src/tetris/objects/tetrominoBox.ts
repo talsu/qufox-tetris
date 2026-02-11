@@ -2,10 +2,12 @@ import { TetrominoType } from "../const/const";
 import { ObjectBase } from './objectBase';
 import { Tetromino } from "./tetromino";
 import { getBlockSize } from "../const/const";
+import { TextStyles, drawPanelBackground, createStyledText } from "../ui/uiStyles";
+
 const BLOCK_SIZE = getBlockSize();
 
 /**
- * Tetromino box.
+ * Tetromino box - displays a single held or next piece.
  */
 export class TetrominoBox extends ObjectBase {
     private tetromino: Tetromino;
@@ -18,45 +20,23 @@ export class TetrominoBox extends ObjectBase {
         this.container.width = width;
         this.container.height = height;
 
-        // Create background.
-        let background = scene.add.graphics();
-        // Set background color.
-        background.fillStyle(0x000000, 0.2);
-        background.fillRect(0, 0, this.container.width, this.container.height);
-        // Set background border
-        background.lineStyle(1, 0xEEEEEE, 1.0);
-        background.strokeRect(0, 0, this.container.width, this.container.height);
-        // Add background graphic to container.
-        this.container.add(background);
+        // Background panel (shared style with LevelIndicator)
+        const bg = scene.add.graphics();
+        drawPanelBackground(bg, width, height);
+        this.container.add(bg);
 
-        this.createHeader(header);
+        if (header) {
+            this.createHeader(header);
+        }
     }
 
     private createHeader(text: string) {
-        // Text Styles
-        const commonStroke = '#000000';
-        const commonThickness = 4;
-        const commonShadow = { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, stroke: true, fill: true };
-
-        const headerStyle = {
-            fontFamily: "Arial Black",
-            fontSize: `${BLOCK_SIZE * 0.7}px`,
-            color: "#ffffff",
-            align: 'center'
-        };
-
-        // Helper to apply visibility styles
-        const applyVisibility = (textObj: Phaser.GameObjects.Text, thickness: number = commonThickness) => {
-            textObj.setStroke(commonStroke, thickness);
-            textObj.setShadow(commonShadow.offsetX, commonShadow.offsetY, commonShadow.color, commonShadow.blur, commonShadow.stroke, commonShadow.fill);
-            return textObj;
-        };
-
-        // Create Header Text at center of top.
-        const headerText = this.scene.add.text(this.container.width / 2, -(BLOCK_SIZE * 0.55), text, headerStyle);
+        const headerText = createStyledText(
+            this.scene, this.container,
+            this.container.width / 2, -(BLOCK_SIZE * 0.55),
+            text, { ...TextStyles.header, align: 'center' },
+        );
         headerText.setOrigin(0.5, 0);
-        applyVisibility(headerText, commonThickness);
-        this.container.add(headerText);
     }
 
     /**
@@ -66,18 +46,17 @@ export class TetrominoBox extends ObjectBase {
      */
     hold(type?: TetrominoType): TetrominoType {
         let existType: TetrominoType = null;
-        if (this.tetromino) { // remove exist tetromino.
+        if (this.tetromino) {
             existType = this.tetromino.type;
             this.container.remove(this.tetromino.container);
             this.tetromino.destroy();
             this.tetromino = null;
         }
 
-        // if new type is invalid, do not create new tetromino.
         if (!type) return existType;
 
-        // create new tetromino.
-        let position = {
+        // Centering offsets per tetromino type
+        const position = {
             I: [0.5, 0],
             J: [1, 0.5],
             L: [1, 0.5],
@@ -93,9 +72,6 @@ export class TetrominoBox extends ObjectBase {
         return existType;
     }
 
-    /**
-     * Clear held tetromino.
-     */
     clear() {
         this.hold();
     }

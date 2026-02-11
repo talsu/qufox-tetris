@@ -1,8 +1,5 @@
 import { PlayField } from '../objects/playField';
 import { CONST, getBlockSize, InputState } from "../const/const";
-import { TetrominoBox } from "../objects/tetrominoBox";
-import { TetrominoBoxQueue } from "../objects/tetrominoBoxQueue";
-import { LevelIndicator } from '../objects/levelIndicator';
 import { Engine } from '../engine';
 import { Socket } from "socket.io-client";
 import { InputManager } from "../input/inputManager";
@@ -11,6 +8,7 @@ import { BaseScene } from "./baseScene";
 import { MiniPlayField } from "../objects/miniPlayField";
 import { LeaderboardPanel, LeaderboardEntry } from "../ui/leaderboardPanel";
 import { BoardCodec } from "../net/boardCodec";
+import { createGameLayout, calcNMultiPlayerPosition } from "../ui/gameLayout";
 
 const BLOCK_SIZE = getBlockSize();
 
@@ -29,8 +27,6 @@ export class NMultiPlayScene extends BaseScene {
     private lastUpdateSend: number = 0;
     private isGameRunning: boolean = false;
     private isGameEnded: boolean = false;
-
-    private holdBox: TetrominoBox;
 
     // Opponents
     private miniFields: Map<string, MiniPlayField> = new Map();
@@ -71,8 +67,7 @@ export class NMultiPlayScene extends BaseScene {
         this.lastUpdateSend = 0;
     }
 
-    preload(): void {
-    }
+    preload(): void { }
 
     create(): void {
         this.createBackground();
@@ -95,20 +90,16 @@ export class NMultiPlayScene extends BaseScene {
 
         this.inputManager = new InputManager(this, (direction, state) => this.onInput(direction, state));
 
-        this.inGameMenu = new InGameMenu(this, this.GAME_WIDTH, this.GAME_HEIGHT, {
+        this.inGameMenu = new InGameMenu(this, {
             onResume: () => this.toggleMenu(),
             onExit: () => this.exitGame(),
             onRestart: () => this.restartGame(),
             onToggleBackground: (btn) => this.toggleBackground(btn)
         });
 
-        // Create opponent container
         this.opponentContainer = this.add.container(0, 0);
-
-        // Create leaderboard
         this.leaderboard = new LeaderboardPanel(this.playerId);
 
-        // Setup socket events
         this.setupSocketEvents();
 
         // Create initial mini fields for opponents already in room
@@ -116,13 +107,11 @@ export class NMultiPlayScene extends BaseScene {
             this.addMiniField(id, (p as any).name);
         }
 
-        // Start game immediately
         this.startGame();
-
         this.events.on('shutdown', this.shutdown, this);
     }
 
-    setupSocketEvents() {
+    private setupSocketEvents() {
         this.socket.on('nmulti_snapshot', (data: any) => {
             if (!data || !data.players) return;
             this.snapshotPlayers = data.players;
@@ -147,7 +136,6 @@ export class NMultiPlayScene extends BaseScene {
                 }
             }
 
-            // Update leaderboard
             this.updateLeaderboard();
         });
 
@@ -188,15 +176,14 @@ export class NMultiPlayScene extends BaseScene {
         const count = this.miniFields.size;
         if (count === 0) return;
 
-        // Opponent area: right portion after the player area (starts at block 23.5)
+        // Opponent area: right portion after the player area
         const areaX = BLOCK_SIZE * 23.5;
         const areaY = BLOCK_SIZE * 1;
         const areaWidth = this.GAME_WIDTH - areaX - BLOCK_SIZE * 0.5;
         const areaHeight = this.GAME_HEIGHT - BLOCK_SIZE * 2;
+        const textHeight = 24;
 
-        const textHeight = 24; // name + score text height
-
-        // Find optimal grid layout
+        // Find optimal grid layout (maximize mini field size)
         let bestCols = 1;
         let bestFieldWidth = 0;
 
@@ -204,8 +191,7 @@ export class NMultiPlayScene extends BaseScene {
             const rows = Math.ceil(count / cols);
             const cellWidth = areaWidth / cols;
             const cellHeight = areaHeight / rows;
-            // Each mini field is 1:2 ratio (10 cols x 20 rows)
-            const fieldWidthFromWidth = cellWidth - 4; // gap
+            const fieldWidthFromWidth = cellWidth - 4;
             const fieldWidthFromHeight = (cellHeight - textHeight - 4) * 0.5;
             const fieldWidth = Math.min(fieldWidthFromWidth, fieldWidthFromHeight);
             if (fieldWidth > bestFieldWidth) {
@@ -223,9 +209,7 @@ export class NMultiPlayScene extends BaseScene {
         for (const [, mini] of this.miniFields) {
             const col = idx % bestCols;
             const row = Math.floor(idx / bestCols);
-            const x = areaX + col * cellWidth + 2;
-            const y = areaY + row * cellHeight + textHeight;
-            mini.setPosition(x, y);
+            mini.setPosition(areaX + col * cellWidth + 2, areaY + row * cellHeight + textHeight);
             mini.resize(cellSize);
             idx++;
         }
@@ -258,7 +242,7 @@ export class NMultiPlayScene extends BaseScene {
         this.leaderboard.update(entries);
     }
 
-    shutdown() {
+    private shutdown() {
         this.scale.off('resize', this.resize, this);
         if (this.socket) {
             this.socket.off('nmulti_snapshot');
@@ -272,24 +256,23 @@ export class NMultiPlayScene extends BaseScene {
         if (this.leaderboard) {
             this.leaderboard.destroy();
         }
-        // Destroy all mini fields
         for (const [, mini] of this.miniFields) {
             mini.destroy();
         }
         this.miniFields.clear();
     }
 
-    toggleMenu() {
+    private toggleMenu() {
         this.inGameMenu.togglePauseMenu();
     }
 
-    toggleBackground(btn: HTMLElement) {
+    private toggleBackground(btn: HTMLElement) {
         const isVisible = this.backgroundGraphics.visible;
         this.backgroundGraphics.setVisible(!isVisible);
         btn.innerText = `Background: ${!isVisible ? 'ON' : 'OFF'}`;
     }
 
-    exitGame() {
+    private exitGame() {
         this.time.paused = false;
         if (this.socket) {
             this.socket.emit('nmulti_leave_room', { roomId: this.roomId });
@@ -297,22 +280,19 @@ export class NMultiPlayScene extends BaseScene {
         this.scene.start("NMultiLobbyScene");
     }
 
-    restartGame() {
+    private restartGame() {
         if (this.socket) {
             this.socket.emit('nmulti_restart', { roomId: this.roomId });
         }
-        // Restart locally
         this.inGameMenu.hideMenu();
         this.inGameMenu.isMenuOpen = false;
         this.inGameMenu.isGameEnded = false;
         this.isGameEnded = false;
 
-        // Remove old game objects and restart
         if (this.playField) {
             this.playField.stop();
         }
 
-        // Restart the scene keeping the socket alive
         this.scene.restart({
             socket: this.socket,
             roomId: this.roomId,
@@ -322,7 +302,7 @@ export class NMultiPlayScene extends BaseScene {
         });
     }
 
-    showEndGameMessage(mainText: string, color: string, score?: number) {
+    private showEndGameMessage(mainText: string, color: string, score?: number) {
         this.isGameRunning = false;
         this.isGameEnded = true;
         this.inputManager.isEnabled = false;
@@ -335,48 +315,22 @@ export class NMultiPlayScene extends BaseScene {
         this.inGameMenu.showEndGame(mainText, color, score);
     }
 
-    startGame() {
+    private startGame() {
         this.isGameRunning = true;
         this.inputManager.isEnabled = true;
 
-        const rawPlayFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
-        const rawPlayFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
+        const pos = calcNMultiPlayerPosition(this.GAME_HEIGHT);
 
-        // Player area (hold + playfield + queue) is ~21 blocks wide.
-        // Center it in the left 23-block portion, leaving right side for opponents.
-        const PLAYER_AREA_BLOCKS = 23;
-        const leftArea = BLOCK_SIZE * PLAYER_AREA_BLOCKS;
-        const p1X = (leftArea - rawPlayFieldWidth) / 2;
-        const p1Y = (this.GAME_HEIGHT - rawPlayFieldHeight) / 2;
-
-        const GAP = BLOCK_SIZE * 0.5;
-        const HOLD_WIDTH = BLOCK_SIZE * 5;
-        const HOLD_HEIGHT = BLOCK_SIZE * 3;
-
-        const holdX = p1X - GAP - HOLD_WIDTH;
-        const holdY = p1Y;
-        this.holdBox = new TetrominoBox(this, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT, "HOLD");
-
-        // Hold touch zone
-        const holdZone = this.add.zone(holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT).setOrigin(0);
-        holdZone.setInteractive();
-        holdZone.on('pointerdown', () => {
-            if (!this.isGameRunning || this.isPause || this.inGameMenu.isMenuOpen || this.isGameEnded) return;
-            this.onInput('hold', InputState.PRESS);
-            this.time.delayedCall(100, () => this.onInput('hold', InputState.RELEASE));
+        const layout = createGameLayout({
+            scene: this,
+            fieldX: pos.x,
+            fieldY: pos.y,
+            onHoldInput: (dir, state) => this.onInput(dir, state),
+            isInputBlocked: () => !this.isGameRunning || this.isPause || this.inGameMenu.isMenuOpen || this.isGameEnded,
         });
 
-        const infoX = holdX;
-        const infoY = holdY + HOLD_HEIGHT + GAP;
-        const levelIndicator = new LevelIndicator(this, infoX, infoY);
-
-        const queueX = p1X + rawPlayFieldWidth + GAP - BLOCK_SIZE;
-        const queueY = p1Y - BLOCK_SIZE;
-        const tetrominoQueue = new TetrominoBoxQueue(this, queueX, queueY, 6);
-
-        this.playField = new PlayField(this, p1X, p1Y, rawPlayFieldWidth, rawPlayFieldHeight);
-
-        this.engine = new Engine(this.playField, this.holdBox, tetrominoQueue, levelIndicator);
+        this.playField = layout.playField;
+        this.engine = layout.engine;
 
         // Send garbage to a random alive opponent
         this.engine.setAttackHandler((count) => {
@@ -404,7 +358,6 @@ export class NMultiPlayScene extends BaseScene {
         this.engine.start();
         this.inputManager.setDragThresholdScale(1);
 
-        // Initial layout of opponents
         this.relayoutOpponents();
     }
 
@@ -440,7 +393,7 @@ export class NMultiPlayScene extends BaseScene {
         }
     }
 
-    onInput(direction: string, state: InputState) {
+    private onInput(direction: string, state: InputState) {
         if (this.engine) {
             this.engine.onInput(direction, state);
         }

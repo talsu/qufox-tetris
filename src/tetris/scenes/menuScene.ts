@@ -35,8 +35,15 @@ export class MenuScene extends BaseScene {
         const nMultiMatch = window.location.pathname.match(/^\/n-multi\/(.+)$/);
         if (nMultiMatch) {
             const roomName = decodeURIComponent(nMultiMatch[1]);
-            history.replaceState(null, '', '/');
-            this.joinRoomByUrl(roomName);
+            this.joinNMultiRoomByUrl(roomName);
+            return;
+        }
+
+        // Check for /multi/{roomName} URL pattern
+        const multiMatch = window.location.pathname.match(/^\/multi\/(.+)$/);
+        if (multiMatch) {
+            const roomName = decodeURIComponent(multiMatch[1]);
+            this.joinMultiRoomByUrl(roomName);
             return;
         }
 
@@ -46,7 +53,7 @@ export class MenuScene extends BaseScene {
         this.resize(window.innerWidth, window.innerHeight);
     }
 
-    private joinRoomByUrl(roomName: string): void {
+    private joinNMultiRoomByUrl(roomName: string): void {
         // Show connecting text
         const connectingText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'Connecting...', {
             fontSize: '32px',
@@ -68,7 +75,8 @@ export class MenuScene extends BaseScene {
                 roomId: data.roomId,
                 playerId: data.playerId,
                 playerName: data.playerName,
-                initialPlayers: data.players
+                initialPlayers: data.players,
+                roomName: roomName
             });
         });
 
@@ -76,6 +84,7 @@ export class MenuScene extends BaseScene {
             connectingText.destroy();
             socket.disconnect();
             alert('Failed to join room: ' + msg);
+            history.replaceState(null, '', '/');
             this.createDOMUI();
             this.resize(window.innerWidth, window.innerHeight);
         });
@@ -84,6 +93,51 @@ export class MenuScene extends BaseScene {
             connectingText.destroy();
             socket.disconnect();
             alert('Failed to connect to server.');
+            history.replaceState(null, '', '/');
+            this.createDOMUI();
+            this.resize(window.innerWidth, window.innerHeight);
+        });
+    }
+
+    private joinMultiRoomByUrl(roomName: string): void {
+        const connectingText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'Connecting...', {
+            fontSize: '32px',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+
+        const socket: Socket = io(getSocketUrl(), { path: SOCKET_PATH });
+
+        socket.on('connect', () => {
+            socket.emit('join_or_create', { roomName });
+        });
+
+        socket.on('room_joined', (data: any) => {
+            connectingText.destroy();
+            this.scene.start("PlayScene", {
+                mode: 'multi',
+                socket,
+                roomId: data.roomId,
+                isHost: data.isHost,
+                roomName: roomName
+            });
+        });
+
+        socket.on('room_error', (msg: string) => {
+            connectingText.destroy();
+            socket.disconnect();
+            alert('Failed to join room: ' + msg);
+            history.replaceState(null, '', '/');
+            this.createDOMUI();
+            this.resize(window.innerWidth, window.innerHeight);
+        });
+
+        socket.on('connect_error', () => {
+            connectingText.destroy();
+            socket.disconnect();
+            alert('Failed to connect to server.');
+            history.replaceState(null, '', '/');
             this.createDOMUI();
             this.resize(window.innerWidth, window.innerHeight);
         });

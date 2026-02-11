@@ -1,6 +1,7 @@
 import { CONST } from "../const/const";
 import { BaseScene } from "./baseScene";
 import { io, Socket } from "socket.io-client";
+import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
 
 
 export class MenuScene extends BaseScene {
@@ -54,10 +55,7 @@ export class MenuScene extends BaseScene {
             strokeThickness: 4
         }).setOrigin(0.5);
 
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const socketUrl = isLocal ? 'http://localhost:3031' : window.location.origin;
-
-        const socket: Socket = io(socketUrl, { path: '/server' });
+        const socket: Socket = io(getSocketUrl(), { path: SOCKET_PATH });
 
         socket.on('connect', () => {
             socket.emit('nmulti_join_or_create', { roomName });

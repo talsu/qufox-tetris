@@ -1,70 +1,124 @@
-
 import { io, Socket } from "socket.io-client";
 import { BaseScene } from "./baseScene";
+import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
 
+// ─── Lobby Configuration ────────────────────────────────────────────
+// Each lobby mode defines its socket events, display text, and target scene.
 
-export class LobbyScene extends BaseScene {
+interface LobbyConfig {
+    sceneKey: string;
+    title: string;
+    playScene: string;
+    maxPlayers: number;
+    events: {
+        getRooms: string;
+        roomList: string;
+        createRoom: string;
+        joinRoom: string;
+        roomJoined: string;
+        roomError: string;
+    };
+    buildSceneData: (socket: Socket, data: any) => any;
+}
+
+const MULTI_CONFIG: LobbyConfig = {
+    sceneKey: 'LobbyScene',
+    title: 'LOBBY',
+    playScene: 'PlayScene',
+    maxPlayers: 2,
+    events: {
+        getRooms: 'get_rooms',
+        roomList: 'room_list',
+        createRoom: 'create_room',
+        joinRoom: 'join_room',
+        roomJoined: 'room_joined',
+        roomError: 'room_error',
+    },
+    buildSceneData: (socket, data) => ({
+        mode: 'multi',
+        socket,
+        roomId: data.roomId,
+        isHost: data.isHost,
+    }),
+};
+
+const NMULTI_CONFIG: LobbyConfig = {
+    sceneKey: 'NMultiLobbyScene',
+    title: 'N-MULTI',
+    playScene: 'NMultiPlayScene',
+    maxPlayers: 100,
+    events: {
+        getRooms: 'nmulti_get_rooms',
+        roomList: 'nmulti_room_list',
+        createRoom: 'nmulti_create_room',
+        joinRoom: 'nmulti_join_room',
+        roomJoined: 'nmulti_room_joined',
+        roomError: 'nmulti_room_error',
+    },
+    buildSceneData: (socket, data) => ({
+        socket,
+        roomId: data.roomId,
+        playerId: data.playerId,
+        playerName: data.playerName,
+        initialPlayers: data.players,
+    }),
+};
+
+// ─── Base Lobby Scene ───────────────────────────────────────────────
+
+class BaseLobbyScene extends BaseScene {
     private socket: Socket;
     private lobbyDOM: Phaser.GameObjects.DOMElement;
     private roomList: any[] = [];
     private isConnected: boolean = false;
+    protected lobbyConfig: LobbyConfig;
 
-
-    constructor() {
-        super({ key: "LobbyScene" });
+    constructor(config: LobbyConfig) {
+        super({ key: config.sceneKey });
+        this.lobbyConfig = config;
     }
 
     init() {
         this.handleResolution();
-
         this.GAME_WIDTH = 500;
         this.GAME_HEIGHT = 1000;
     }
 
-    preload(): void {
-    }
+    preload(): void { }
 
     create(): void {
-        // Register resize handler
         this.scale.on('resize', this.resize, this);
         this.createBackground();
-
-        // Create DOM UI
         this.createDOMUI();
 
-        // Connect to socket
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const socketUrl = isLocal ? 'http://localhost:3031' : window.location.origin;
-
         if (!this.socket || !this.socket.connected) {
-            this.socket = io(socketUrl, { path: '/server' });
+            this.socket = io(getSocketUrl(), { path: SOCKET_PATH });
             this.setupSocketEvents();
         } else {
-            // Already connected (returning from game)
-            this.socket.emit('get_rooms');
+            this.socket.emit(this.lobbyConfig.events.getRooms);
         }
 
-        // Initial resize
         this.resize(window.innerWidth, window.innerHeight);
     }
 
-    setupSocketEvents() {
+    private setupSocketEvents() {
+        const { events } = this.lobbyConfig;
+
         this.socket.on('connect', () => {
-            console.log('Connected to server');
             this.isConnected = true;
-            this.socket.emit('get_rooms');
+            this.socket.emit(events.getRooms);
         });
 
-        this.socket.on('room_list', (rooms: any[]) => {
+        this.socket.on(events.roomList, (rooms: any[]) => {
             this.roomList = rooms;
             this.refreshRoomList();
         });
 
-        this.socket.on('room_joined', (data: any) => {
-            this.scene.start("PlayScene", { mode: 'multi', socket: this.socket, roomId: data.roomId, isHost: data.isHost });
+        this.socket.on(events.roomJoined, (data: any) => {
+            this.scene.start(this.lobbyConfig.playScene, this.lobbyConfig.buildSceneData(this.socket, data));
         });
 
-        this.socket.on('room_error', (msg: string) => {
+        this.socket.on(events.roomError, (msg: string) => {
             alert(msg);
         });
 
@@ -73,19 +127,20 @@ export class LobbyScene extends BaseScene {
         });
     }
 
-    createDOMUI() {
+    private createDOMUI() {
+        const { title, events } = this.lobbyConfig;
+
         const html = `
         <div class="menu-container">
             <div class="lobby-container">
                 <div class="lobby-header">
-                    <div class="lobby-title">LOBBY</div>
+                    <div class="lobby-title">${title}</div>
                     <div>
                         <button class="puyo-btn green" style="font-size: 20px; padding: 10px 20px; min-width: auto;" id="createBtn">Create Room</button>
                         <button class="puyo-btn red" style="font-size: 20px; padding: 10px 20px; min-width: auto;" id="backBtn">Back</button>
                     </div>
                 </div>
                 <div class="room-list" id="roomListContainer">
-                    <!-- Room items will be injected here -->
                     <div style="text-align: center; color: #888; margin-top: 50px;">Loading rooms...</div>
                 </div>
             </div>
@@ -95,15 +150,15 @@ export class LobbyScene extends BaseScene {
         this.lobbyDOM = this.add.dom(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2).createFromHTML(html);
         this.lobbyDOM.setPerspective(800);
 
-        // Bind static buttons
         const createBtn = this.lobbyDOM.getChildByID('createBtn') as HTMLElement;
         const backBtn = this.lobbyDOM.getChildByID('backBtn') as HTMLElement;
 
         if (createBtn) {
             createBtn.addEventListener('click', () => {
-                const roomName = prompt("Enter room name:", "My Room");
+                const roomName = prompt('Enter room name:', 'My Room');
                 if (roomName && this.socket) {
-                    this.socket.emit('create_room', roomName);
+                    const payload = this.lobbyConfig.maxPlayers > 2 ? { roomName } : roomName;
+                    this.socket.emit(events.createRoom, payload);
                 }
             });
         }
@@ -113,12 +168,12 @@ export class LobbyScene extends BaseScene {
                 if (this.socket) {
                     this.socket.disconnect();
                 }
-                this.scene.start("MenuScene");
+                this.scene.start('MenuScene');
             });
         }
     }
 
-    refreshRoomList() {
+    private refreshRoomList() {
         if (!this.lobbyDOM) return;
 
         const container = this.lobbyDOM.getChildByID('roomListContainer') as HTMLElement;
@@ -126,18 +181,18 @@ export class LobbyScene extends BaseScene {
 
         if (this.roomList.length === 0) {
             container.innerHTML = '<div style="text-align: center; color: #888; margin-top: 50px;">No rooms found. Create one!</div>';
-            // Even if no rooms, update nav to just top buttons
-            // Even if no rooms, update nav to just top buttons
             return;
         }
 
+        const maxPlayers = this.lobbyConfig.maxPlayers;
         let listHtml = '';
         this.roomList.forEach((room) => {
+            const playerCount = room.playerCount ?? room.players ?? 0;
             listHtml += `
             <div class="room-item">
                 <div class="room-name">${room.name}</div>
                 <div style="display: flex; align-items: center;">
-                    <div class="room-players">${room.players}/2</div>
+                    <div class="room-players">${playerCount}/${maxPlayers}</div>
                     <button class="join-btn" data-room-id="${room.id}">JOIN</button>
                 </div>
             </div>
@@ -146,22 +201,20 @@ export class LobbyScene extends BaseScene {
 
         container.innerHTML = listHtml;
 
-        // Re-bind join buttons
+        // Bind join buttons
         const joinBtns = container.querySelectorAll('.join-btn');
         joinBtns.forEach((btn: HTMLElement) => {
             btn.addEventListener('click', (e) => {
                 const roomId = (e.target as HTMLElement).getAttribute('data-room-id');
                 if (roomId && this.socket) {
-                    this.socket.emit('join_room', roomId);
+                    const payload = this.lobbyConfig.maxPlayers > 2 ? { roomId } : roomId;
+                    this.socket.emit(this.lobbyConfig.events.joinRoom, payload);
                 }
             });
         });
-
-
     }
 
-    update(time: number, delta: number): void {
-    }
+    update(time: number, delta: number): void { }
 
     shutdown() {
         if (this.lobbyDOM) {
@@ -172,9 +225,22 @@ export class LobbyScene extends BaseScene {
 
     resize(gameSize, baseSize?, displaySize?, resolution?) {
         super.resize(gameSize, baseSize, displaySize, resolution);
-        if (this.lobbyDOM) {
+        if (this.lobbyDOM && this.cameras && this.cameras.main) {
             this.lobbyDOM.setScale(this.cameras.main.zoom);
         }
     }
 }
 
+// ─── Exported Scene Variants ────────────────────────────────────────
+
+export class LobbyScene extends BaseLobbyScene {
+    constructor() {
+        super(MULTI_CONFIG);
+    }
+}
+
+export class NMultiLobbyScene extends BaseLobbyScene {
+    constructor() {
+        super(NMULTI_CONFIG);
+    }
+}

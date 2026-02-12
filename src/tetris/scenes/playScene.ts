@@ -11,6 +11,7 @@ import { io, Socket } from "socket.io-client";
 import { InputManager } from "../input/inputManager";
 import { InGameMenu } from "../ui/inGameMenu";
 import { BaseScene } from "./baseScene";
+import { BotManager } from "../logic/botManager";
 import {
     createGameLayout,
     calcSinglePlayerPosition,
@@ -39,6 +40,8 @@ export class PlayScene extends BaseScene {
     private mode: string = 'single';
     private roomName: string;
     private isGameEnded: boolean = false;
+    private botLevel: number = 0;
+    private botManager: BotManager;
 
     // Configurable Scales
     private readonly MAIN_SCALE = 1;
@@ -56,6 +59,7 @@ export class PlayScene extends BaseScene {
 
         this.mode = data.mode || 'single';
         this.roomName = data.roomName;
+        this.botLevel = data.botLevel || 0;
         if (this.mode === 'multi') {
             this.socket = data.socket;
             this.roomId = data.roomId;
@@ -135,7 +139,7 @@ export class PlayScene extends BaseScene {
             });
 
             this.socket.on('restart_signal', () => {
-                this.scene.restart({ mode: 'multi', socket: this.socket, roomId: this.roomId, roomName: this.roomName });
+                this.scene.restart({ mode: 'multi', socket: this.socket, roomId: this.roomId, roomName: this.roomName, botLevel: this.botLevel });
             });
 
             this.socket.on('opponent_disconnected', () => {
@@ -150,6 +154,9 @@ export class PlayScene extends BaseScene {
 
     private shutdown() {
         this.scale.off('resize', this.resize, this);
+        if (this.botManager) {
+            this.botManager.stop();
+        }
         if (this.socket) {
             this.socket.off('game_start');
             this.socket.off('opponent_state_update');
@@ -221,6 +228,9 @@ export class PlayScene extends BaseScene {
         this.isGameRunning = false;
         this.isGameEnded = true;
         this.inputManager.isEnabled = false;
+        if (this.botManager) {
+            this.botManager.stop();
+        }
         if (this.playField) {
             this.playField.stop();
         }
@@ -270,6 +280,11 @@ export class PlayScene extends BaseScene {
         this.engine.start();
         this.inputManager.setDragThresholdScale(currentMainScale);
 
+        if (this.botLevel > 0) {
+            this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
+            this.botManager.start();
+        }
+
         // Opponent field for 2-player mode
         if (this.mode === 'multi') {
             const rawPlayFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
@@ -290,6 +305,10 @@ export class PlayScene extends BaseScene {
 
         if (this.engine) {
             this.engine.update(time, delta);
+        }
+
+        if (this.botManager) {
+            this.botManager.update(time, delta);
         }
 
         const softDropSpeed = this.playField ? (this.playField.autoDropDelay / 20) : CONST.PLAY_FIELD.AR_MS;

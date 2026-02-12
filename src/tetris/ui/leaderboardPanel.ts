@@ -9,11 +9,14 @@ export class LeaderboardPanel {
     private container: HTMLElement;
     private myPlayerId: string;
 
-    constructor(myPlayerId: string) {
+    constructor(myPlayerId: string, layoutMode?: string) {
         this.myPlayerId = myPlayerId;
 
         this.container = document.createElement('div');
         this.container.className = 'nmulti-leaderboard';
+        if (layoutMode === 'mobile-portrait') {
+            this.container.classList.add('nmulti-leaderboard--portrait');
+        }
         this.container.innerHTML = '<div class="lb-title">LEADERBOARD</div><div class="lb-list"></div>';
         document.body.appendChild(this.container);
     }

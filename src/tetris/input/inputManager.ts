@@ -127,18 +127,11 @@ export class InputManager {
             this.emitInput('softDrop', InputState.RELEASE);
 
             if (this.isTap) {
-                // Check Rotation
-                // We use scene.scale.width to determine 'center' of screen relative to camera if needed,
-                // but PlayScene uses logical GAME_WIDTH.
-                // For now, we assume standard landscape center.
-                // Ideally, we should pass the click region.
-                // But let's assume worldX is correct.
+                // Check Rotation - use world-space center for correct comparison with pointer.worldX
+                const cam = this.scene.cameras.main;
+                const centerWidth = cam.scrollX + (cam.width / cam.zoom) / 2;
 
-                // TODO: Improve this hardcoded width check if possible.
-                // Assuming logical width is consistent with PlayScene logic.
-                const centerWidth = this.scene.cameras.main.width / 2; // approximate
-
-                if (pointer.worldX < centerWidth) { // approximate center
+                if (pointer.worldX < centerWidth) {
                     this.emitInput('anticlockwise', InputState.PRESS);
                     this.scene.time.delayedCall(100, () => this.emitInput('anticlockwise', InputState.RELEASE));
                 } else {

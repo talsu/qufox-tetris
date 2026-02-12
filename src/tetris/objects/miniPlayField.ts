@@ -23,6 +23,7 @@ export class MiniPlayField {
     private blockContainer: Phaser.GameObjects.Container;
     private dimGraphics: Phaser.GameObjects.Graphics;
     private nameText: Phaser.GameObjects.Text;
+    private rankText: Phaser.GameObjects.Text;
     private scoreText: Phaser.GameObjects.Text;
     private gameOverText: Phaser.GameObjects.Text;
     private gameOverScoreText: Phaser.GameObjects.Text;
@@ -56,11 +57,17 @@ export class MiniPlayField {
         this.dimGraphics.setVisible(false);
         this.container.add(this.dimGraphics);
 
-        // Info texts
+        // Name text (above field)
         this.nameText = this.createText(playerName, { fontSize: '12px', color: '#ffffff' }, 3);
         this.nameText.setOrigin(0, 1);
 
+        // Rank text (below field, left-aligned)
+        this.rankText = this.createText('', { fontSize: '10px', color: '#ffbe0b' }, 2);
+        this.rankText.setOrigin(0, 0);
+
+        // Score text (below field, right-aligned)
         this.scoreText = this.createText('0', { fontSize: '10px', color: '#ffffff' }, 2);
+        this.scoreText.setOrigin(1, 0);
 
         // Game over overlay texts (hidden by default)
         this.gameOverText = this.createText('GAME OVER', { fontSize: '12px', color: '#ff0000', align: 'center' }, 3);
@@ -93,6 +100,10 @@ export class MiniPlayField {
         this.updateGameOverOverlay();
     }
 
+    updateRank(rank: number) {
+        this.rankText.setText(`#${rank}`);
+    }
+
     setPosition(x: number, y: number) {
         this.container.setPosition(x, y);
     }
@@ -102,14 +113,20 @@ export class MiniPlayField {
         const fieldWidth = cellSize * COLS;
         const fieldHeight = cellSize * ROWS;
 
-        const fontSize = Math.max(8, Math.floor(cellSize * 2.5));
-        const scoreFontSize = Math.max(6, Math.floor(cellSize * 2));
-
-        this.nameText.setFontSize(fontSize);
+        // Name: scale with cellSize but cap to prevent overflow
+        const nameFontSize = Math.max(8, Math.min(Math.floor(cellSize * 2), 18));
+        this.nameText.setFontSize(nameFontSize);
         this.nameText.setPosition(0, -2);
+        // Crop name text to fieldWidth to prevent horizontal overflow
+        this.nameText.setCrop(0, 0, fieldWidth, nameFontSize * 2);
 
-        this.scoreText.setFontSize(scoreFontSize);
-        this.scoreText.setPosition(0, fieldHeight + 2);
+        // Bottom info row: rank (left) + score (right)
+        const infoFontSize = Math.max(6, Math.min(Math.floor(cellSize * 1.8), 14));
+        this.rankText.setFontSize(infoFontSize);
+        this.rankText.setPosition(0, fieldHeight + 2);
+
+        this.scoreText.setFontSize(infoFontSize);
+        this.scoreText.setPosition(fieldWidth, fieldHeight + 2);
 
         // Game over text sizing
         const goFontSize = Math.max(8, Math.floor(cellSize * 2));

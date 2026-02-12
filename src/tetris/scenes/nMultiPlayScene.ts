@@ -6,10 +6,9 @@ import { InputManager } from "../input/inputManager";
 import { InGameMenu } from "../ui/inGameMenu";
 import { BaseScene } from "./baseScene";
 import { MiniPlayField } from "../objects/miniPlayField";
-import { LeaderboardPanel, LeaderboardEntry } from "../ui/leaderboardPanel";
 import { BoardCodec } from "../net/boardCodec";
 import { BotManager } from "../logic/botManager";
-import { createGameLayout, calcNMultiPlayerPosition } from "../ui/gameLayout";
+import { createGameLayout, calcNMultiPlayerPosition, calcNMultiSceneDimensions, calcPortraitPosition } from "../ui/gameLayout";
 
 const BLOCK_SIZE = getBlockSize();
 
@@ -35,9 +34,8 @@ export class NMultiPlayScene extends BaseScene {
     // Opponents
     private miniFields: Map<string, MiniPlayField> = new Map();
     private opponentContainer: Phaser.GameObjects.Container;
-    private leaderboard: LeaderboardPanel;
 
-    // Snapshot data for leaderboard
+    // Snapshot data for rank computation
     private snapshotPlayers: Record<string, any> = {};
 
     constructor() {
@@ -47,8 +45,9 @@ export class NMultiPlayScene extends BaseScene {
     init(data: any): void {
         this.handleResolution();
 
-        this.GAME_WIDTH = BLOCK_SIZE * 36;
-        this.GAME_HEIGHT = BLOCK_SIZE * 22;
+        const dims = calcNMultiSceneDimensions(this.layoutMode);
+        this.GAME_WIDTH = dims.width;
+        this.GAME_HEIGHT = dims.height;
 
         this.socket = data.socket;
         this.roomId = data.roomId;
@@ -104,7 +103,6 @@ export class NMultiPlayScene extends BaseScene {
         });
 
         this.opponentContainer = this.add.container(0, 0);
-        this.leaderboard = new LeaderboardPanel(this.playerId);
 
         this.setupSocketEvents();
 
@@ -176,7 +174,7 @@ export class NMultiPlayScene extends BaseScene {
                 }
             }
 
-            this.updateLeaderboard();
+            this.updateRanks();
         });
 
         this.socket.on('nmulti_player_joined', (data: any) => {
@@ -193,7 +191,7 @@ export class NMultiPlayScene extends BaseScene {
                 this.miniFields.delete(data.playerId);
                 delete this.snapshotPlayers[data.playerId];
                 this.relayoutOpponents();
-                this.updateLeaderboard();
+                this.updateRanks();
             }
         });
 
@@ -216,26 +214,39 @@ export class NMultiPlayScene extends BaseScene {
         const count = this.miniFields.size;
         if (count === 0) return;
 
-        // Opponent area: right portion after the player area
-        const areaX = BLOCK_SIZE * 23.5;
-        const areaY = BLOCK_SIZE * 1;
-        const areaWidth = this.GAME_WIDTH - areaX - BLOCK_SIZE * 0.5;
-        const areaHeight = this.GAME_HEIGHT - BLOCK_SIZE * 2;
-        const textHeight = 24;
+        const isPortrait = this.layoutMode === 'mobile-portrait';
+
+        // Opponent area dimensions
+        let areaX: number, areaY: number, areaWidth: number, areaHeight: number;
+        if (isPortrait) {
+            // Below player area in portrait
+            areaX = BLOCK_SIZE * 0.5;
+            areaY = BLOCK_SIZE * 28.5; // Below playfield + compact stats
+            areaWidth = this.GAME_WIDTH - BLOCK_SIZE;
+            areaHeight = this.GAME_HEIGHT - areaY - BLOCK_SIZE * 0.5;
+        } else {
+            // Right of player area in desktop
+            areaX = BLOCK_SIZE * 23.5;
+            areaY = BLOCK_SIZE * 1;
+            areaWidth = this.GAME_WIDTH - areaX - BLOCK_SIZE * 0.5;
+            areaHeight = this.GAME_HEIGHT - BLOCK_SIZE * 2;
+        }
+        // Height factor: 20 field rows + 2 name + 2 info = 24 cell-size units
+        const TOTAL_ROWS = 24;
 
         // Find optimal grid layout (maximize mini field size)
         let bestCols = 1;
-        let bestFieldWidth = 0;
+        let bestCellSize = 1;
 
         for (let cols = 1; cols <= count; cols++) {
             const rows = Math.ceil(count / cols);
             const cellWidth = areaWidth / cols;
             const cellHeight = areaHeight / rows;
-            const fieldWidthFromWidth = cellWidth - 4;
-            const fieldWidthFromHeight = (cellHeight - textHeight - 4) * 0.5;
-            const fieldWidth = Math.min(fieldWidthFromWidth, fieldWidthFromHeight);
-            if (fieldWidth > bestFieldWidth) {
-                bestFieldWidth = fieldWidth;
+            const cellSizeFromWidth = (cellWidth - 4) / CONST.PLAY_FIELD.COL_COUNT;
+            const cellSizeFromHeight = (cellHeight - 8) / TOTAL_ROWS;
+            const cellSize = Math.min(cellSizeFromWidth, cellSizeFromHeight);
+            if (cellSize > bestCellSize) {
+                bestCellSize = cellSize;
                 bestCols = cols;
             }
         }
@@ -243,43 +254,49 @@ export class NMultiPlayScene extends BaseScene {
         const bestRows = Math.ceil(count / bestCols);
         const cellWidth = areaWidth / bestCols;
         const cellHeight = areaHeight / bestRows;
-        const cellSize = Math.max(1, bestFieldWidth / 10);
+        const cellSize = Math.max(1, bestCellSize);
+
+        // Name height matches the capped font size in MiniPlayField.resize()
+        const nameHeight = Math.max(8, Math.min(Math.floor(cellSize * 2), 18)) + 4;
 
         let idx = 0;
         for (const [, mini] of this.miniFields) {
             const col = idx % bestCols;
             const row = Math.floor(idx / bestCols);
-            mini.setPosition(areaX + col * cellWidth + 2, areaY + row * cellHeight + textHeight);
+            mini.setPosition(areaX + col * cellWidth + 2, areaY + row * cellHeight + nameHeight);
             mini.resize(cellSize);
             idx++;
         }
     }
 
-    private updateLeaderboard() {
-        const entries: LeaderboardEntry[] = [];
+    private updateRanks() {
+        const entries: { playerId: string; score: number }[] = [];
 
         // Add self
         if (this.engine) {
             const stats = this.engine.getStats();
-            entries.push({
-                playerId: this.playerId,
-                name: this.playerName,
-                score: stats.score,
-                isAlive: !this.isGameEnded
-            });
+            entries.push({ playerId: this.playerId, score: stats.score });
         }
 
         // Add opponents from snapshot
         for (const [id, p] of Object.entries(this.snapshotPlayers) as [string, any][]) {
-            entries.push({
-                playerId: id,
-                name: p.name,
-                score: p.score || 0,
-                isAlive: p.isAlive !== false
-            });
+            entries.push({ playerId: id, score: p.score || 0 });
         }
 
-        this.leaderboard.update(entries);
+        // Sort by score descending
+        entries.sort((a, b) => b.score - a.score);
+
+        // Build rank map
+        const rankMap = new Map<string, number>();
+        entries.forEach((e, i) => rankMap.set(e.playerId, i + 1));
+
+        // Update mini fields with their rank
+        for (const [id, mini] of this.miniFields) {
+            const rank = rankMap.get(id);
+            if (rank !== undefined) {
+                mini.updateRank(rank);
+            }
+        }
     }
 
     private shutdown() {
@@ -295,9 +312,6 @@ export class NMultiPlayScene extends BaseScene {
         }
         if (this.inGameMenu) {
             this.inGameMenu.destroy();
-        }
-        if (this.leaderboard) {
-            this.leaderboard.destroy();
         }
         for (const [, mini] of this.miniFields) {
             mini.destroy();
@@ -368,7 +382,10 @@ export class NMultiPlayScene extends BaseScene {
         this.isGameRunning = true;
         this.inputManager.isEnabled = true;
 
-        const pos = calcNMultiPlayerPosition(this.GAME_HEIGHT);
+        const isPortrait = this.layoutMode === 'mobile-portrait';
+        const pos = isPortrait
+            ? calcPortraitPosition(this.GAME_WIDTH)
+            : calcNMultiPlayerPosition(this.GAME_HEIGHT);
 
         const layout = createGameLayout({
             scene: this,
@@ -376,6 +393,7 @@ export class NMultiPlayScene extends BaseScene {
             fieldY: pos.y,
             onHoldInput: (dir, state) => this.onInput(dir, state),
             isInputBlocked: () => !this.isGameRunning || this.isPause || this.inGameMenu.isMenuOpen || this.isGameEnded,
+            layoutMode: this.layoutMode,
         });
 
         this.playField = layout.playField;

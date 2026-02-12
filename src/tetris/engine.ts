@@ -147,7 +147,7 @@ export class Engine {
         }
 
         // Update indicator.
-        if (result.actionName) this.levelIndicator.setAction(result.actionName);
+        this.levelIndicator.setAction(result.actionName);
         this.levelIndicator.setCombo(result.combo);
         // this.levelIndicator.setLevel(result.level);
         // this.levelIndicator.setLine(this.scoreSystem.getClearedLines(), this.scoreSystem.getNextLevelRequireClearedLines());

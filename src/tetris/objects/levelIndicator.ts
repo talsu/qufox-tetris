@@ -9,7 +9,7 @@ import {
 
 const BLOCK_SIZE = getBlockSize();
 
-// Layout constants
+// Layout constants (standard vertical mode)
 const BG_WIDTH = BLOCK_SIZE * 5;
 const BG_HEIGHT = BLOCK_SIZE * 16.5;
 const PADDING_LEFT = BLOCK_SIZE * 0.5;
@@ -19,8 +19,17 @@ const HEADER_ROW_HEIGHT = BLOCK_SIZE;
 const VALUE_ROW_HEIGHT = BLOCK_SIZE * 1.5;
 const TEMP_TEXT_DURATION = 3000;
 
+// Compact horizontal mode constants
+const COMPACT_WIDTH = BLOCK_SIZE * 10;
+const COMPACT_HEIGHT = BLOCK_SIZE * 3;
+
+export interface LevelIndicatorOptions {
+    compact?: boolean;
+}
+
 export class LevelIndicator extends ObjectBase {
     public container: Phaser.GameObjects.Container;
+    private compact: boolean;
 
     // Large value displays
     private scoreValueText: Phaser.GameObjects.Text;
@@ -42,10 +51,74 @@ export class LevelIndicator extends ObjectBase {
     private comboText: Phaser.GameObjects.Text;
     private comboTextShowEvent: Phaser.Time.TimerEvent;
 
-    constructor(scene: Phaser.Scene, x: number, y: number) {
+    constructor(scene: Phaser.Scene, x: number, y: number, options?: LevelIndicatorOptions) {
         super(scene);
+        this.compact = options?.compact ?? false;
         this.container = scene.add.container(x, y);
-        this.createUI();
+        if (this.compact) {
+            this.createCompactUI();
+        } else {
+            this.createUI();
+        }
+    }
+
+    private createCompactUI() {
+        const bg = this.scene.add.graphics();
+        drawPanelBackground(bg, COMPACT_WIDTH, COMPACT_HEIGHT);
+        this.container.add(bg);
+
+        const pad = BLOCK_SIZE * 0.4;
+        const midY = BLOCK_SIZE * 0.3;
+        const bottomY = BLOCK_SIZE * 1.6;
+        const halfW = COMPACT_WIDTH / 2;
+
+        // Row 1: SCORE (large, left-aligned) + TIME (right-aligned)
+        createStyledText(this.scene, this.container, pad, midY, 'SCORE', TextStyles.label, 3);
+        this.scoreValueText = createStyledText(
+            this.scene, this.container, pad + BLOCK_SIZE * 2.2, midY, '0',
+            { ...TextStyles.valueLarge, fontSize: `${BLOCK_SIZE * 0.7}px` }, 3
+        );
+        this.timeValueText = createStyledText(
+            this.scene, this.container, COMPACT_WIDTH - pad, midY, '00:00',
+            { ...TextStyles.valueSmall, fontSize: `${BLOCK_SIZE * 0.55}px` }, 3
+        );
+        this.timeValueText.setOrigin(1, 0);
+
+        // Row 2: LV:x   LN:x
+        const colW = (COMPACT_WIDTH - pad * 2) / 3;
+        const makeCompactStat = (label: string, colIdx: number) => {
+            const lx = pad + colW * colIdx;
+            createStyledText(this.scene, this.container, lx, bottomY, label,
+                { ...TextStyles.label, fontSize: `${BLOCK_SIZE * 0.4}px` }, 2);
+            const vt = createStyledText(this.scene, this.container, lx + BLOCK_SIZE * 1.2, bottomY, '0',
+                { ...TextStyles.valueSmall, fontSize: `${BLOCK_SIZE * 0.5}px` }, 2);
+            return vt;
+        };
+
+        this.levelValueText = makeCompactStat('LV', 0);
+        this.linesValueText = makeCompactStat('LN', 1);
+        this.goalValueText = makeCompactStat('GL', 2);
+
+        // Hidden stats (tracked internally but not shown)
+        const hiddenStyle = { ...TextStyles.valueSmall, fontSize: '1px' };
+        this.tetrisesValueText = this.scene.add.text(-9999, -9999, '0', hiddenStyle);
+        this.tSpinsValueText = this.scene.add.text(-9999, -9999, '0', hiddenStyle);
+        this.combosValueText = this.scene.add.text(-9999, -9999, '0', hiddenStyle);
+        this.tpmValueText = this.scene.add.text(-9999, -9999, '0', hiddenStyle);
+        this.lpmValueText = this.scene.add.text(-9999, -9999, '0', hiddenStyle);
+
+        // Action/Combo text - overlaid centered above this container
+        this.actionText = createStyledText(
+            this.scene, this.container,
+            halfW, -BLOCK_SIZE * 1.2, '', TextStyles.action,
+        );
+        this.actionText.setOrigin(0.5, 0);
+
+        this.comboText = createStyledText(
+            this.scene, this.container,
+            halfW, -BLOCK_SIZE * 0.5, '', TextStyles.combo,
+        );
+        this.comboText.setOrigin(0.5, 0);
     }
 
     private createUI() {
@@ -140,7 +213,7 @@ export class LevelIndicator extends ObjectBase {
     setLine(cleared, nextGoal) { }
     setScore(score: number) { }
 
-    setAction(action?: string) {
+    setAction(action?: string | null) {
         this.actionTextShowEvent?.destroy();
         this.actionTextShowEvent = null;
 

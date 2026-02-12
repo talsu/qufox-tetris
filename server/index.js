@@ -29,7 +29,8 @@ let nMultiRooms = {};
 //   id: string,
 //   name: string,
 //   playerCounter: number,
-//   players: { [socketId]: { name, score, level, lines, board, isAlive } },
+//   players: { [socketId]: { name, score, level, lines, board, isAlive, v } },
+//   lastBroadcasted: { [socketId]: string },
 //   _broadcastInterval: NodeJS.Timer
 // }
 
@@ -179,9 +180,11 @@ io.on('connection', (socket) => {
                     level: 1,
                     lines: 0,
                     board: null,
-                    isAlive: true
+                    isAlive: true,
+                    v: 0
                 }
             },
+            lastBroadcasted: {},
             _broadcastInterval: null
         };
 
@@ -264,10 +267,15 @@ io.on('connection', (socket) => {
         if (!room || !room.players[socket.id]) return;
 
         const player = room.players[socket.id];
-        if (data.score !== undefined) player.score = data.score;
-        if (data.level !== undefined) player.level = data.level;
-        if (data.lines !== undefined) player.lines = data.lines;
-        if (data.board !== undefined) player.board = data.board;
+        let changed = false;
+        if (data.score !== undefined && player.score !== data.score) { player.score = data.score; changed = true; }
+        if (data.level !== undefined && player.level !== data.level) { player.level = data.level; changed = true; }
+        if (data.lines !== undefined && player.lines !== data.lines) { player.lines = data.lines; changed = true; }
+        if (data.board !== undefined && player.board !== data.board) { player.board = data.board; changed = true; }
+        
+        if (changed) {
+            player.v++;
+        }
     });
 
     socket.on('nmulti_send_garbage', (data) => {
@@ -322,7 +330,8 @@ io.on('connection', (socket) => {
                 level: 1,
                 lines: 0,
                 board: null,
-                isAlive: true
+                isAlive: true,
+                v: 0
             };
 
             socket.join(existingRoomId);
@@ -357,9 +366,11 @@ io.on('connection', (socket) => {
                         level: 1,
                         lines: 0,
                         board: null,
-                        isAlive: true
+                        isAlive: true,
+                        v: 0
                     }
                 },
+                lastBroadcasted: {},
                 _broadcastInterval: null
             };
 
@@ -382,6 +393,17 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('nmulti_request_full_sync', (data) => {
+        if (!data || !data.roomId) return;
+        const room = nMultiRooms[data.roomId];
+        if (!room || !room.players[socket.id]) return;
+
+        socket.emit('nmulti_snapshot', {
+            players: getPlayersMap(room),
+            isDelta: false
+        });
+    });
+
     socket.on('nmulti_restart', (data) => {
         if (!data || !data.roomId) return;
         const room = nMultiRooms[data.roomId];
@@ -392,6 +414,7 @@ io.on('connection', (socket) => {
         player.lines = 0;
         player.board = null;
         player.isAlive = true;
+        player.v++;
     });
 
     // ===== Disconnect =====
@@ -443,7 +466,8 @@ function getPlayersMap(room) {
             level: p.level,
             lines: p.lines,
             board: p.board,
-            isAlive: p.isAlive
+            isAlive: p.isAlive,
+            v: p.v
         };
     }
     return map;
@@ -456,29 +480,33 @@ function broadcastNMultiSnapshot(roomId) {
     const playerIds = Object.keys(room.players);
     if (playerIds.length === 0) return;
 
-    // Build full snapshot
-    const allPlayers = {};
+    const deltaSnapshot = {};
+    let hasChanges = false;
+
     for (const sid of playerIds) {
         const p = room.players[sid];
-        allPlayers[sid] = {
-            name: p.name,
-            score: p.score,
-            level: p.level,
-            lines: p.lines,
-            board: p.board,
-            isAlive: p.isAlive
-        };
+        
+        if (room.lastBroadcasted[sid] !== p.v) {
+            deltaSnapshot[sid] = {
+                name: p.name,
+                score: p.score,
+                level: p.level,
+                lines: p.lines,
+                board: p.board,
+                isAlive: p.isAlive,
+                v: p.v
+            };
+            room.lastBroadcasted[sid] = p.v;
+            hasChanges = true;
+        }
     }
 
-    // Send to each client excluding themselves
-    for (const sid of playerIds) {
-        const snapshot = {};
-        for (const otherId of playerIds) {
-            if (otherId !== sid) {
-                snapshot[otherId] = allPlayers[otherId];
-            }
-        }
-        io.to(sid).emit('nmulti_snapshot', { players: snapshot });
+    if (hasChanges) {
+        // Broadcast single packet to all
+        io.to(roomId).emit('nmulti_snapshot', { 
+            players: deltaSnapshot,
+            isDelta: true 
+        });
     }
 }
 
@@ -487,6 +515,7 @@ function removeFromNMultiRoom(socket, roomId) {
     if (!room || !room.players[socket.id]) return;
 
     delete room.players[socket.id];
+    if (room.lastBroadcasted) delete room.lastBroadcasted[socket.id];
     socket.leave(roomId);
 
     const remaining = Object.keys(room.players).length;

@@ -120,10 +120,42 @@ export class NMultiPlayScene extends BaseScene {
     private setupSocketEvents() {
         this.socket.on('nmulti_snapshot', (data: any) => {
             if (!data || !data.players) return;
-            this.snapshotPlayers = data.players;
+            
+            const isDelta = data.isDelta !== false;
+            let hasGap = false;
+
+            // Merge delta or replace full state
+            if (!isDelta) {
+                this.snapshotPlayers = data.players;
+            } else {
+                for (const [id, p] of Object.entries(data.players) as [string, any][]) {
+                    if (id === this.playerId) continue; // Ignore self
+
+                    const localPlayer = this.snapshotPlayers[id];
+                    if (localPlayer) {
+                        // Check for version gap
+                        if (p.v > (localPlayer.v || 0) + 1) {
+                            hasGap = true;
+                        }
+                        // Merge attributes
+                        Object.assign(localPlayer, p);
+                    } else {
+                        // New player in delta
+                        this.snapshotPlayers[id] = p;
+                    }
+                }
+            }
+
+            // If gap detected, request full sync
+            if (hasGap) {
+                console.warn('Network gap detected, requesting full sync...');
+                this.socket.emit('nmulti_request_full_sync', { roomId: this.roomId });
+            }
 
             // Update mini fields
-            for (const [id, p] of Object.entries(data.players) as [string, any][]) {
+            for (const [id, p] of Object.entries(this.snapshotPlayers) as [string, any][]) {
+                if (id === this.playerId) continue;
+
                 let mini = this.miniFields.get(id);
                 if (!mini) {
                     this.addMiniField(id, p.name);
@@ -134,11 +166,13 @@ export class NMultiPlayScene extends BaseScene {
                 }
             }
 
-            // Remove mini fields for players no longer in snapshot
-            for (const [id, mini] of this.miniFields) {
-                if (!data.players[id]) {
-                    mini.destroy();
-                    this.miniFields.delete(id);
+            // Remove mini fields for players no longer in room (only relevant in full sync or via left event)
+            if (!isDelta) {
+                for (const [id, mini] of this.miniFields) {
+                    if (!this.snapshotPlayers[id]) {
+                        mini.destroy();
+                        this.miniFields.delete(id);
+                    }
                 }
             }
 

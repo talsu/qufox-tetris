@@ -16,6 +16,8 @@ import {
     createGameLayout,
     calcSinglePlayerPosition,
     calcMultiPlayerPosition,
+    calcPlaySceneDimensions,
+    calcPortraitPosition,
 } from "../ui/gameLayout";
 
 const BLOCK_SIZE = getBlockSize();
@@ -54,9 +56,6 @@ export class PlayScene extends BaseScene {
     init(data: any): void {
         this.handleResolution();
 
-        this.GAME_WIDTH = BLOCK_SIZE * 22;
-        this.GAME_HEIGHT = BLOCK_SIZE * 22;
-
         this.mode = data.mode || 'single';
         this.roomName = data.roomName;
         this.botLevel = data.botLevel || 0;
@@ -64,6 +63,10 @@ export class PlayScene extends BaseScene {
             this.socket = data.socket;
             this.roomId = data.roomId;
         }
+
+        const dims = calcPlaySceneDimensions(this.layoutMode, this.mode);
+        this.GAME_WIDTH = dims.width;
+        this.GAME_HEIGHT = dims.height;
 
         this.isPause = false;
         this.isGameRunning = false;
@@ -241,23 +244,30 @@ export class PlayScene extends BaseScene {
         this.isGameRunning = true;
         this.inputManager.isEnabled = true;
 
+        const isPortrait = this.layoutMode === 'mobile-portrait';
         const currentMainScale = (this.mode === 'single') ? this.MAIN_SCALE : 1;
         const currentSideScale = (this.mode === 'single') ? this.SIDE_SCALE : 1;
 
-        // Calculate play field position based on mode
-        const pos = (this.mode === 'single')
-            ? calcSinglePlayerPosition(this.GAME_WIDTH, this.GAME_HEIGHT, currentMainScale)
-            : calcMultiPlayerPosition(this.GAME_WIDTH, this.GAME_HEIGHT);
+        // Calculate play field position based on mode and layout
+        let pos: { x: number; y: number };
+        if (isPortrait) {
+            pos = calcPortraitPosition(this.GAME_WIDTH);
+        } else if (this.mode === 'single') {
+            pos = calcSinglePlayerPosition(this.GAME_WIDTH, this.GAME_HEIGHT, currentMainScale);
+        } else {
+            pos = calcMultiPlayerPosition(this.GAME_WIDTH, this.GAME_HEIGHT);
+        }
 
         // Create standard game layout
         const layout = createGameLayout({
             scene: this,
             fieldX: pos.x,
             fieldY: pos.y,
-            mainScale: currentMainScale,
-            sideScale: currentSideScale,
+            mainScale: isPortrait ? 1 : currentMainScale,
+            sideScale: isPortrait ? 1 : currentSideScale,
             onHoldInput: (dir, state) => this.onInput(dir, state),
             isInputBlocked: () => !this.isGameRunning || this.isPause || this.inGameMenu.isMenuOpen || this.isGameEnded,
+            layoutMode: this.layoutMode,
         });
 
         this.playField = layout.playField;
@@ -278,7 +288,7 @@ export class PlayScene extends BaseScene {
         });
 
         this.engine.start();
-        this.inputManager.setDragThresholdScale(currentMainScale);
+        this.inputManager.setDragThresholdScale(isPortrait ? 1 : currentMainScale);
 
         if (this.botLevel > 0) {
             this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
@@ -289,10 +299,20 @@ export class PlayScene extends BaseScene {
         if (this.mode === 'multi') {
             const rawPlayFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
             const rawPlayFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
-            const p2X = (this.GAME_WIDTH * 0.75) - (rawPlayFieldWidth / 2);
-            const p2Y = (this.GAME_HEIGHT - rawPlayFieldHeight) / 2;
-            this.opponentPlayField = new PlayField(this, p2X, p2Y, rawPlayFieldWidth, rawPlayFieldHeight);
-            this.add.text(p2X, p2Y - 30, 'Opponent', { fontSize: '20px', color: '#ffffff' });
+            if (isPortrait) {
+                // Opponent below player in portrait mode (scaled down)
+                const opScale = 0.4;
+                const opX = (this.GAME_WIDTH - rawPlayFieldWidth * opScale) / 2;
+                const opY = pos.y + rawPlayFieldHeight + BLOCK_SIZE * 4.5; // below compact stats
+                this.opponentPlayField = new PlayField(this, opX, opY, rawPlayFieldWidth, rawPlayFieldHeight);
+                this.opponentPlayField.setScale(opScale);
+                this.add.text(opX, opY - 20, 'Opponent', { fontSize: '16px', color: '#ffffff' });
+            } else {
+                const p2X = (this.GAME_WIDTH * 0.75) - (rawPlayFieldWidth / 2);
+                const p2Y = (this.GAME_HEIGHT - rawPlayFieldHeight) / 2;
+                this.opponentPlayField = new PlayField(this, p2X, p2Y, rawPlayFieldWidth, rawPlayFieldHeight);
+                this.add.text(p2X, p2Y - 30, 'Opponent', { fontSize: '20px', color: '#ffffff' });
+            }
         }
     }
 

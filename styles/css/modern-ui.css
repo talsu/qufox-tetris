@@ -356,3 +356,123 @@
     font-size: 12px;
     padding: 2px 0;
 }
+
+/* ─── Responsive: Tablet / Small Desktop ─────────────────────────── */
+@media (max-width: 768px) {
+    .menu-panel {
+        min-width: 320px;
+        padding: 40px 30px;
+        gap: 18px;
+    }
+
+    .menu-title {
+        font-size: 52px;
+        margin-bottom: 10px;
+    }
+
+    .menu-score {
+        font-size: 36px;
+        padding: 8px 20px;
+    }
+
+    .puyo-btn {
+        min-width: 240px;
+        font-size: 28px;
+        padding: 12px 35px;
+        margin: 10px;
+    }
+
+    .game-title {
+        font-size: 80px;
+        margin-bottom: 30px;
+    }
+
+    .nmulti-leaderboard {
+        width: 200px;
+    }
+
+    .lobby-container {
+        padding: 20px;
+    }
+
+    .lobby-title {
+        font-size: 36px;
+    }
+}
+
+/* ─── Responsive: Phone ──────────────────────────────────────────── */
+@media (max-width: 480px) {
+    .menu-panel {
+        min-width: unset;
+        width: 90vw;
+        padding: 30px 20px;
+        gap: 14px;
+        border-radius: 24px;
+    }
+
+    .menu-title {
+        font-size: 40px;
+        -webkit-text-stroke: 3px var(--primary-color);
+    }
+
+    .menu-score {
+        font-size: 28px;
+        padding: 6px 16px;
+    }
+
+    .game-title {
+        font-size: 56px;
+        margin-bottom: 20px;
+    }
+
+    .puyo-btn {
+        min-width: 200px;
+        font-size: 22px;
+        padding: 10px 25px;
+        margin: 8px;
+        border-radius: 30px;
+    }
+
+    .lobby-container {
+        padding: 15px;
+        border-radius: 20px;
+    }
+
+    .lobby-title {
+        font-size: 28px;
+    }
+
+    .room-name {
+        font-size: 18px;
+    }
+
+    .room-players {
+        font-size: 14px;
+        margin-right: 10px;
+    }
+
+    .room-item {
+        padding: 10px 15px;
+    }
+}
+
+/* ─── Responsive: Phone Portrait ─────────────────────────────────── */
+@media (max-width: 480px) and (orientation: portrait) {
+    .nmulti-leaderboard {
+        top: auto;
+        bottom: 5px;
+        left: 5px;
+        right: 5px;
+        width: auto;
+        max-height: 150px;
+        border-radius: 10px;
+    }
+
+    .nmulti-leaderboard.nmulti-leaderboard--portrait {
+        top: auto;
+        bottom: 5px;
+        left: 5px;
+        right: 5px;
+        width: auto;
+    }
+}

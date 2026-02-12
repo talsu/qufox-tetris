@@ -1,25 +1,28 @@
 
+export type LayoutMode = 'desktop' | 'mobile-portrait' | 'mobile-landscape';
+
 export abstract class BaseScene extends Phaser.Scene {
     // Logical base resolution
     protected GAME_WIDTH: number = 1920;
     protected GAME_HEIGHT: number = 1080;
     protected isMobile: boolean = false;
+    protected layoutMode: LayoutMode = 'desktop';
 
     constructor(config: string | Phaser.Types.Scenes.SettingsConfig) {
         super(config);
     }
 
+    protected getLayoutMode(): LayoutMode {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const isMobile = Math.min(w, h) < 768;
+        if (!isMobile) return 'desktop';
+        return w < h ? 'mobile-portrait' : 'mobile-landscape';
+    }
+
     protected handleResolution(): void {
-        // Detect Mobile Portrait
-        if (window.innerWidth < window.innerHeight) {
-            this.GAME_WIDTH = 800;
-            this.GAME_HEIGHT = 1200;
-            this.isMobile = true;
-        } else {
-            this.GAME_WIDTH = 1920;
-            this.GAME_HEIGHT = 1080;
-            this.isMobile = false;
-        }
+        this.layoutMode = this.getLayoutMode();
+        this.isMobile = this.layoutMode !== 'desktop';
     }
 
     protected backgroundGraphics: Phaser.GameObjects.Graphics;

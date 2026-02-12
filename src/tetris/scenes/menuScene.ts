@@ -35,7 +35,9 @@ export class MenuScene extends BaseScene {
         const nMultiMatch = window.location.pathname.match(/^\/n-multi\/(.+)$/);
         if (nMultiMatch) {
             const roomName = decodeURIComponent(nMultiMatch[1]);
-            this.joinNMultiRoomByUrl(roomName);
+            const urlParams = new URLSearchParams(window.location.search);
+            const botLevel = parseInt(urlParams.get('bot') || '0', 10);
+            this.joinNMultiRoomByUrl(roomName, botLevel);
             return;
         }
 
@@ -43,7 +45,9 @@ export class MenuScene extends BaseScene {
         const multiMatch = window.location.pathname.match(/^\/multi\/(.+)$/);
         if (multiMatch) {
             const roomName = decodeURIComponent(multiMatch[1]);
-            this.joinMultiRoomByUrl(roomName);
+            const urlParams = new URLSearchParams(window.location.search);
+            const botLevel = parseInt(urlParams.get('bot') || '0', 10);
+            this.joinMultiRoomByUrl(roomName, botLevel);
             return;
         }
 
@@ -53,7 +57,7 @@ export class MenuScene extends BaseScene {
         this.resize(window.innerWidth, window.innerHeight);
     }
 
-    private joinNMultiRoomByUrl(roomName: string): void {
+    private joinNMultiRoomByUrl(roomName: string, botLevel: number = 0): void {
         // Show connecting text
         const connectingText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'Connecting...', {
             fontSize: '32px',
@@ -76,7 +80,8 @@ export class MenuScene extends BaseScene {
                 playerId: data.playerId,
                 playerName: data.playerName,
                 initialPlayers: data.players,
-                roomName: roomName
+                roomName: roomName,
+                botLevel: botLevel
             });
         });
 
@@ -99,7 +104,7 @@ export class MenuScene extends BaseScene {
         });
     }
 
-    private joinMultiRoomByUrl(roomName: string): void {
+    private joinMultiRoomByUrl(roomName: string, botLevel: number = 0): void {
         const connectingText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'Connecting...', {
             fontSize: '32px',
             color: '#ffffff',
@@ -120,7 +125,8 @@ export class MenuScene extends BaseScene {
                 socket,
                 roomId: data.roomId,
                 isHost: data.isHost,
-                roomName: roomName
+                roomName: roomName,
+                botLevel: botLevel
             });
         });
 

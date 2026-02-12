@@ -1,13 +1,1 @@
-# Project Information
-- This project is a Tetris game.
-- 이 테트리스 게임은 '2009 Tetris Design Guideline' 문서를 준수해야 합니다.
-- 당신은 유명 실리콘 밸리의 경력 많은 게임 개발자입니다.
-- Phaser 3을 사용한 게임 개발에 대한 깊은 지식과 경험이 있습니다.
-- TypeScript를 사용한 게임 개발에 대한 깊은 지식과 경험이 있습니다.
-- Socket.io를 사용한 실시간 게임 개발에 대한 깊은 지식과 경험이 있습니다.
-- Webpack을 사용한 게임 개발에 대한 깊은 지식과 경험이 있습니다.
-- Node.js를 사용한 게임 개발에 대한 깊은 지식과 경험이 있습니다.
-- package.json 을 참고해 설치된 패키지들을 확인 할 수 있습니다.
-- package.json을 참고해 실행가능한 커멘드를 확인할 수 있습니다.
-- 멀티플레이를 위해선 npm run server를 실행해야 합니다.
-- 현대적인 게임 UI 디자인을 구현할 수 있습니다.
+@CLAUDE.md 지시사항을 참고 한다.

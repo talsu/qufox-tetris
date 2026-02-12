@@ -49,6 +49,7 @@ src/tetris/
     gameRules.ts             # Static SRS kick data lookup & scoring table lookup
     scoreSystem.ts           # Score calculation: T-spins, combos, back-to-back, levels
     garbageGenerator.ts      # Multiplayer garbage line generation
+    botManager.ts            # AI logic for automated play via input simulation
   objects/
     objectBase.ts            # Base class (extends Phaser.Events.EventEmitter)
     playField.ts             # Main 10x20 board: spawning, collision, line clears, lock delay
@@ -126,6 +127,12 @@ Single (100), Double (300), Triple (500), Tetris (800), T-Spin (400), T-Spin Min
 - Players eliminated on game over (overlay shown on mini boards)
 - URL-based room joining: `/n-multi/{roomName}`
 
+**Bot Mode (Debug/Testing):**
+- Activated via URL query parameter: `?bot={level}` (level: 1-100)
+- Works in both 1v1 (`/multi/{roomName}?bot=50`) and N-Multi (`/n-multi/{roomName}?bot=50`)
+- Bot simulates human inputs (left, right, rotate, etc.) based on heuristic board evaluation
+- Higher levels increase input speed and placement accuracy
+
 **Socket Events (Client -> Server):**
 - `create_room`, `join_room`, `player_ready`, `update_state`, `send_garbage`, `game_over`, `request_restart`
 - `nmulti_create_room`, `nmulti_join_room`, `nmulti_join_or_create`, `nmulti_update_state`, `nmulti_send_garbage`, `nmulti_game_over`, `nmulti_restart`
@@ -152,6 +159,7 @@ npx jest --testPathPattern="scoreSystem"  # Run tests matching a pattern
 Tests cover:
 - `logic/gameRules.test.ts` -- SRS rotation kick data
 - `logic/scoreSystem.test.ts` -- Scoring (line clears, T-spins, combos, back-to-back, levels)
+- `logic/botManager.test.ts` -- Bot AI logic and placement heuristics
 - `logic/scoreSystem_garbage.test.ts` -- Garbage count from scoring events
 - `logic/garbageGenerator.test.ts` -- Garbage line generation
 - `net/boardCodec.test.ts` -- Board serialization/deserialization

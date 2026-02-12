@@ -95,6 +95,13 @@ export class TetrominoBoxQueue extends ObjectBase {
     }
 
     /**
+     * Peek next tetromino type.
+     */
+    peek(): TetrominoType {
+        return this.typeQueue[0];
+    }
+
+    /**
      * Clear type queue and boxes.
      */
     clear() {

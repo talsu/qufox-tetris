@@ -19,6 +19,14 @@ export class PlayField extends ObjectBase {
     public autoDropDelay: number = 1000;
     private effects: PlayFieldEffects;
 
+    public get activeTetrominoInstance(): Tetromino {
+        return this.activeTetromino;
+    }
+
+    public get canHoldFlag(): boolean {
+        return this.canHold;
+    }
+
     constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number) {
         super(scene);
 

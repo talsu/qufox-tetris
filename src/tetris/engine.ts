@@ -18,6 +18,14 @@ export class Engine {
 
     private onAttack: (count: number) => void;
 
+    public get holdBoxInstance(): TetrominoBox {
+        return this.holdBox;
+    }
+
+    public get queueInstance(): TetrominoBoxQueue {
+        return this.queue;
+    }
+
     constructor(playField: PlayField, holdBox: TetrominoBox, queue: TetrominoBoxQueue, levelIndicator: LevelIndicator) {
         this.playField = playField;
         this.holdBox = holdBox;

@@ -8,6 +8,7 @@ import { BaseScene } from "./baseScene";
 import { MiniPlayField } from "../objects/miniPlayField";
 import { LeaderboardPanel, LeaderboardEntry } from "../ui/leaderboardPanel";
 import { BoardCodec } from "../net/boardCodec";
+import { BotManager } from "../logic/botManager";
 import { createGameLayout, calcNMultiPlayerPosition } from "../ui/gameLayout";
 
 const BLOCK_SIZE = getBlockSize();
@@ -28,6 +29,8 @@ export class NMultiPlayScene extends BaseScene {
     private lastUpdateSend: number = 0;
     private isGameRunning: boolean = false;
     private isGameEnded: boolean = false;
+    private botLevel: number = 0;
+    private botManager: BotManager;
 
     // Opponents
     private miniFields: Map<string, MiniPlayField> = new Map();
@@ -52,6 +55,7 @@ export class NMultiPlayScene extends BaseScene {
         this.roomName = data.roomName;
         this.playerId = data.playerId;
         this.playerName = data.playerName;
+        this.botLevel = data.botLevel || 0;
 
         // Initialize opponent data from initial players (exclude self)
         this.snapshotPlayers = {};
@@ -246,6 +250,9 @@ export class NMultiPlayScene extends BaseScene {
 
     private shutdown() {
         this.scale.off('resize', this.resize, this);
+        if (this.botManager) {
+            this.botManager.stop();
+        }
         if (this.socket) {
             this.socket.off('nmulti_snapshot');
             this.socket.off('nmulti_player_joined');
@@ -302,7 +309,8 @@ export class NMultiPlayScene extends BaseScene {
             roomName: this.roomName,
             playerId: this.playerId,
             playerName: this.playerName,
-            initialPlayers: this.snapshotPlayers
+            initialPlayers: this.snapshotPlayers,
+            botLevel: this.botLevel
         });
     }
 
@@ -310,6 +318,9 @@ export class NMultiPlayScene extends BaseScene {
         this.isGameRunning = false;
         this.isGameEnded = true;
         this.inputManager.isEnabled = false;
+        if (this.botManager) {
+            this.botManager.stop();
+        }
         if (this.playField) {
             this.playField.stop();
         }
@@ -362,6 +373,11 @@ export class NMultiPlayScene extends BaseScene {
         this.engine.start();
         this.inputManager.setDragThresholdScale(1);
 
+        if (this.botLevel > 0) {
+            this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
+            this.botManager.start();
+        }
+
         this.relayoutOpponents();
     }
 
@@ -374,6 +390,10 @@ export class NMultiPlayScene extends BaseScene {
 
         if (this.engine) {
             this.engine.update(time, delta);
+        }
+
+        if (this.botManager) {
+            this.botManager.update(time, delta);
         }
 
         const softDropSpeed = this.playField ? (this.playField.autoDropDelay / 20) : CONST.PLAY_FIELD.AR_MS;

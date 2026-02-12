@@ -14,6 +14,10 @@ export class TetrominoBox extends ObjectBase {
 
     public container: Phaser.GameObjects.Container;
 
+    public get type(): TetrominoType {
+        return this.tetromino ? this.tetromino.type : null;
+    }
+
     constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number, header: string = "") {
         super(scene);
         this.container = scene.add.container(x, y);

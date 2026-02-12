@@ -18,6 +18,7 @@ export class PlayField extends ObjectBase {
     private droppedRotateType: RotateType;
     public autoDropDelay: number = 1000;
     private effects: PlayFieldEffects;
+    private pendingClearedRows: number[] | null = null;
 
     public get activeTetrominoInstance(): Tetromino {
         return this.activeTetromino;
@@ -289,6 +290,11 @@ export class PlayField extends ObjectBase {
             }
         });
 
+        // Update pending cleared rows indices
+        if (this.pendingClearedRows) {
+            this.pendingClearedRows = this.pendingClearedRows.map(row => row - count);
+        }
+
         // Also move active tetromino up to prevent collision logic weirdness
         if (this.activeTetromino) {
              this.activeTetromino.row -= count;
@@ -438,8 +444,12 @@ export class PlayField extends ObjectBase {
         };
 
         if (clearedLineCount > 0) {
+            this.pendingClearedRows = clearedRows;
             this.playClearAnimation(clearedRows, () => {
-                this.clearRows(clearedRows);
+                if (this.pendingClearedRows) {
+                    this.clearRows(this.pendingClearedRows);
+                    this.pendingClearedRows = null;
+                }
                 proceed();
             });
         } else {

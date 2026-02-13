@@ -1,6 +1,6 @@
 import { CONST } from "../const/const";
 import { BoardCodec } from "../net/boardCodec";
-import { applyTextEffect } from "../ui/uiStyles";
+import { applyTextEffect, GAME_FONT_FAMILY } from "../ui/uiStyles";
 
 const COLS = 10;
 const ROWS = 20;
@@ -83,7 +83,7 @@ export class MiniPlayField {
         strokeThickness: number,
     ): Phaser.GameObjects.Text {
         const text = this.scene.add.text(0, 0, content, {
-            fontFamily: 'Arial Black',
+            fontFamily: GAME_FONT_FAMILY,
             ...style,
         });
         applyTextEffect(text, strokeThickness);

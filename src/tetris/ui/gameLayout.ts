@@ -15,9 +15,58 @@ const HOLD_HEIGHT = BLOCK_SIZE * 3;
 const QUEUE_SIZE = 6;
 
 // Mobile portrait constants
-const MOBILE_HOLD_WIDTH = BLOCK_SIZE * 4;
-const MOBILE_HOLD_HEIGHT = BLOCK_SIZE * 3;
+const MOBILE_UI_SCALE = 0.75;
 const MOBILE_QUEUE_SIZE = 1;
+const PLAYFIELD_WIDTH = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
+const PLAYFIELD_HEIGHT = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
+
+export interface LayoutMetrics {
+    gap: number;
+    holdWidth: number;
+    holdHeight: number;
+    queueSize: number;
+    mobileQueueSize: number;
+    mobileUiScale: number;
+    portraitFieldTopBlocks: number;
+    multiPlayerAreaBlocks: number;
+    multiPortraitOpponentOffsetBlocks: number;
+    multiPortraitOpponentBottomMarginBlocks: number;
+    nMultiDesktopAreaXBlocks: number;
+    nMultiDesktopAreaYBlocks: number;
+    nMultiDesktopAreaBottomPaddingBlocks: number;
+    nMultiDesktopAreaRightPaddingBlocks: number;
+    nMultiPortraitAreaXBlocks: number;
+    nMultiPortraitAreaYBlocks: number;
+    nMultiPortraitAreaBottomPaddingBlocks: number;
+    nMultiPortraitAreaHorizontalPaddingBlocks: number;
+}
+
+export interface PlaySceneOpponentLayout {
+    x: number;
+    y: number;
+    scale: number;
+    labelOffset: number;
+}
+
+export interface OpponentAreaLayout {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+export interface PortraitHudLayout {
+    holdX: number;
+    holdY: number;
+    holdWidth: number;
+    holdHeight: number;
+    queueX: number;
+    queueY: number;
+    queueWidth: number;
+    queueHeight: number;
+    infoX: number;
+    infoY: number;
+}
 
 export interface GameLayoutResult {
     holdBox: TetrominoBox;
@@ -45,17 +94,45 @@ export interface GameLayoutOptions {
     layoutMode?: LayoutMode;
 }
 
+export function getLayoutMetrics(): LayoutMetrics {
+    return {
+        gap: GAP,
+        holdWidth: HOLD_WIDTH,
+        holdHeight: HOLD_HEIGHT,
+        queueSize: QUEUE_SIZE,
+        mobileQueueSize: MOBILE_QUEUE_SIZE,
+        mobileUiScale: MOBILE_UI_SCALE,
+        portraitFieldTopBlocks: 4.7,
+        multiPlayerAreaBlocks: 23,
+        multiPortraitOpponentOffsetBlocks: 4.5,
+        multiPortraitOpponentBottomMarginBlocks: 0.5,
+        nMultiDesktopAreaXBlocks: 23.5,
+        nMultiDesktopAreaYBlocks: 1,
+        nMultiDesktopAreaBottomPaddingBlocks: 2,
+        nMultiDesktopAreaRightPaddingBlocks: 0.5,
+        nMultiPortraitAreaXBlocks: 0.5,
+        nMultiPortraitAreaYBlocks: 28.5,
+        nMultiPortraitAreaBottomPaddingBlocks: 0.5,
+        nMultiPortraitAreaHorizontalPaddingBlocks: 1,
+    };
+}
+
 // ─── Dimension Calculators ──────────────────────────────────────────
 
 /**
  * Calculate scene dimensions based on layout mode for PlayScene.
  */
 export function calcPlaySceneDimensions(layoutMode: LayoutMode, mode: string): { width: number; height: number } {
+    const metrics = getLayoutMetrics();
+
     if (layoutMode === 'mobile-portrait') {
         if (mode === 'multi') {
             return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 35 };
         }
         return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 27 };
+    }
+    if (mode === 'multi') {
+        return { width: BLOCK_SIZE * (metrics.multiPlayerAreaBlocks + 11), height: BLOCK_SIZE * 22 };
     }
     return { width: BLOCK_SIZE * 22, height: BLOCK_SIZE * 22 };
 }
@@ -64,10 +141,11 @@ export function calcPlaySceneDimensions(layoutMode: LayoutMode, mode: string): {
  * Calculate scene dimensions based on layout mode for NMultiPlayScene.
  */
 export function calcNMultiSceneDimensions(layoutMode: LayoutMode): { width: number; height: number } {
+    const metrics = getLayoutMetrics();
     if (layoutMode === 'mobile-portrait') {
         return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 35 };
     }
-    return { width: BLOCK_SIZE * 36, height: BLOCK_SIZE * 22 };
+    return { width: BLOCK_SIZE * (metrics.multiPlayerAreaBlocks + 13), height: BLOCK_SIZE * 22 };
 }
 
 // ─── Position Calculators ───────────────────────────────────────────
@@ -76,23 +154,9 @@ export function calcNMultiSceneDimensions(layoutMode: LayoutMode): { width: numb
  * Calculate the play field position for single-player mode (centered).
  */
 export function calcSinglePlayerPosition(gameWidth: number, gameHeight: number, mainScale: number = 1) {
-    const rawWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
-    const rawHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
     return {
-        x: (gameWidth - rawWidth * mainScale) / 2,
-        y: (gameHeight - rawHeight * mainScale) / 2,
-    };
-}
-
-/**
- * Calculate the play field position for multiplayer mode (left side).
- */
-export function calcMultiPlayerPosition(gameWidth: number, gameHeight: number) {
-    const rawWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
-    const rawHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
-    return {
-        x: (gameWidth * 0.25) - (rawWidth / 2),
-        y: (gameHeight - rawHeight) / 2,
+        x: (gameWidth - PLAYFIELD_WIDTH * mainScale) / 2,
+        y: (gameHeight - PLAYFIELD_HEIGHT * mainScale) / 2,
     };
 }
 
@@ -100,12 +164,12 @@ export function calcMultiPlayerPosition(gameWidth: number, gameHeight: number) {
  * Calculate the play field position for N-multi mode (centered in left player area).
  */
 export function calcNMultiPlayerPosition(gameHeight: number, playerAreaBlocks: number = 23) {
-    const rawWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
-    const rawHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
-    const leftArea = BLOCK_SIZE * playerAreaBlocks;
+    const metrics = getLayoutMetrics();
+    const areaBlocks = playerAreaBlocks ?? metrics.multiPlayerAreaBlocks;
+    const leftArea = BLOCK_SIZE * areaBlocks;
     return {
-        x: (leftArea - rawWidth) / 2,
-        y: (gameHeight - rawHeight) / 2,
+        x: (leftArea - PLAYFIELD_WIDTH) / 2,
+        y: (gameHeight - PLAYFIELD_HEIGHT) / 2,
     };
 }
 
@@ -113,10 +177,74 @@ export function calcNMultiPlayerPosition(gameHeight: number, playerAreaBlocks: n
  * Portrait position: playfield centered horizontally, below hold+next row.
  */
 export function calcPortraitPosition(gameWidth: number): { x: number; y: number } {
-    const rawWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
+    const metrics = getLayoutMetrics();
     return {
-        x: (gameWidth - rawWidth) / 2,
-        y: BLOCK_SIZE * 4.5,  // Below hold+next row (3 blocks hold + 1 header + 0.5 gap)
+        x: (gameWidth - PLAYFIELD_WIDTH) / 2,
+        y: BLOCK_SIZE * metrics.portraitFieldTopBlocks,
+    };
+}
+
+export function calcPlaySceneOpponentLayout(
+    layoutMode: LayoutMode,
+    gameWidth: number,
+    gameHeight: number,
+    playerFieldY: number,
+): PlaySceneOpponentLayout {
+    const metrics = getLayoutMetrics();
+
+    if (layoutMode === 'mobile-portrait') {
+        const y = playerFieldY + PLAYFIELD_HEIGHT + BLOCK_SIZE * metrics.multiPortraitOpponentOffsetBlocks;
+        const availableHeight = gameHeight - y - BLOCK_SIZE * metrics.multiPortraitOpponentBottomMarginBlocks;
+        const scale = availableHeight / PLAYFIELD_HEIGHT;
+        const x = (gameWidth - PLAYFIELD_WIDTH * scale) / 2;
+        return { x, y, scale, labelOffset: 20 };
+    }
+
+    const playerAreaWidth = BLOCK_SIZE * metrics.multiPlayerAreaBlocks;
+    const rightAreaWidth = gameWidth - playerAreaWidth;
+    const x = playerAreaWidth + (rightAreaWidth - PLAYFIELD_WIDTH) / 2;
+    const y = (gameHeight - PLAYFIELD_HEIGHT) / 2;
+    return { x, y, scale: 1, labelOffset: 30 };
+}
+
+export function calcNMultiOpponentArea(layoutMode: LayoutMode, gameWidth: number, gameHeight: number): OpponentAreaLayout {
+    const metrics = getLayoutMetrics();
+
+    if (layoutMode === 'mobile-portrait') {
+        const x = BLOCK_SIZE * metrics.nMultiPortraitAreaXBlocks;
+        const y = BLOCK_SIZE * metrics.nMultiPortraitAreaYBlocks;
+        const width = gameWidth - BLOCK_SIZE * metrics.nMultiPortraitAreaHorizontalPaddingBlocks;
+        const height = gameHeight - y - BLOCK_SIZE * metrics.nMultiPortraitAreaBottomPaddingBlocks;
+        return { x, y, width, height };
+    }
+
+    const x = BLOCK_SIZE * metrics.nMultiDesktopAreaXBlocks;
+    const y = BLOCK_SIZE * metrics.nMultiDesktopAreaYBlocks;
+    const width = gameWidth - x - BLOCK_SIZE * metrics.nMultiDesktopAreaRightPaddingBlocks;
+    const height = gameHeight - BLOCK_SIZE * metrics.nMultiDesktopAreaBottomPaddingBlocks;
+    return { x, y, width, height };
+}
+
+export function calcPortraitHudLayout(fieldX: number, fieldY: number): PortraitHudLayout {
+    const metrics = getLayoutMetrics();
+    const holdWidth = metrics.holdWidth * metrics.mobileUiScale;
+    const holdHeight = metrics.holdHeight * metrics.mobileUiScale;
+    const queueWidth = (BLOCK_SIZE + metrics.holdWidth) * metrics.mobileUiScale;
+    const queueHeight = BLOCK_SIZE * metrics.mobileUiScale + metrics.holdHeight * metrics.mobileUiScale;
+    const holdY = fieldY - holdHeight - metrics.gap;
+    const queueY = holdY - BLOCK_SIZE * metrics.mobileUiScale;
+
+    return {
+        holdX: fieldX,
+        holdY,
+        holdWidth,
+        holdHeight,
+        queueX: fieldX + PLAYFIELD_WIDTH - queueWidth,
+        queueY,
+        queueWidth,
+        queueHeight,
+        infoX: fieldX,
+        infoY: fieldY + PLAYFIELD_HEIGHT + metrics.gap,
     };
 }
 
@@ -139,18 +267,16 @@ function createDesktopLayout(options: GameLayoutOptions): GameLayoutResult {
     const { scene, fieldX, fieldY, onHoldInput, isInputBlocked } = options;
     const mainScale = options.mainScale ?? 1;
     const sideScale = options.sideScale ?? 1;
-
-    const rawPlayFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
-    const rawPlayFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
+    const metrics = getLayoutMetrics();
 
     // Hold Box (left of play field)
-    const holdX = fieldX - GAP - (HOLD_WIDTH * sideScale);
+    const holdX = fieldX - metrics.gap - (metrics.holdWidth * sideScale);
     const holdY = fieldY;
-    const holdBox = new TetrominoBox(scene, holdX, holdY, HOLD_WIDTH, HOLD_HEIGHT, "HOLD");
+    const holdBox = new TetrominoBox(scene, holdX, holdY, metrics.holdWidth, metrics.holdHeight, "HOLD");
     holdBox.container.setScale(sideScale);
 
     // Hold Touch Zone
-    const holdZone = scene.add.zone(holdX, holdY, HOLD_WIDTH * sideScale, HOLD_HEIGHT * sideScale).setOrigin(0);
+    const holdZone = scene.add.zone(holdX, holdY, metrics.holdWidth * sideScale, metrics.holdHeight * sideScale).setOrigin(0);
     holdZone.setInteractive();
     holdZone.on('pointerdown', () => {
         if (isInputBlocked()) return;
@@ -160,18 +286,18 @@ function createDesktopLayout(options: GameLayoutOptions): GameLayoutResult {
 
     // Level Indicator (below hold box)
     const infoX = holdX;
-    const infoY = holdY + (HOLD_HEIGHT * sideScale) + GAP;
+    const infoY = holdY + (metrics.holdHeight * sideScale) + metrics.gap;
     const levelIndicator = new LevelIndicator(scene, infoX, infoY);
     levelIndicator.container.setScale(sideScale);
 
     // Queue (right of play field)
-    const queueX = fieldX + (rawPlayFieldWidth * mainScale) + GAP - (BLOCK_SIZE * sideScale);
+    const queueX = fieldX + (PLAYFIELD_WIDTH * mainScale) + metrics.gap - (BLOCK_SIZE * sideScale);
     const queueY = fieldY - (BLOCK_SIZE * sideScale);
-    const tetrominoQueue = new TetrominoBoxQueue(scene, queueX, queueY, QUEUE_SIZE);
+    const tetrominoQueue = new TetrominoBoxQueue(scene, queueX, queueY, metrics.queueSize);
     tetrominoQueue.container.setScale(sideScale);
 
     // Play Field
-    const playField = new PlayField(scene, fieldX, fieldY, rawPlayFieldWidth, rawPlayFieldHeight);
+    const playField = new PlayField(scene, fieldX, fieldY, PLAYFIELD_WIDTH, PLAYFIELD_HEIGHT);
     playField.setScale(mainScale);
 
     // Engine
@@ -182,17 +308,20 @@ function createDesktopLayout(options: GameLayoutOptions): GameLayoutResult {
 
 function createPortraitLayout(options: GameLayoutOptions): GameLayoutResult {
     const { scene, fieldX, fieldY, onHoldInput, isInputBlocked } = options;
-
-    const rawPlayFieldWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
-    const rawPlayFieldHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
+    const metrics = getLayoutMetrics();
+    const hudLayout = calcPortraitHudLayout(fieldX, fieldY);
 
     // Hold Box (above-left of play field)
-    const holdX = fieldX;
-    const holdY = fieldY - MOBILE_HOLD_HEIGHT - GAP - BLOCK_SIZE * 0.6; // space for header text
-    const holdBox = new TetrominoBox(scene, holdX, holdY, MOBILE_HOLD_WIDTH, MOBILE_HOLD_HEIGHT, "HOLD");
+    const holdBox = new TetrominoBox(scene, hudLayout.holdX, hudLayout.holdY, metrics.holdWidth, metrics.holdHeight, "HOLD");
+    holdBox.container.setScale(metrics.mobileUiScale);
 
     // Hold Touch Zone
-    const holdZone = scene.add.zone(holdX, holdY, MOBILE_HOLD_WIDTH, MOBILE_HOLD_HEIGHT).setOrigin(0);
+    const holdZone = scene.add.zone(
+        hudLayout.holdX,
+        hudLayout.holdY,
+        hudLayout.holdWidth,
+        hudLayout.holdHeight,
+    ).setOrigin(0);
     holdZone.setInteractive();
     holdZone.on('pointerdown', () => {
         if (isInputBlocked()) return;
@@ -201,17 +330,14 @@ function createPortraitLayout(options: GameLayoutOptions): GameLayoutResult {
     });
 
     // Queue (above-right of play field, single next piece)
-    const queueX = fieldX + rawPlayFieldWidth - MOBILE_HOLD_WIDTH - BLOCK_SIZE;
-    const queueY = holdY - BLOCK_SIZE;
-    const tetrominoQueue = new TetrominoBoxQueue(scene, queueX, queueY, MOBILE_QUEUE_SIZE);
+    const tetrominoQueue = new TetrominoBoxQueue(scene, hudLayout.queueX, hudLayout.queueY, metrics.mobileQueueSize);
+    tetrominoQueue.container.setScale(metrics.mobileUiScale);
 
     // Play Field
-    const playField = new PlayField(scene, fieldX, fieldY, rawPlayFieldWidth, rawPlayFieldHeight);
+    const playField = new PlayField(scene, fieldX, fieldY, PLAYFIELD_WIDTH, PLAYFIELD_HEIGHT);
 
     // Level Indicator (compact, below play field)
-    const infoX = fieldX;
-    const infoY = fieldY + rawPlayFieldHeight + GAP;
-    const levelIndicator = new LevelIndicator(scene, infoX, infoY, { compact: true });
+    const levelIndicator = new LevelIndicator(scene, hudLayout.infoX, hudLayout.infoY, { compact: true });
 
     // Engine
     const engine = new Engine(playField, holdBox, tetrominoQueue, levelIndicator);

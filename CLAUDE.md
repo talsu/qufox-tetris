@@ -38,7 +38,7 @@ src/tetris/
   const/
     const.ts                 # All game constants (scoring, SRS kick data, tetromino shapes, timing)
   scenes/
-    baseScene.ts             # Base Phaser.Scene with responsive resize (mobile/desktop)
+    baseScene.ts             # Base Phaser.Scene with layout mode detection & responsive resize
     menuScene.ts             # Main menu with mode selection (Single, 1v1, N-Multi)
     lobbyScene.ts            # Room lobby (exports LobbyScene for 1v1, NMultiLobbyScene for N-multi)
     playScene.ts             # Single-player & 1v1 multiplayer gameplay scene
@@ -56,15 +56,15 @@ src/tetris/
     tetromino.ts             # Piece logic: SRS rotation, wall kicks, ghost piece, drop tracking
     tetrominoBox.ts          # Hold box UI component
     tetrominoBoxQueue.ts     # Next queue (6-piece preview) with 7-bag randomizer
-    levelIndicator.ts        # Stats display (score, level, lines, combos, TPM, LPM)
-    miniPlayField.ts         # Compact opponent board display for N-multiplayer
+    levelIndicator.ts        # Stats display (standard vertical + compact horizontal for mobile)
+    miniPlayField.ts         # Compact opponent board with inline rank + score for N-multiplayer
   net/
     boardCodec.ts            # Board serialization: 200-char string (10x20, one char per cell)
     socketUtils.ts           # Socket.io URL config (localhost:3031 or window.location.origin)
   ui/
-    gameLayout.ts            # Factory for creating standardized game UI layouts
+    gameLayout.ts            # Layout factory with desktop/mobile-portrait responsive branches
     inGameMenu.ts            # Pause/Game Over DOM overlays
-    leaderboardPanel.ts      # N-multiplayer leaderboard (DOM-based)
+    leaderboardPanel.ts      # N-multiplayer leaderboard (DOM-based, unused — rank now inline in miniPlayField)
     uiStyles.ts              # Shared UI styling utilities
   view/
     playFieldEffects.ts      # Visual effects (line clear animations)
@@ -91,10 +91,13 @@ test/
 - **Game rules** follow the 2009 Tetris Design Guideline (SRS rotation, 7-bag randomizer, T-spin detection, back-to-back combos)
 - **Pure logic** in `src/tetris/logic/` -- `GameRules` and `GarbageGenerator` are stateless
 - **Event-driven** communication between game objects via `Phaser.Events.EventEmitter`
-- **Factory pattern** in `gameLayout.ts` avoids duplication between single/multi/n-multi layouts
-- **DOM overlays** for menus and leaderboards (outside Phaser scene graph) in `src/tetris/ui/`
+- **Factory pattern** in `gameLayout.ts` avoids duplication between single/multi/n-multi layouts and handles desktop vs mobile-portrait branches
+- **Responsive layout** via `LayoutMode` (`desktop` / `mobile-portrait` / `mobile-landscape`) detected in `BaseScene.getLayoutMode()`. Mobile portrait rearranges UI vertically (hold+next above field, compact stats below); mobile landscape uses desktop layout
+- **DOM overlays** for menus (outside Phaser scene graph) in `src/tetris/ui/`; CSS media queries in `modern-ui.css` handle phone/tablet sizing
 - **Camera zoom** handles responsive scaling; base block size is fixed at 32px
 - **Networking** uses compact BoardCodec serialization (single character per cell: I/J/L/O/S/T/Z/G/0)
+- **Collaboration language**: Commit messages and PR descriptions must be written in English
+- **Response language**: Prefer Korean for assistant responses whenever possible
 
 ### Game Constants (src/tetris/const/const.ts)
 
@@ -123,7 +126,7 @@ Single (100), Double (300), Triple (500), Tetris (800), T-Spin (400), T-Spin Min
 - NMultiPlayScene broadcasts snapshots every 500ms
 - Server selectively broadcasts (each player gets others' state, not their own)
 - Up to 100 players per room
-- Leaderboard tracks top 10 + current player rank
+- Rank (`#N`) and score displayed inline on each MiniPlayField (no separate leaderboard panel)
 - Players eliminated on game over (overlay shown on mini boards)
 - URL-based room joining: `/n-multi/{roomName}`
 

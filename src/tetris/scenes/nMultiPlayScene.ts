@@ -1,5 +1,5 @@
 import { PlayField } from '../objects/playField';
-import { CONST, getBlockSize, InputState } from "../const/const";
+import { CONST, InputState } from "../const/const";
 import { Engine } from '../engine';
 import { Socket } from "socket.io-client";
 import { InputManager } from "../input/inputManager";
@@ -8,9 +8,14 @@ import { BaseScene } from "./baseScene";
 import { MiniPlayField } from "../objects/miniPlayField";
 import { BoardCodec } from "../net/boardCodec";
 import { BotManager } from "../logic/botManager";
-import { createGameLayout, calcNMultiPlayerPosition, calcNMultiSceneDimensions, calcPortraitPosition } from "../ui/gameLayout";
-
-const BLOCK_SIZE = getBlockSize();
+import { GAME_FONT_FAMILY } from "../ui/uiStyles";
+import {
+    createGameLayout,
+    calcNMultiPlayerPosition,
+    calcNMultiSceneDimensions,
+    calcPortraitPosition,
+    calcNMultiOpponentArea,
+} from "../ui/gameLayout";
 
 export class NMultiPlayScene extends BaseScene {
     private playField: PlayField;
@@ -87,6 +92,7 @@ export class NMultiPlayScene extends BaseScene {
         this.resize(window.innerWidth, window.innerHeight);
 
         this.statusText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, '', {
+            fontFamily: GAME_FONT_FAMILY,
             fontSize: '32px',
             color: '#ffffff',
             stroke: '#000000',
@@ -214,23 +220,7 @@ export class NMultiPlayScene extends BaseScene {
         const count = this.miniFields.size;
         if (count === 0) return;
 
-        const isPortrait = this.layoutMode === 'mobile-portrait';
-
-        // Opponent area dimensions
-        let areaX: number, areaY: number, areaWidth: number, areaHeight: number;
-        if (isPortrait) {
-            // Below player area in portrait
-            areaX = BLOCK_SIZE * 0.5;
-            areaY = BLOCK_SIZE * 28.5; // Below playfield + compact stats
-            areaWidth = this.GAME_WIDTH - BLOCK_SIZE;
-            areaHeight = this.GAME_HEIGHT - areaY - BLOCK_SIZE * 0.5;
-        } else {
-            // Right of player area in desktop
-            areaX = BLOCK_SIZE * 23.5;
-            areaY = BLOCK_SIZE * 1;
-            areaWidth = this.GAME_WIDTH - areaX - BLOCK_SIZE * 0.5;
-            areaHeight = this.GAME_HEIGHT - BLOCK_SIZE * 2;
-        }
+        const opponentArea = calcNMultiOpponentArea(this.layoutMode, this.GAME_WIDTH, this.GAME_HEIGHT);
         // Height factor: 20 field rows + 2 name + 2 info = 24 cell-size units
         const TOTAL_ROWS = 24;
 
@@ -240,8 +230,8 @@ export class NMultiPlayScene extends BaseScene {
 
         for (let cols = 1; cols <= count; cols++) {
             const rows = Math.ceil(count / cols);
-            const cellWidth = areaWidth / cols;
-            const cellHeight = areaHeight / rows;
+            const cellWidth = opponentArea.width / cols;
+            const cellHeight = opponentArea.height / rows;
             const cellSizeFromWidth = (cellWidth - 4) / CONST.PLAY_FIELD.COL_COUNT;
             const cellSizeFromHeight = (cellHeight - 8) / TOTAL_ROWS;
             const cellSize = Math.min(cellSizeFromWidth, cellSizeFromHeight);
@@ -252,8 +242,8 @@ export class NMultiPlayScene extends BaseScene {
         }
 
         const bestRows = Math.ceil(count / bestCols);
-        const cellWidth = areaWidth / bestCols;
-        const cellHeight = areaHeight / bestRows;
+        const cellWidth = opponentArea.width / bestCols;
+        const cellHeight = opponentArea.height / bestRows;
         const cellSize = Math.max(1, bestCellSize);
 
         // Name height matches the capped font size in MiniPlayField.resize()
@@ -263,7 +253,7 @@ export class NMultiPlayScene extends BaseScene {
         for (const [, mini] of this.miniFields) {
             const col = idx % bestCols;
             const row = Math.floor(idx / bestCols);
-            mini.setPosition(areaX + col * cellWidth + 2, areaY + row * cellHeight + nameHeight);
+            mini.setPosition(opponentArea.x + col * cellWidth + 2, opponentArea.y + row * cellHeight + nameHeight);
             mini.resize(cellSize);
             idx++;
         }

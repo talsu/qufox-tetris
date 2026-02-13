@@ -1,6 +1,7 @@
 import { getBlockSize } from "../const/const";
 
 const BLOCK_SIZE = getBlockSize();
+export const GAME_FONT_FAMILY = 'Pretendard, Arial Black, sans-serif';
 
 // ─── Common Text Visual Effects ─────────────────────────────────────
 export const TEXT_STROKE_COLOR = '#000000';
@@ -25,42 +26,44 @@ export const PANEL_BG = {
 // ─── Reusable Text Style Presets ────────────────────────────────────
 export const TextStyles = {
     header: {
-        fontFamily: 'Arial Black',
+        fontFamily: GAME_FONT_FAMILY,
+        fontStyle: 'bold',
         fontSize: `${BLOCK_SIZE * 0.7}px`,
         color: '#ffffff',
         align: 'left',
     },
 
     valueLarge: {
-        fontFamily: 'Arial Black',
+        fontFamily: GAME_FONT_FAMILY,
         fontSize: `${BLOCK_SIZE * 0.8}px`,
         color: '#ffffff',
         align: 'left',
     },
 
     label: {
-        fontFamily: 'Arial Black',
+        fontFamily: GAME_FONT_FAMILY,
+        fontStyle: 'bold',
         fontSize: `${BLOCK_SIZE * 0.5}px`,
         color: '#ffffff',
         align: 'left',
     },
 
     valueSmall: {
-        fontFamily: 'Arial Black',
+        fontFamily: GAME_FONT_FAMILY,
         fontSize: `${BLOCK_SIZE * 0.5}px`,
         color: '#ffffff',
         align: 'right',
     },
 
     action: {
-        fontFamily: 'Arial Black',
+        fontFamily: GAME_FONT_FAMILY,
         fontSize: `${BLOCK_SIZE * 0.8}px`,
         color: '#ffff00',
         align: 'center',
     },
 
     combo: {
-        fontFamily: 'Arial Black',
+        fontFamily: GAME_FONT_FAMILY,
         fontSize: `${BLOCK_SIZE * 0.5}px`,
         color: '#00ffff',
         align: 'center',

@@ -1,3 +1,19 @@
+@font-face {
+    font-family: 'Pretendard';
+    src: url('/assets/font/Pretendard-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Pretendard';
+    src: url('/assets/font/Pretendard-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
 /* Modern Puyo Puyo Tetris inspired UI */
 :root {
     --primary-color: #FF006E;
@@ -11,6 +27,7 @@
 
     --font-main: 'M PLUS Rounded 1c', sans-serif;
     --font-title: 'Fredoka One', cursive;
+    --font-game: 'Pretendard', 'Arial Black', sans-serif;
 }
 
 /* Global Container Setup for Phaser DOM */

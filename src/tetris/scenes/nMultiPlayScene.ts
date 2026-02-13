@@ -8,6 +8,7 @@ import { BaseScene } from "./baseScene";
 import { MiniPlayField } from "../objects/miniPlayField";
 import { BoardCodec } from "../net/boardCodec";
 import { BotManager } from "../logic/botManager";
+import { GAME_FONT_FAMILY } from "../ui/uiStyles";
 import {
     createGameLayout,
     calcNMultiPlayerPosition,
@@ -91,6 +92,7 @@ export class NMultiPlayScene extends BaseScene {
         this.resize(window.innerWidth, window.innerHeight);
 
         this.statusText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, '', {
+            fontFamily: GAME_FONT_FAMILY,
             fontSize: '32px',
             color: '#ffffff',
             stroke: '#000000',

@@ -2,6 +2,8 @@ import { CONST } from "../const/const";
 import { BaseScene } from "./baseScene";
 import { io, Socket } from "socket.io-client";
 import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
+import { GAME_FONT_FAMILY } from "../ui/uiStyles";
+import { ensureGameFontReady } from "../ui/fontLoader";
 
 
 export class MenuScene extends BaseScene {
@@ -30,6 +32,11 @@ export class MenuScene extends BaseScene {
         this.events.on('shutdown', this.shutdown, this);
 
         this.createBackground();
+        void this.initializeMenuFlow();
+    }
+
+    private async initializeMenuFlow(): Promise<void> {
+        await ensureGameFontReady();
 
         // Check for /n-multi/{roomName} URL pattern
         const nMultiMatch = window.location.pathname.match(/^\/n-multi\/(.+)$/);
@@ -60,6 +67,7 @@ export class MenuScene extends BaseScene {
     private joinNMultiRoomByUrl(roomName: string, botLevel: number = 0): void {
         // Show connecting text
         const connectingText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'Connecting...', {
+            fontFamily: GAME_FONT_FAMILY,
             fontSize: '32px',
             color: '#ffffff',
             stroke: '#000000',
@@ -106,6 +114,7 @@ export class MenuScene extends BaseScene {
 
     private joinMultiRoomByUrl(roomName: string, botLevel: number = 0): void {
         const connectingText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'Connecting...', {
+            fontFamily: GAME_FONT_FAMILY,
             fontSize: '32px',
             color: '#ffffff',
             stroke: '#000000',

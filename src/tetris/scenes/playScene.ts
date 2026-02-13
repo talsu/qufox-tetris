@@ -12,6 +12,7 @@ import { InputManager } from "../input/inputManager";
 import { InGameMenu } from "../ui/inGameMenu";
 import { BaseScene } from "./baseScene";
 import { BotManager } from "../logic/botManager";
+import { GAME_FONT_FAMILY } from "../ui/uiStyles";
 import {
     createGameLayout,
     calcSinglePlayerPosition,
@@ -89,6 +90,7 @@ export class PlayScene extends BaseScene {
         this.resize(window.innerWidth, window.innerHeight);
 
         this.statusText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, '', {
+            fontFamily: GAME_FONT_FAMILY,
             fontSize: '32px',
             color: '#ffffff',
             stroke: '#000000',
@@ -302,6 +304,7 @@ export class PlayScene extends BaseScene {
             this.opponentPlayField = new PlayField(this, opponentLayout.x, opponentLayout.y, rawPlayFieldWidth, rawPlayFieldHeight);
             this.opponentPlayField.setScale(opponentLayout.scale);
             this.add.text(opponentLayout.x, opponentLayout.y - opponentLayout.labelOffset, 'Opponent', {
+                fontFamily: GAME_FONT_FAMILY,
                 fontSize: isPortrait ? '16px' : '20px',
                 color: '#ffffff',
             });

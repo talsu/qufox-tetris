@@ -3,6 +3,23 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const crypto = require('crypto');
+const { RANDOM_NAMES } = require('./randomNames');
+
+function generateRandomName(room) {
+    const usedNames = new Set(Object.values(room.players).map(p => p.name));
+    // Try random picks first (fast path)
+    for (let i = 0; i < 20; i++) {
+        const name = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
+        if (!usedNames.has(name)) return name;
+    }
+    // Fallback: filter available names
+    const available = RANDOM_NAMES.filter(n => !usedNames.has(n));
+    if (available.length > 0) {
+        return available[Math.floor(Math.random() * available.length)];
+    }
+    // All 1000 names used: append number
+    return 'Player' + (Object.keys(room.players).length + 1);
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -167,7 +184,7 @@ io.on('connection', (socket) => {
     socket.on('nmulti_create_room', (data) => {
         const roomName = (data && data.roomName) || 'Room';
         const roomId = crypto.randomUUID();
-        const playerName = 'Player1';
+        const playerName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
 
         nMultiRooms[roomId] = {
             id: roomId,
@@ -226,7 +243,7 @@ io.on('connection', (socket) => {
         }
 
         room.playerCounter++;
-        const playerName = 'Player' + room.playerCounter;
+        const playerName = generateRandomName(room);
 
         room.players[socket.id] = {
             name: playerName,
@@ -322,7 +339,7 @@ io.on('connection', (socket) => {
             }
 
             room.playerCounter++;
-            const playerName = 'Player' + room.playerCounter;
+            const playerName = generateRandomName(room);
 
             room.players[socket.id] = {
                 name: playerName,
@@ -353,7 +370,7 @@ io.on('connection', (socket) => {
         } else {
             // Create new room
             const roomId = crypto.randomUUID();
-            const playerName = 'Player1';
+            const playerName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
 
             nMultiRooms[roomId] = {
                 id: roomId,

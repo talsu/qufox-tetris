@@ -57,6 +57,9 @@ export function calcPlaySceneDimensions(layoutMode: LayoutMode, mode: string): {
         }
         return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 27 };
     }
+    if (mode === 'multi') {
+        return { width: BLOCK_SIZE * 34, height: BLOCK_SIZE * 22 };
+    }
     return { width: BLOCK_SIZE * 22, height: BLOCK_SIZE * 22 };
 }
 
@@ -85,18 +88,6 @@ export function calcSinglePlayerPosition(gameWidth: number, gameHeight: number, 
 }
 
 /**
- * Calculate the play field position for multiplayer mode (left side).
- */
-export function calcMultiPlayerPosition(gameWidth: number, gameHeight: number) {
-    const rawWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
-    const rawHeight = BLOCK_SIZE * CONST.PLAY_FIELD.ROW_COUNT;
-    return {
-        x: (gameWidth * 0.25) - (rawWidth / 2),
-        y: (gameHeight - rawHeight) / 2,
-    };
-}
-
-/**
  * Calculate the play field position for N-multi mode (centered in left player area).
  */
 export function calcNMultiPlayerPosition(gameHeight: number, playerAreaBlocks: number = 23) {
@@ -116,7 +107,7 @@ export function calcPortraitPosition(gameWidth: number): { x: number; y: number 
     const rawWidth = BLOCK_SIZE * CONST.PLAY_FIELD.COL_COUNT;
     return {
         x: (gameWidth - rawWidth) / 2,
-        y: BLOCK_SIZE * 4.5,  // Below hold+next row (3 blocks hold + 1 header + 0.5 gap)
+        y: BLOCK_SIZE * 4.7,  // Below hold+next row with header text clearance
     };
 }
 

@@ -96,6 +96,8 @@ test/
 - **DOM overlays** for menus (outside Phaser scene graph) in `src/tetris/ui/`; CSS media queries in `modern-ui.css` handle phone/tablet sizing
 - **Camera zoom** handles responsive scaling; base block size is fixed at 32px
 - **Networking** uses compact BoardCodec serialization (single character per cell: I/J/L/O/S/T/Z/G/0)
+- **Collaboration language**: Commit messages and PR descriptions must be written in English
+- **Response language**: Prefer Korean for assistant responses whenever possible
 
 ### Game Constants (src/tetris/const/const.ts)
 

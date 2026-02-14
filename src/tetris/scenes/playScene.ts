@@ -45,6 +45,7 @@ export class PlayScene extends BaseScene {
     private botLevel: number = 0;
     private botManager: BotManager;
     private disconnectNoticeDOM: Phaser.GameObjects.DOMElement | null = null;
+    private startImmediately: boolean = false;
 
     // Configurable Scales
     private readonly MAIN_SCALE = 1;
@@ -73,6 +74,7 @@ export class PlayScene extends BaseScene {
         this.isGameRunning = false;
         this.isGameEnded = false;
         this.lastUpdateSend = 0;
+        this.startImmediately = data.startImmediately || false;
     }
 
     preload(): void { }
@@ -111,6 +113,10 @@ export class PlayScene extends BaseScene {
             this.startGame();
         } else {
             this.setupMultiplayer();
+            if (this.startImmediately) {
+                this.statusText.setVisible(false);
+                this.startGame();
+            }
         }
 
         this.events.on('shutdown', this.shutdown, this);
@@ -121,6 +127,21 @@ export class PlayScene extends BaseScene {
 
         if (this.socket) {
             this.socket.on('game_start', () => {
+                if (this.isGameRunning) return;
+
+                if (this.playField) {
+                    // Previous game objects exist — restart scene cleanly
+                    this.scene.restart({
+                        mode: 'multi',
+                        socket: this.socket,
+                        roomId: this.roomId,
+                        roomName: this.roomName,
+                        botLevel: this.botLevel,
+                        startImmediately: true
+                    });
+                    return;
+                }
+
                 if (this.disconnectNoticeDOM) {
                     this.disconnectNoticeDOM.destroy();
                     this.disconnectNoticeDOM = null;

@@ -135,28 +135,35 @@ io.on('connection', (socket) => {
     socket.on('join_or_create', (data) => {
         const roomName = (data && data.roomName) || 'Room';
 
-        // Find existing waiting room by name
-        let existingRoomId = null;
+        // Find existing room by name (check both waiting and playing)
+        let existingWaitingRoomId = null;
+        let existingPlayingRoomId = null;
         for (const roomId in rooms) {
-            if (rooms[roomId].name === roomName && rooms[roomId].status === 'waiting') {
-                existingRoomId = roomId;
-                break;
+            if (rooms[roomId].name === roomName) {
+                if (rooms[roomId].status === 'waiting') {
+                    existingWaitingRoomId = roomId;
+                    break;
+                } else if (rooms[roomId].status === 'playing') {
+                    existingPlayingRoomId = roomId;
+                }
             }
         }
 
-        if (existingRoomId) {
+        if (existingWaitingRoomId) {
             // Join existing room as p2
-            const room = rooms[existingRoomId];
+            const room = rooms[existingWaitingRoomId];
             room.p2 = socket.id;
             room.status = 'playing';
 
-            socket.join(existingRoomId);
-            socket.emit('room_joined', { roomId: existingRoomId, isHost: false, roomName: room.name });
+            socket.join(existingWaitingRoomId);
+            socket.emit('room_joined', { roomId: existingWaitingRoomId, isHost: false, roomName: room.name });
 
             io.to(room.p1).emit('opponent_joined', { opponentId: socket.id });
             socket.emit('opponent_joined', { opponentId: room.p1 });
 
             io.emit('room_list', getRoomList());
+        } else if (existingPlayingRoomId) {
+            socket.emit('room_error', 'Game is already in progress in this room.');
         } else {
             // Create new room
             const roomId = crypto.randomUUID();

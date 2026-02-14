@@ -44,6 +44,7 @@ export class PlayScene extends BaseScene {
     private isGameEnded: boolean = false;
     private botLevel: number = 0;
     private botManager: BotManager;
+    private disconnectNoticeDOM: Phaser.GameObjects.DOMElement | null = null;
 
     // Configurable Scales
     private readonly MAIN_SCALE = 1;
@@ -120,6 +121,10 @@ export class PlayScene extends BaseScene {
 
         if (this.socket) {
             this.socket.on('game_start', () => {
+                if (this.disconnectNoticeDOM) {
+                    this.disconnectNoticeDOM.destroy();
+                    this.disconnectNoticeDOM = null;
+                }
                 this.statusText.setVisible(false);
                 this.startGame();
             });
@@ -146,14 +151,66 @@ export class PlayScene extends BaseScene {
                 this.scene.restart({ mode: 'multi', socket: this.socket, roomId: this.roomId, roomName: this.roomName, botLevel: this.botLevel });
             });
 
-            this.socket.on('opponent_disconnected', () => {
-                history.replaceState(null, '', '/');
-                alert('Opponent disconnected!');
-                this.scene.start('LobbyScene');
+            this.socket.on('opponent_disconnected', (data?: { message?: string }) => {
+                this.handleOpponentDisconnected(data?.message);
             });
 
             this.socket.emit('player_ready', { roomId: this.roomId });
         }
+    }
+
+    private handleOpponentDisconnected(message?: string) {
+        if (this.mode !== 'multi' || !this.socket) {
+            return;
+        }
+
+        this.isGameRunning = false;
+        this.isGameEnded = false;
+        this.inputManager.isEnabled = false;
+
+        if (this.botManager) {
+            this.botManager.stop();
+        }
+        if (this.playField) {
+            this.playField.stop();
+        }
+
+        this.showDisconnectNotice(message || 'Opponent left. Waiting for a new player...');
+
+        this.socket.emit('player_ready', { roomId: this.roomId });
+    }
+
+    private showDisconnectNotice(message: string) {
+        if (this.disconnectNoticeDOM) {
+            this.disconnectNoticeDOM.destroy();
+            this.disconnectNoticeDOM = null;
+        }
+
+        this.statusText
+            .setText('Waiting for opponent...')
+            .setVisible(true)
+            .setDepth(1000);
+
+        const html = `
+        <div class="disconnect-notice-overlay" style="width: ${this.GAME_WIDTH}px; height: ${this.GAME_HEIGHT}px;">
+            <div class="menu-panel disconnect-notice-panel">
+                <div class="menu-title disconnect-notice-title">NOTICE</div>
+                <div class="disconnect-notice-message">${message}</div>
+            </div>
+        </div>
+        `;
+
+        this.disconnectNoticeDOM = this.add.dom(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2).createFromHTML(html);
+        this.disconnectNoticeDOM.setDepth(1001);
+        this.disconnectNoticeDOM.setScale(this.cameras.main.zoom);
+
+        this.time.delayedCall(2500, () => {
+            if (!this.disconnectNoticeDOM) {
+                return;
+            }
+            this.disconnectNoticeDOM.destroy();
+            this.disconnectNoticeDOM = null;
+        });
     }
 
     private shutdown() {
@@ -168,6 +225,10 @@ export class PlayScene extends BaseScene {
             this.socket.off('opponent_game_over');
             this.socket.off('restart_signal');
             this.socket.off('opponent_disconnected');
+        }
+        if (this.disconnectNoticeDOM) {
+            this.disconnectNoticeDOM.destroy();
+            this.disconnectNoticeDOM = null;
         }
         if (this.inGameMenu) {
             this.inGameMenu.destroy();
@@ -308,6 +369,14 @@ export class PlayScene extends BaseScene {
                 fontSize: isPortrait ? '16px' : '20px',
                 color: '#ffffff',
             });
+        }
+    }
+
+
+    resize(gameSize, baseSize?, displaySize?, resolution?) {
+        super.resize(gameSize, baseSize, displaySize, resolution);
+        if (this.disconnectNoticeDOM && this.cameras && this.cameras.main) {
+            this.disconnectNoticeDOM.setScale(this.cameras.main.zoom);
         }
     }
 

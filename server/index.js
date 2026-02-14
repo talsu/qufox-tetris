@@ -442,10 +442,41 @@ io.on('connection', (socket) => {
         let roomChanged = false;
         for (const roomId in rooms) {
             const room = rooms[roomId];
-            if (room.p1 === socket.id || room.p2 === socket.id) {
-                io.to(roomId).emit('opponent_disconnected');
+            if (room.p1 !== socket.id && room.p2 !== socket.id) {
+                continue;
+            }
+
+            roomChanged = true;
+
+            // Host left: promote guest to host and keep room waiting.
+            if (room.p1 === socket.id && room.p2) {
+                const remainingPlayer = room.p2;
+                room.p1 = remainingPlayer;
+                room.p2 = null;
+                room.status = 'waiting';
+                room.p1Ready = true;
+                room.p2Ready = false;
+                io.to(remainingPlayer).emit('opponent_disconnected', {
+                    message: 'Opponent left. Waiting for a new player...'
+                });
+                continue;
+            }
+
+            // Guest left: keep host in the room and return to waiting state.
+            if (room.p2 === socket.id) {
+                room.p2 = null;
+                room.status = 'waiting';
+                room.p1Ready = true;
+                room.p2Ready = false;
+                io.to(room.p1).emit('opponent_disconnected', {
+                    message: 'Opponent left. Waiting for a new player...'
+                });
+                continue;
+            }
+
+            // Host left while waiting: remove empty room.
+            if (room.p1 === socket.id) {
                 delete rooms[roomId];
-                roomChanged = true;
             }
         }
         if (roomChanged) {

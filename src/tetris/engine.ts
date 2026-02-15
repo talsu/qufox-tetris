@@ -15,6 +15,7 @@ export class Engine {
     private levelIndicator: LevelIndicator;
     private scoreSystem: ScoreSystem;
     private gameTime: number = 0;
+    private readonly isDebugLogging: boolean = typeof process !== 'undefined' ? process.env.NODE_ENV !== 'production' : true;
 
     private onAttack: (count: number) => void;
 
@@ -136,13 +137,10 @@ export class Engine {
             tSpinCornerOccupiedCount
         );
 
-        if (result.scoreAdded > 0 && result.actionName) {
+        if (this.isDebugLogging && result.scoreAdded > 0 && result.actionName) {
             console.log(`${result.actionName} - ${result.scoreAdded}`);
         }
-        if (result.combo > 0) {
-            const comboScore = 50 * result.combo * result.level; // Logic duplication for logging?
-            // Better rely on ScoreSystem to return combo score details if we want detailed logs,
-            // but for now simple log is fine.
+        if (this.isDebugLogging && result.combo > 0) {
              console.log(`Combo ${result.combo}`);
         }
 
@@ -192,7 +190,9 @@ export class Engine {
      * Game over. emit from play field, when can not create tetromino anymore.
      */
     gameOver(gameOverType) {
-        console.log(`Game Over - ${gameOverType}`);
+        if (this.isDebugLogging) {
+            console.log(`Game Over - ${gameOverType}`);
+        }
     }
 
     /**

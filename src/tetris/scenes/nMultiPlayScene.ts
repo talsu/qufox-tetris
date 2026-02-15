@@ -6,7 +6,6 @@ import { InputManager } from "../input/inputManager";
 import { InGameMenu } from "../ui/inGameMenu";
 import { BaseScene } from "./baseScene";
 import { MiniPlayField } from "../objects/miniPlayField";
-import { BoardCodec } from "../net/boardCodec";
 import { BotManager } from "../logic/botManager";
 import { GAME_FONT_FAMILY } from "../ui/uiStyles";
 import {
@@ -446,8 +445,7 @@ export class NMultiPlayScene extends BaseScene {
             this.lastUpdateSend = time;
             if (this.playField && this.socket) {
                 const stats = this.engine.getStats();
-                const boardBlocks = this.playField.serialize();
-                const board = BoardCodec.encode(boardBlocks);
+                const board = this.playField.serializeEncoded();
                 this.socket.emit('nmulti_update_state', {
                     roomId: this.roomId,
                     score: stats.score,

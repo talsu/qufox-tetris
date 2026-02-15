@@ -3,8 +3,21 @@ import {ObjectBase} from './objectBase';
 import {Tetromino} from "./tetromino";
 import {PlayFieldEffects} from "../view/playFieldEffects";
 import {GarbageGenerator} from "../logic/garbageGenerator";
+import { BoardCodec } from "../net/boardCodec";
+
 
 const BLOCK_SIZE = getBlockSize();
+const TYPE_TO_CHAR: Record<string, string> = {
+    [TetrominoType.I]: 'I',
+    [TetrominoType.J]: 'J',
+    [TetrominoType.L]: 'L',
+    [TetrominoType.O]: 'O',
+    [TetrominoType.S]: 'S',
+    [TetrominoType.T]: 'T',
+    [TetrominoType.Z]: 'Z',
+    [TetrominoType.GARBAGE]: 'G',
+};
+
 /**
  * Play field
  */
@@ -19,6 +32,7 @@ export class PlayField extends ObjectBase {
     public autoDropDelay: number = 1000;
     private effects: PlayFieldEffects;
     private pendingClearedRows: number[] | null = null;
+    private inactiveBlocksCache: ColRow[] | null = null;
 
     public get activeTetrominoInstance(): Tetromino {
         return this.activeTetromino;
@@ -98,6 +112,11 @@ export class PlayField extends ObjectBase {
         this.activeTetromino = null;
         // Clear inactive tetrominos.
         this.inactiveTetrominos = [];
+        this.inactiveBlocksCache = [];
+    }
+
+    private invalidateInactiveBlocksCache() {
+        this.inactiveBlocksCache = null;
     }
 
     /**
@@ -146,8 +165,20 @@ export class PlayField extends ObjectBase {
      * Get inactive block positions.
      */
     getInactiveBlocks(): ColRow[] {
-        // Get all inactive tetromino blocks and aggregate.
-        return this.inactiveTetrominos.map(tetromino => tetromino.getBlocks()).reduce((a, b) => a.concat(b), []);
+        if (this.inactiveBlocksCache) {
+            return this.inactiveBlocksCache;
+        }
+
+        const blocks: ColRow[] = [];
+        for (const tetromino of this.inactiveTetrominos) {
+            const tetrominoBlocks = tetromino.getBlocks();
+            for (const block of tetrominoBlocks) {
+                blocks.push(block);
+            }
+        }
+
+        this.inactiveBlocksCache = blocks;
+        return blocks;
     }
 
     /**
@@ -235,9 +266,14 @@ export class PlayField extends ObjectBase {
         const rowsToCheck = new Set(lockedTetromino.getBlocks().map(([, row]) => row));
         const needClearRows: number[] = [];
         const inactiveBlocks = this.getInactiveBlocks();
+        const rowCounts = new Map<number, number>();
+
+        for (const [, row] of inactiveBlocks) {
+            rowCounts.set(row, (rowCounts.get(row) || 0) + 1);
+        }
 
         for (const row of rowsToCheck) {
-            const numberOfRowBlocks = inactiveBlocks.filter(([, r]) => r === row).length;
+            const numberOfRowBlocks = rowCounts.get(row) || 0;
             if (numberOfRowBlocks >= CONST.PLAY_FIELD.COL_COUNT) needClearRows.push(row);
         }
         return needClearRows;
@@ -270,6 +306,7 @@ export class PlayField extends ObjectBase {
                 this.inactiveTetrominos.splice(this.inactiveTetrominos.indexOf(tetromino), 1);
             });
         });
+        this.invalidateInactiveBlocksCache();
     }
 
     /**
@@ -333,6 +370,7 @@ export class PlayField extends ObjectBase {
             this.inactiveTetrominos.push(garbageTetromino);
             this.container.add(garbageTetromino.container);
         });
+        this.invalidateInactiveBlocksCache();
 
         // Update active tetromino's blocked positions map and ghost block
         if (this.activeTetromino) {
@@ -375,6 +413,34 @@ export class PlayField extends ObjectBase {
         return result;
     }
 
+
+    /**
+     * Serialize field state to 200-char encoded board string.
+     */
+    serializeEncoded(): string {
+        const grid = new Array(200).fill('0');
+
+        const writeBlocks = (tetromino: Tetromino, type: TetrominoType) => {
+            const blocks = tetromino.getBlocks();
+            const encodedType = TYPE_TO_CHAR[type] || '0';
+            for (const [col, row] of blocks) {
+                if (row >= 0 && row < CONST.PLAY_FIELD.ROW_COUNT && col >= 0 && col < CONST.PLAY_FIELD.COL_COUNT) {
+                    grid[row * CONST.PLAY_FIELD.COL_COUNT + col] = encodedType;
+                }
+            }
+        };
+
+        for (const tetromino of this.inactiveTetrominos) {
+            writeBlocks(tetromino, tetromino.type);
+        }
+
+        if (this.activeTetromino) {
+            writeBlocks(this.activeTetromino, this.activeTetromino.type);
+        }
+
+        return grid.join('');
+    }
+
     /**
      * Deserialize field state (for opponent view).
      */
@@ -389,6 +455,14 @@ export class PlayField extends ObjectBase {
         dummy.setInactiveBlocks(blocks);
         this.inactiveTetrominos.push(dummy);
         this.container.add(dummy.container);
+        this.invalidateInactiveBlocksCache();
+    }
+
+    /**
+     * Deserialize encoded board state (for opponent view).
+     */
+    deserializeEncoded(encodedBoard: string | null) {
+        this.deserialize(BoardCodec.decode(encodedBoard || ''));
     }
 
     /**
@@ -410,6 +484,7 @@ export class PlayField extends ObjectBase {
         let lockedTetromino = this.activeTetromino;
         lockedTetromino.inactive();
         this.inactiveTetrominos.push(lockedTetromino);
+        this.invalidateInactiveBlocksCache();
         this.activeTetromino = null;
 
         // Check locked Tetromino is inside buffer zone entire.

@@ -33,6 +33,8 @@ export class MiniPlayField {
     private _isAlive: boolean = true;
     private _board: string | null = null;
     private _score: number = 0;
+    private _lastRenderedBoard: string | null = null;
+    private blockPool: Phaser.GameObjects.Image[] = [];
 
     public playerId: string;
     public playerName: string;
@@ -92,12 +94,21 @@ export class MiniPlayField {
     }
 
     updateState(board: string | null, score: number, isAlive: boolean) {
+        const boardChanged = this._board !== board;
+        const aliveChanged = this._isAlive !== isAlive;
+
         this._board = board;
         this._isAlive = isAlive;
         this._score = score;
         this.scoreText.setText(score.toString());
-        this.redraw();
-        this.updateGameOverOverlay();
+
+        if (boardChanged) {
+            this.redrawBoard();
+        }
+
+        if (aliveChanged || boardChanged) {
+            this.updateGameOverOverlay();
+        }
     }
 
     updateRank(rank: number) {
@@ -136,7 +147,8 @@ export class MiniPlayField {
         this.gameOverScoreText.setFontSize(goScoreFontSize);
         this.gameOverScoreText.setPosition(fieldWidth / 2, fieldHeight / 2 + goFontSize * 0.6);
 
-        this.redraw();
+        this.redrawBackground();
+        this.redrawBoard(true);
     }
 
     private updateGameOverOverlay() {
@@ -158,11 +170,10 @@ export class MiniPlayField {
         }
     }
 
-    private redraw() {
+    private redrawBackground() {
         const cellSize = this._cellSize;
         const fieldWidth = cellSize * COLS;
         const fieldHeight = cellSize * ROWS;
-        const blockScale = cellSize / BLOCK_IMAGE_SIZE;
 
         // Background
         this.bgGraphics.clear();
@@ -170,26 +181,46 @@ export class MiniPlayField {
         this.bgGraphics.fillRect(0, 0, fieldWidth, fieldHeight);
         this.bgGraphics.lineStyle(1, 0xaaaaaa, 0.5);
         this.bgGraphics.strokeRect(0, 0, fieldWidth, fieldHeight);
+    }
 
-        // Clear old block images
-        this.blockContainer.removeAll(true);
+    private redrawBoard(force = false) {
+        const cellSize = this._cellSize;
+        const blockScale = cellSize / BLOCK_IMAGE_SIZE;
 
-        // Draw blocks
+        if (!force && this._board === this._lastRenderedBoard) {
+            return;
+        }
+
+        let used = 0;
+
         if (this._board) {
             const blocks = BoardCodec.decode(this._board);
             for (const b of blocks) {
                 const frame = SPRITE_FRAMES[b.type] ?? 7;
-                const img = this.scene.add.image(
-                    b.col * cellSize,
-                    b.row * cellSize,
-                    'blockSheet',
-                    frame
-                );
-                img.setOrigin(0);
+                const img = this.ensurePooledImage(used++);
+                img.setFrame(frame);
+                img.setPosition(b.col * cellSize, b.row * cellSize);
                 img.setScale(blockScale);
-                this.blockContainer.add(img);
+                img.setVisible(true);
             }
         }
+
+        for (let i = used; i < this.blockPool.length; i++) {
+            this.blockPool[i].setVisible(false);
+        }
+
+        this._lastRenderedBoard = this._board;
+    }
+
+    private ensurePooledImage(index: number): Phaser.GameObjects.Image {
+        if (!this.blockPool[index]) {
+            const img = this.scene.add.image(0, 0, 'blockSheet', 0);
+            img.setOrigin(0);
+            this.blockContainer.add(img);
+            this.blockPool[index] = img;
+        }
+
+        return this.blockPool[index];
     }
 
     destroy() {

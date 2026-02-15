@@ -48,8 +48,43 @@ let nMultiRooms = {};
 //   playerCounter: number,
 //   players: { [socketId]: { name, score, level, lines, board, isAlive, v } },
 //   lastBroadcasted: { [socketId]: string },
+//   dirtyPlayers: Set<string>,
 //   _broadcastInterval: NodeJS.Timer
 // }
+
+function createNMultiRoom(roomId, roomName, hostSocketId, hostName) {
+    nMultiRooms[roomId] = {
+        id: roomId,
+        name: roomName,
+        playerCounter: 1,
+        players: {
+            [hostSocketId]: {
+                name: hostName,
+                score: 0,
+                level: 1,
+                lines: 0,
+                board: null,
+                isAlive: true,
+                v: 0
+            }
+        },
+        lastBroadcasted: {},
+        dirtyPlayers: new Set([hostSocketId]),
+        _broadcastInterval: setInterval(() => {
+            broadcastNMultiSnapshot(roomId);
+        }, 500)
+    };
+
+    return nMultiRooms[roomId];
+}
+
+function markNMultiPlayerDirty(room, playerId) {
+    if (!room || !playerId) return;
+    if (!room.dirtyPlayers) {
+        room.dirtyPlayers = new Set();
+    }
+    room.dirtyPlayers.add(playerId);
+}
 
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
@@ -193,33 +228,10 @@ io.on('connection', (socket) => {
         const roomId = crypto.randomUUID();
         const playerName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
 
-        nMultiRooms[roomId] = {
-            id: roomId,
-            name: roomName,
-            playerCounter: 1,
-            players: {
-                [socket.id]: {
-                    name: playerName,
-                    score: 0,
-                    level: 1,
-                    lines: 0,
-                    board: null,
-                    isAlive: true,
-                    v: 0
-                }
-            },
-            lastBroadcasted: {},
-            _broadcastInterval: null
-        };
+        const room = createNMultiRoom(roomId, roomName, socket.id, playerName);
 
         socket.join(roomId);
 
-        // Start broadcast interval
-        nMultiRooms[roomId]._broadcastInterval = setInterval(() => {
-            broadcastNMultiSnapshot(roomId);
-        }, 500);
-
-        const room = nMultiRooms[roomId];
         socket.emit('nmulti_room_joined', {
             roomId,
             playerId: socket.id,
@@ -258,8 +270,10 @@ io.on('connection', (socket) => {
             level: 1,
             lines: 0,
             board: null,
-            isAlive: true
+            isAlive: true,
+            v: 0
         };
+        markNMultiPlayerDirty(room, socket.id);
 
         socket.join(roomId);
 
@@ -299,6 +313,7 @@ io.on('connection', (socket) => {
         
         if (changed) {
             player.v++;
+            markNMultiPlayerDirty(room, socket.id);
         }
     });
 
@@ -318,6 +333,8 @@ io.on('connection', (socket) => {
         const room = nMultiRooms[data.roomId];
         if (!room || !room.players[socket.id]) return;
         room.players[socket.id].isAlive = false;
+        room.players[socket.id].v++;
+        markNMultiPlayerDirty(room, socket.id);
     });
 
     socket.on('nmulti_join_or_create', (data) => {
@@ -357,6 +374,7 @@ io.on('connection', (socket) => {
                 isAlive: true,
                 v: 0
             };
+            markNMultiPlayerDirty(room, socket.id);
 
             socket.join(existingRoomId);
 
@@ -379,37 +397,16 @@ io.on('connection', (socket) => {
             const roomId = crypto.randomUUID();
             const playerName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
 
-            nMultiRooms[roomId] = {
-                id: roomId,
-                name: roomName,
-                playerCounter: 1,
-                players: {
-                    [socket.id]: {
-                        name: playerName,
-                        score: 0,
-                        level: 1,
-                        lines: 0,
-                        board: null,
-                        isAlive: true,
-                        v: 0
-                    }
-                },
-                lastBroadcasted: {},
-                _broadcastInterval: null
-            };
+            const room = createNMultiRoom(roomId, roomName, socket.id, playerName);
 
             socket.join(roomId);
-
-            nMultiRooms[roomId]._broadcastInterval = setInterval(() => {
-                broadcastNMultiSnapshot(roomId);
-            }, 500);
 
             socket.emit('nmulti_room_joined', {
                 roomId,
                 playerId: socket.id,
                 playerName,
                 roomName,
-                players: getPlayersMap(nMultiRooms[roomId])
+                players: getPlayersMap(room)
             });
 
             io.emit('nmulti_room_list', getNMultiRoomList());
@@ -439,6 +436,7 @@ io.on('connection', (socket) => {
         player.board = null;
         player.isAlive = true;
         player.v++;
+        markNMultiPlayerDirty(room, socket.id);
     });
 
     // ===== Disconnect =====
@@ -532,14 +530,14 @@ function broadcastNMultiSnapshot(roomId) {
     const room = nMultiRooms[roomId];
     if (!room) return;
 
-    const playerIds = Object.keys(room.players);
-    if (playerIds.length === 0) return;
+    const dirtyPlayers = room.dirtyPlayers ? Array.from(room.dirtyPlayers) : [];
+    if (dirtyPlayers.length === 0) return;
 
     const deltaSnapshot = {};
-    let hasChanges = false;
 
-    for (const sid of playerIds) {
+    for (const sid of dirtyPlayers) {
         const p = room.players[sid];
+        if (!p) continue;
         
         if (room.lastBroadcasted[sid] !== p.v) {
             deltaSnapshot[sid] = {
@@ -552,11 +550,12 @@ function broadcastNMultiSnapshot(roomId) {
                 v: p.v
             };
             room.lastBroadcasted[sid] = p.v;
-            hasChanges = true;
         }
     }
 
-    if (hasChanges) {
+    room.dirtyPlayers.clear();
+
+    if (Object.keys(deltaSnapshot).length > 0) {
         // Broadcast single packet to all
         io.to(roomId).emit('nmulti_snapshot', { 
             players: deltaSnapshot,
@@ -571,6 +570,7 @@ function removeFromNMultiRoom(socket, roomId) {
 
     delete room.players[socket.id];
     if (room.lastBroadcasted) delete room.lastBroadcasted[socket.id];
+    if (room.dirtyPlayers) room.dirtyPlayers.delete(socket.id);
     socket.leave(roomId);
 
     const remaining = Object.keys(room.players).length;

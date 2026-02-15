@@ -152,7 +152,11 @@ export class PlayScene extends BaseScene {
 
             this.socket.on('opponent_state_update', (data) => {
                 if (this.opponentPlayField) {
-                    this.opponentPlayField.deserialize(data.board);
+                    if (typeof data.board === 'string') {
+                        this.opponentPlayField.deserializeEncoded(data.board);
+                    } else {
+                        this.opponentPlayField.deserialize(data.board);
+                    }
                 }
             });
 
@@ -425,7 +429,7 @@ export class PlayScene extends BaseScene {
             if (this.playField && this.socket) {
                 this.socket.emit('update_state', {
                     roomId: this.roomId,
-                    board: this.playField.serialize()
+                    board: this.playField.serializeEncoded()
                 });
             }
         }

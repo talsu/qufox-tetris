@@ -1,106 +1,76 @@
+import { TextStyles, createStyledText, drawPanelBackground } from "./uiStyles";
+
 interface OverlayControlOptions {
     scene: Phaser.Scene;
     onMenuClick: () => void;
 }
 
-/**
- * Fixed viewport menu button (DOM-based).
- * - independent from camera zoom / aspect ratio
- * - always visible at top-left
- * - reliable mouse click handling
- */
 export class GameOverlayControls {
     private readonly scene: Phaser.Scene;
     private readonly onMenuClick: () => void;
 
-    private menuButton: HTMLButtonElement | null = null;
+    private root: Phaser.GameObjects.Container;
+    private background: Phaser.GameObjects.Graphics;
+    private label: Phaser.GameObjects.Text;
+    private readonly width: number = 108;
+    private readonly height: number = 40;
 
     constructor(options: OverlayControlOptions) {
         this.scene = options.scene;
         this.onMenuClick = options.onMenuClick;
 
-        this.createMenuButton();
+        this.root = this.scene.add.container(0, 0).setDepth(3000);
+
+        this.background = this.scene.add.graphics();
+        this.drawDefault();
+
+        this.label = createStyledText(
+            this.scene,
+            this.root,
+            this.width / 2,
+            this.height / 2,
+            'MENU',
+            { ...TextStyles.header, align: 'center', fontSize: '18px' },
+            3,
+        ).setOrigin(0.5);
+
+        const hitArea = this.scene.add.rectangle(0, 0, this.width, this.height, 0x000000, 0);
+        hitArea.setOrigin(0, 0);
+        hitArea.setInteractive({ useHandCursor: true });
+        hitArea.on('pointerdown', () => this.drawPressed());
+        hitArea.on('pointerup', () => {
+            this.drawDefault();
+            this.onMenuClick();
+        });
+        hitArea.on('pointerout', () => this.drawDefault());
+
+        this.root.add([this.background, hitArea, this.label]);
         this.layout();
     }
 
     public layout() {
-        if (!this.menuButton) return;
-        // iOS notch/safe-area 대응 + 고정 좌상단 배치
-        this.menuButton.style.top = 'max(12px, env(safe-area-inset-top))';
-        this.menuButton.style.left = 'max(12px, env(safe-area-inset-left))';
+        const cam = this.scene.cameras.main;
+        const view = cam.worldView;
+        this.root.setPosition(view.x + 12, view.y + 10);
     }
 
     public destroy() {
-        if (!this.menuButton) return;
-        this.menuButton.onclick = null;
-        if (this.menuButton.parentNode) {
-            this.menuButton.parentNode.removeChild(this.menuButton);
-        }
-        this.menuButton = null;
+        this.root.destroy(true);
     }
 
-    private createMenuButton() {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.textContent = 'MENU';
-        button.setAttribute('aria-label', 'Open menu');
+    private drawDefault() {
+        this.background.clear();
+        drawPanelBackground(this.background, this.width, this.height);
+        this.background.lineStyle(1, 0x67e8f9, 0.9);
+        this.background.strokeRect(2, 2, this.width - 4, this.height - 4);
+    }
 
-        // HOLD/NEXT 패널 감성에 맞춘 스타일
-        button.style.cssText = `
-            position: fixed;
-            z-index: 9000;
-            width: 108px;
-            height: 40px;
-            border: 1px solid #eeeeee;
-            outline: 1px solid rgba(103, 232, 249, 0.9);
-            outline-offset: -3px;
-            background: rgba(0, 0, 0, 0.2);
-            color: #ffffff;
-            font-family: Pretendard, Arial Black, sans-serif;
-            font-weight: 700;
-            font-size: 18px;
-            line-height: 1;
-            letter-spacing: 0.5px;
-            cursor: pointer;
-            user-select: none;
-            -webkit-text-stroke: 1px #000000;
-            text-shadow: 2px 2px 2px rgba(0,0,0,0.85);
-            box-sizing: border-box;
-            border-radius: 2px;
-            padding: 0;
-            touch-action: manipulation;
-        `;
-
-        const resetVisual = () => {
-            if (!this.menuButton) return;
-            this.menuButton.style.background = 'rgba(0, 0, 0, 0.2)';
-            this.menuButton.style.transform = 'translateY(0px)';
-        };
-
-        button.onpointerdown = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            button.style.background = 'rgba(15, 23, 42, 0.45)';
-            button.style.transform = 'translateY(1px)';
-        };
-
-        button.onpointerup = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            resetVisual();
-        };
-
-        button.onpointerleave = resetVisual;
-        button.onpointercancel = resetVisual;
-
-        // 포인터 이벤트 미지원/차단 환경 대비
-        button.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.onMenuClick();
-        };
-
-        document.body.appendChild(button);
-        this.menuButton = button;
+    private drawPressed() {
+        this.background.clear();
+        drawPanelBackground(this.background, this.width, this.height);
+        this.background.fillStyle(0x0f172a, 0.45);
+        this.background.fillRect(0, 0, this.width, this.height);
+        this.background.lineStyle(1, 0x67e8f9, 1);
+        this.background.strokeRect(2, 2, this.width - 4, this.height - 4);
     }
 }

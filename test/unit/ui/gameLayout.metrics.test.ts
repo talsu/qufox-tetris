@@ -17,36 +17,36 @@ describe('gameLayout metrics', () => {
     const fieldRight = fieldPos.x + block * CONST.PLAY_FIELD.COL_COUNT;
 
     expect(hud.holdX).toBe(fieldPos.x);
-    expect(hud.holdY).toBeCloseTo(62.4, 5);
+    expect(hud.holdY).toBeCloseTo(110.4, 5);
     expect(hud.holdX + hud.holdWidth).toBeLessThanOrEqual(fieldRight);
 
-    expect(hud.queueY).toBeCloseTo(38.4, 5);
+    expect(hud.queueY).toBeCloseTo(86.4, 5);
     expect(hud.queueX + hud.queueWidth).toBeCloseTo(fieldRight, 5);
   });
 
   test('keeps scene dimension outputs unchanged', () => {
-    expect(calcPlaySceneDimensions('mobile-portrait', 'single')).toEqual({ width: 384, height: 864 });
-    expect(calcPlaySceneDimensions('mobile-portrait', 'multi')).toEqual({ width: 384, height: 1120 });
-    expect(calcPlaySceneDimensions('desktop', 'single')).toEqual({ width: 704, height: 704 });
-    expect(calcPlaySceneDimensions('desktop', 'multi')).toEqual({ width: 1088, height: 704 });
+    expect(calcPlaySceneDimensions('mobile-portrait', 'single')).toEqual({ width: 384, height: 912 });
+    expect(calcPlaySceneDimensions('mobile-portrait', 'multi')).toEqual({ width: 384, height: 1168 });
+    expect(calcPlaySceneDimensions('desktop', 'single')).toEqual({ width: 704, height: 752 });
+    expect(calcPlaySceneDimensions('desktop', 'multi')).toEqual({ width: 1088, height: 752 });
 
-    expect(calcNMultiSceneDimensions('mobile-portrait')).toEqual({ width: 384, height: 1120 });
-    expect(calcNMultiSceneDimensions('desktop')).toEqual({ width: 1152, height: 704 });
+    expect(calcNMultiSceneDimensions('mobile-portrait')).toEqual({ width: 384, height: 1168 });
+    expect(calcNMultiSceneDimensions('desktop')).toEqual({ width: 1152, height: 752 });
   });
 
   test('keeps n-multi opponent area bounds unchanged', () => {
-    expect(calcNMultiOpponentArea('mobile-portrait', 384, 1120)).toEqual({
+    expect(calcNMultiOpponentArea('mobile-portrait', 384, 1168)).toEqual({
       x: 16,
-      y: 912,
+      y: 960,
       width: 352,
       height: 192,
     });
 
-    expect(calcNMultiOpponentArea('desktop', 1152, 704)).toEqual({
+    expect(calcNMultiOpponentArea('desktop', 1152, 752)).toEqual({
       x: 752,
-      y: 32,
+      y: 80,
       width: 384,
-      height: 640,
+      height: 608,
     });
   });
 });

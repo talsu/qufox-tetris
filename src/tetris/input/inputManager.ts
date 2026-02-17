@@ -139,8 +139,9 @@ export class InputManager {
                     this.scene.time.delayedCall(100, () => this.emitInput('clockwise', InputState.RELEASE));
                 }
             } else {
-                // Check Hard Drop (Flick)
-                if (duration < 300 && deltaY > 50) {
+                // Check Hard Drop (Flick) - require primarily vertical swipe
+                const deltaX = Math.abs(pointer.worldX - this.touchStartX);
+                if (duration < 300 && deltaY > 50 && deltaX < 30 && deltaY > deltaX * 2) {
                     this.emitInput('hardDrop', InputState.PRESS);
                     this.scene.time.delayedCall(100, () => this.emitInput('hardDrop', InputState.RELEASE));
                 }

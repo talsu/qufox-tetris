@@ -270,9 +270,14 @@ describe('ScoreSystem - Auto Drop Delay', () => {
     test('drop delay decreases as level increases', () => {
         const delayL1 = scoreSystem.getAutoDropDelay();
 
-        // Level up by clearing a Tetris
+        // Reach level 2 by clearing total 5 lines.
         scoreSystem.onLock(
             4, TetrominoType.I, RotateType.UP, RotateType.UP, 'drop', 0,
+            { softDrop: 0, hardDrop: 0, autoDrop: 0 },
+            { pointSide: 0, flatSide: 0 }
+        );
+        scoreSystem.onLock(
+            1, TetrominoType.I, RotateType.UP, RotateType.UP, 'drop', 0,
             { softDrop: 0, hardDrop: 0, autoDrop: 0 },
             { pointSide: 0, flatSide: 0 }
         );

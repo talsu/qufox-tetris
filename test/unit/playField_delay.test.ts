@@ -1,4 +1,4 @@
-import { PlayField } from '../../src/tetris/objects/playField';
+import { PlayField, EnginePhase } from '../../src/tetris/objects/playField';
 import { Tetromino } from '../../src/tetris/objects/tetromino';
 import { TetrominoType, CONST } from '../../src/tetris/const/const';
 import * as Phaser from 'phaser';
@@ -19,6 +19,8 @@ describe('PlayField Delay', () => {
         const playClearAnimationSpy = jest.spyOn(playField, 'playClearAnimation');
         const clearRowsSpy = jest.spyOn(playField, 'clearRows');
         const emitSpy = jest.spyOn(playField, 'emit');
+        const phases: EnginePhase[] = [];
+        playField.on('phaseChange', (phase: EnginePhase) => phases.push(phase));
 
         // Mock getClearedRows to return a row
         jest.spyOn(playField, 'getClearedRows').mockReturnValue([19]);
@@ -34,12 +36,12 @@ describe('PlayField Delay', () => {
             dropCounter: { softDrop: 0, hardDrop: 0, autoDrop: 0 },
             getTSpinCornerOccupiedCount: () => ({ pointSide: 0, flatSide: 0 }),
             isLockable: () => true,
-            animateBlocksInRows: jest.fn(), // Add this
-            clearLine: jest.fn().mockReturnValue(false), // Add this
+            animateBlocksInRows: jest.fn(),
+            clearLine: jest.fn().mockReturnValue(false),
         } as unknown as Tetromino;
 
         // Inject activeTetromino so lock() works
-        (playField as any).droppedRotateType = '0'; // Fix undefined
+        (playField as any).droppedRotateType = '0';
         (playField as any).activeTetromino = lockedTetromino;
         (playField as any).startLockTimer = jest.fn();
         (playField as any).stopLockTimer = jest.fn();
@@ -64,6 +66,13 @@ describe('PlayField Delay', () => {
 
         // Verify lock emitted
         expect(emitSpy).toHaveBeenCalledWith('lock', 1, expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything());
+        expect(phases).toEqual([
+            EnginePhase.PATTERN,
+            EnginePhase.ITERATE,
+            EnginePhase.ANIMATE,
+            EnginePhase.ELIMINATE,
+            EnginePhase.COMPLETION,
+        ]);
     });
 
     test('should NOT delay if no lines cleared', () => {
@@ -72,6 +81,8 @@ describe('PlayField Delay', () => {
          const playClearAnimationSpy = jest.spyOn(playField, 'playClearAnimation');
          const clearRowsSpy = jest.spyOn(playField, 'clearRows');
          const emitSpy = jest.spyOn(playField, 'emit');
+         const phases: EnginePhase[] = [];
+         playField.on('phaseChange', (phase: EnginePhase) => phases.push(phase));
 
          jest.spyOn(playField, 'getClearedRows').mockReturnValue([]);
 
@@ -99,5 +110,33 @@ describe('PlayField Delay', () => {
         expect(clearRowsSpy).not.toHaveBeenCalled();
         // Lock emitted immediately
         expect(emitSpy).toHaveBeenCalledWith('lock', 0, expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything());
+        expect(phases).toEqual([
+            EnginePhase.PATTERN,
+            EnginePhase.ITERATE,
+            EnginePhase.ELIMINATE,
+            EnginePhase.COMPLETION,
+        ]);
+    });
+
+    test('setLockTimer allows reset at manipulationCount 15 but blocks after 16', () => {
+        const stopSpy = jest.spyOn(playField, 'stopLockTimer').mockImplementation(() => {});
+        const startSpy = jest.spyOn(playField, 'startLockTimer').mockImplementation(() => {});
+
+        const active = {
+            isLockable: jest.fn().mockReturnValue(true),
+            manipulationCount: 15,
+            rotateType: '0'
+        };
+
+        (playField as any).activeTetromino = active;
+
+        playField.setLockTimer(true, true);
+        expect(stopSpy).toHaveBeenCalledTimes(1);
+        expect(startSpy).toHaveBeenCalledTimes(1);
+
+        active.manipulationCount = 16;
+        playField.setLockTimer(true, true);
+        expect(stopSpy).toHaveBeenCalledTimes(1);
+        expect(startSpy).toHaveBeenCalledTimes(1);
     });
 });

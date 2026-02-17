@@ -50,8 +50,9 @@ describe('ScoreSystem', () => {
             { pointSide: 0, flatSide: 0 }
         );
 
-        // 800 * 1.5 = 1200 * Level 2 + Combo 100 = 2500
-        expect(result.scoreAdded).toBe(2500);
+        // First tetris keeps level 1 (4 lines).
+        // 2nd tetris: 800 * 1.5 * level1 + combo(50*1*1) = 1250
+        expect(result.scoreAdded).toBe(1250);
         expect(result.isBackToBack).toBe(true);
         expect(result.actionName).toContain('Back to Back');
     });
@@ -63,7 +64,10 @@ describe('ScoreSystem', () => {
             { pointSide: 0, flatSide: 0 }
         );
 
-        // Tetris gives 8 lines count. Level 1 requires 5. Should level up.
-        expect(scoreSystem.getLevel()).toBeGreaterThan(1);
+        // Single tetris clears 4 lines, so level should stay at 1 (need 5 lines).
+        expect(scoreSystem.getLevel()).toBe(1);
+
+        scoreSystem.onLock(1, TetrominoType.I, RotateType.UP, RotateType.UP, 'drop', 0, { softDrop: 0, hardDrop: 0, autoDrop: 0 }, { pointSide: 0, flatSide: 0 });
+        expect(scoreSystem.getLevel()).toBe(2);
     });
 });

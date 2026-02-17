@@ -18,6 +18,18 @@ const TYPE_TO_CHAR: Record<string, string> = {
     [TetrominoType.GARBAGE]: 'G',
 };
 
+
+
+export enum EnginePhase {
+    GENERATION = 'Generation',
+    FALLING = 'Falling',
+    LOCK = 'Lock',
+    PATTERN = 'Pattern',
+    ITERATE = 'Iterate',
+    ANIMATE = 'Animate',
+    ELIMINATE = 'Eliminate',
+    COMPLETION = 'Completion',
+}
 /**
  * Play field
  */
@@ -33,6 +45,7 @@ export class PlayField extends ObjectBase {
     private effects: PlayFieldEffects;
     private pendingClearedRows: number[] | null = null;
     private inactiveBlocksCache: ColRow[] | null = null;
+    private currentPhase: EnginePhase = EnginePhase.COMPLETION;
 
     public get activeTetrominoInstance(): Tetromino {
         return this.activeTetromino;
@@ -40,6 +53,16 @@ export class PlayField extends ObjectBase {
 
     public get canHoldFlag(): boolean {
         return this.canHold;
+    }
+
+    public get phase(): EnginePhase {
+        return this.currentPhase;
+    }
+
+    private setPhase(phase: EnginePhase) {
+        if (this.currentPhase === phase) return;
+        this.currentPhase = phase;
+        this.emit('phaseChange', phase);
     }
 
     constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number) {
@@ -113,6 +136,7 @@ export class PlayField extends ObjectBase {
         // Clear inactive tetrominos.
         this.inactiveTetrominos = [];
         this.inactiveBlocksCache = [];
+        this.setPhase(EnginePhase.COMPLETION);
     }
 
     private invalidateInactiveBlocksCache() {
@@ -124,6 +148,7 @@ export class PlayField extends ObjectBase {
      * @param {TetrominoType} type - Tetromino type.
      */
     spawnTetromino(type?: TetrominoType): void {
+        this.setPhase(EnginePhase.GENERATION);
         // Get tetrominoType from param or generate random type from queue.
         let tetrominoType = type;
         if (!tetrominoType) this.emit('generateRandomType', (genType: TetrominoType) => tetrominoType = genType);
@@ -133,6 +158,7 @@ export class PlayField extends ObjectBase {
         if (tetromino.isSpawnSuccess) { // If spawn is success.
             // Set active tetromino with new tetromino.
             this.activeTetromino = tetromino;
+            this.setPhase(EnginePhase.FALLING);
             // Add tetromino ui to play field container.
             this.container.add(this.activeTetromino.container);
             // Check is lockable
@@ -496,12 +522,15 @@ export class PlayField extends ObjectBase {
             return;
         }
 
+        this.setPhase(EnginePhase.PATTERN);
+
         // clear line 
         const clearedRows = this.getClearedRows(lockedTetromino);
         const clearedLineCount = clearedRows.length;
 
         // Proceed function
         const proceed = () => {
+            this.setPhase(EnginePhase.COMPLETION);
              // Emit lock event.
             this.emit('lock',
                 clearedLineCount,
@@ -520,14 +549,19 @@ export class PlayField extends ObjectBase {
 
         if (clearedLineCount > 0) {
             this.pendingClearedRows = clearedRows;
+            this.setPhase(EnginePhase.ITERATE);
+            this.setPhase(EnginePhase.ANIMATE);
             this.playClearAnimation(clearedRows, () => {
                 if (this.pendingClearedRows) {
+                    this.setPhase(EnginePhase.ELIMINATE);
                     this.clearRows(this.pendingClearedRows);
                     this.pendingClearedRows = null;
                 }
                 proceed();
             });
         } else {
+            this.setPhase(EnginePhase.ITERATE);
+            this.setPhase(EnginePhase.ELIMINATE);
             proceed();
         }
     }
@@ -577,6 +611,7 @@ export class PlayField extends ObjectBase {
      */
     startLockTimer() {
         if (this.activeTetromino) {
+            this.setPhase(EnginePhase.LOCK);
             // Lock tetromino after lock animation finished.
             this.activeTetromino.playLockAnimation(() => this.lock());
         }
@@ -612,8 +647,8 @@ export class PlayField extends ObjectBase {
                 // Set dropped rotate type.
                 if (setDroppedRotate) this.droppedRotateType = this.activeTetromino.rotateType;
                 
-                // Restart lock timer only if manipulation count < 15 (Extended Placement).
-                if (this.activeTetromino.manipulationCount < 15) {
+                // Restart lock timer while manipulation count is within the 15 reset limit (Extended Placement).
+                if (this.activeTetromino.manipulationCount <= 15) {
                     this.stopLockTimer();
                     this.startLockTimer();
                 }

@@ -151,11 +151,9 @@ export class ScoreSystem {
 
         this.score += scoreAdded;
 
-        // Calculate Level
-        if (actionName) {
-            let lineCount = GameRules.getLineCount(actionName);
-            if (isBackToBackBonus) lineCount = Math.ceil(lineCount * 1.5);
-            this.addLineCount(lineCount);
+        // Calculate Level by actual cleared lines (Guideline: line-clear accumulation)
+        if (clearedLineCount > 0) {
+            this.addLineCount(clearedLineCount);
         }
 
         // Calculate Garbage

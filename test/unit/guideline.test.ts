@@ -222,11 +222,11 @@ describe('2009 Tetris Guideline Compliance', () => {
 
              let score2 = engine.getScore() - score1;
 
-             // Level 2 (triggered by first tetris)
-             // Base 800 * B2B 1.5 * Level 2 = 2400
-             // Combo 1 (50*1*2) = 100
-             // Total 2500
-             expect(score2).toBe(2500);
+             // First tetris gives 4 lines, so second tetris is still scored at level 1.
+             // Base 800 * B2B 1.5 * Level 1 = 1200
+             // Combo 1 (50*1*1) = 50
+             // Total 1250
+             expect(score2).toBe(1250);
         });
 
         test('T-Spin Double', () => {

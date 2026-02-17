@@ -13,6 +13,7 @@ import { InGameMenu } from "../ui/inGameMenu";
 import { BaseScene } from "./baseScene";
 import { BotManager } from "../logic/botManager";
 import { GAME_FONT_FAMILY } from "../ui/uiStyles";
+import { GameOverlayControls } from "../ui/gameOverlayControls";
 import {
     createGameLayout,
     calcSinglePlayerPosition,
@@ -46,6 +47,7 @@ export class PlayScene extends BaseScene {
     private botManager: BotManager;
     private disconnectNoticeDOM: Phaser.GameObjects.DOMElement | null = null;
     private startImmediately: boolean = false;
+    private overlayControls: GameOverlayControls;
 
     // Configurable Scales
     private readonly MAIN_SCALE = 1;
@@ -107,6 +109,11 @@ export class PlayScene extends BaseScene {
             onExit: () => this.exitGame(),
             onRestart: () => this.restartGame(),
             onToggleBackground: (btn) => this.toggleBackground(btn)
+        });
+
+        this.overlayControls = new GameOverlayControls({
+            scene: this,
+            onMenuClick: () => this.toggleMenu(),
         });
 
         if (this.mode === 'single') {
@@ -258,6 +265,9 @@ export class PlayScene extends BaseScene {
         if (this.inGameMenu) {
             this.inGameMenu.destroy();
         }
+        if (this.overlayControls) {
+            this.overlayControls.destroy();
+        }
     }
 
     private toggleMenu() {
@@ -402,6 +412,9 @@ export class PlayScene extends BaseScene {
         super.resize(gameSize, baseSize, displaySize, resolution);
         if (this.disconnectNoticeDOM && this.cameras && this.cameras.main) {
             this.disconnectNoticeDOM.setScale(this.cameras.main.zoom);
+        }
+        if (this.overlayControls) {
+            this.overlayControls.layout();
         }
     }
 

@@ -12,7 +12,7 @@ describe('scene layout positions', () => {
     const opponent = calcPlaySceneOpponentLayout('mobile-portrait', dims.width, dims.height, playerPos.y);
 
     expect(opponent.x).toBeCloseTo(149.6, 5);
-    expect(opponent.y).toBeCloseTo(982.4, 5);
+    expect(opponent.y).toBeCloseTo(966.4, 5);
     expect(opponent.scale).toBeCloseTo(0.265, 5);
     expect(opponent.labelOffset).toBe(20);
   });

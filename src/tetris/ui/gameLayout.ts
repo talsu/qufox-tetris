@@ -40,6 +40,7 @@ export interface LayoutMetrics {
     nMultiPortraitAreaBottomPaddingBlocks: number;
     nMultiPortraitAreaHorizontalPaddingBlocks: number;
     topNavBarBlocks: number;
+    mobileTopNavBarBlocks: number;
 }
 
 export interface PlaySceneOpponentLayout {
@@ -116,13 +117,15 @@ export function getLayoutMetrics(): LayoutMetrics {
         nMultiPortraitAreaBottomPaddingBlocks: 0.5,
         nMultiPortraitAreaHorizontalPaddingBlocks: 1,
         topNavBarBlocks: 1.5,
+        mobileTopNavBarBlocks: 1.0,
     };
 }
 
 
-export function getTopNavBarHeight(): number {
+export function getTopNavBarHeight(layoutMode: LayoutMode = 'desktop'): number {
     const metrics = getLayoutMetrics();
-    return BLOCK_SIZE * metrics.topNavBarBlocks;
+    const blocks = layoutMode === 'mobile-portrait' ? metrics.mobileTopNavBarBlocks : metrics.topNavBarBlocks;
+    return BLOCK_SIZE * blocks;
 }
 
 // ─── Dimension Calculators ──────────────────────────────────────────
@@ -133,7 +136,7 @@ export function getTopNavBarHeight(): number {
 export function calcPlaySceneDimensions(layoutMode: LayoutMode, mode: string): { width: number; height: number } {
     const metrics = getLayoutMetrics();
 
-    const topNavBarHeight = getTopNavBarHeight();
+    const topNavBarHeight = getTopNavBarHeight(layoutMode);
 
     if (layoutMode === 'mobile-portrait') {
         if (mode === 'multi') {
@@ -152,7 +155,7 @@ export function calcPlaySceneDimensions(layoutMode: LayoutMode, mode: string): {
  */
 export function calcNMultiSceneDimensions(layoutMode: LayoutMode): { width: number; height: number } {
     const metrics = getLayoutMetrics();
-    const topNavBarHeight = getTopNavBarHeight();
+    const topNavBarHeight = getTopNavBarHeight(layoutMode);
     if (layoutMode === 'mobile-portrait') {
         return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 35 + topNavBarHeight };
     }
@@ -189,7 +192,7 @@ export function calcNMultiPlayerPosition(gameHeight: number, playerAreaBlocks: n
 /**
  * Portrait position: playfield centered horizontally, below hold+next row.
  */
-export function calcPortraitPosition(gameWidth: number, topInset: number = getTopNavBarHeight()): { x: number; y: number } {
+export function calcPortraitPosition(gameWidth: number, topInset: number = getTopNavBarHeight('mobile-portrait')): { x: number; y: number } {
     const metrics = getLayoutMetrics();
     return {
         x: (gameWidth - PLAYFIELD_WIDTH) / 2,
@@ -216,7 +219,7 @@ export function calcPlaySceneOpponentLayout(
     const playerAreaWidth = BLOCK_SIZE * metrics.multiPlayerAreaBlocks;
     const rightAreaWidth = gameWidth - playerAreaWidth;
     const x = playerAreaWidth + (rightAreaWidth - PLAYFIELD_WIDTH) / 2;
-    const topInset = getTopNavBarHeight();
+    const topInset = getTopNavBarHeight(layoutMode);
     const usableHeight = Math.max(0, gameHeight - topInset);
     const y = topInset + (usableHeight - PLAYFIELD_HEIGHT) / 2;
     return { x, y, scale: 1, labelOffset: 30 };
@@ -225,7 +228,7 @@ export function calcPlaySceneOpponentLayout(
 export function calcNMultiOpponentArea(layoutMode: LayoutMode, gameWidth: number, gameHeight: number): OpponentAreaLayout {
     const metrics = getLayoutMetrics();
 
-    const topInset = getTopNavBarHeight();
+    const topInset = getTopNavBarHeight(layoutMode);
 
     if (layoutMode === 'mobile-portrait') {
         const x = BLOCK_SIZE * metrics.nMultiPortraitAreaXBlocks;

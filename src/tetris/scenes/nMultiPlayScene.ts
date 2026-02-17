@@ -8,6 +8,7 @@ import { BaseScene } from "./baseScene";
 import { MiniPlayField } from "../objects/miniPlayField";
 import { BotManager } from "../logic/botManager";
 import { GAME_FONT_FAMILY } from "../ui/uiStyles";
+import { GameOverlayControls } from "../ui/gameOverlayControls";
 import {
     createGameLayout,
     calcNMultiPlayerPosition,
@@ -34,6 +35,7 @@ export class NMultiPlayScene extends BaseScene {
     private isGameEnded: boolean = false;
     private botLevel: number = 0;
     private botManager: BotManager;
+    private overlayControls: GameOverlayControls;
 
     // Opponents
     private miniFields: Map<string, MiniPlayField> = new Map();
@@ -105,6 +107,11 @@ export class NMultiPlayScene extends BaseScene {
             onExit: () => this.exitGame(),
             onRestart: () => this.restartGame(),
             onToggleBackground: (btn) => this.toggleBackground(btn)
+        });
+
+        this.overlayControls = new GameOverlayControls({
+            scene: this,
+            onMenuClick: () => this.toggleMenu(),
         });
 
         this.opponentContainer = this.add.container(0, 0);
@@ -302,6 +309,9 @@ export class NMultiPlayScene extends BaseScene {
         if (this.inGameMenu) {
             this.inGameMenu.destroy();
         }
+        if (this.overlayControls) {
+            this.overlayControls.destroy();
+        }
         for (const [, mini] of this.miniFields) {
             mini.destroy();
         }
@@ -420,6 +430,13 @@ export class NMultiPlayScene extends BaseScene {
         }
 
         this.relayoutOpponents();
+    }
+
+    resize(gameSize, baseSize?, displaySize?, resolution?) {
+        super.resize(gameSize, baseSize, displaySize, resolution);
+        if (this.overlayControls) {
+            this.overlayControls.layout();
+        }
     }
 
     update(time: number, delta: number): void {

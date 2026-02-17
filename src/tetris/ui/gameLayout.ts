@@ -39,6 +39,8 @@ export interface LayoutMetrics {
     nMultiPortraitAreaYBlocks: number;
     nMultiPortraitAreaBottomPaddingBlocks: number;
     nMultiPortraitAreaHorizontalPaddingBlocks: number;
+    topNavBarBlocks: number;
+    mobileTopNavBarBlocks: number;
 }
 
 export interface PlaySceneOpponentLayout {
@@ -114,7 +116,16 @@ export function getLayoutMetrics(): LayoutMetrics {
         nMultiPortraitAreaYBlocks: 28.5,
         nMultiPortraitAreaBottomPaddingBlocks: 0.5,
         nMultiPortraitAreaHorizontalPaddingBlocks: 1,
+        topNavBarBlocks: 1.5,
+        mobileTopNavBarBlocks: 1.0,
     };
+}
+
+
+export function getTopNavBarHeight(layoutMode: LayoutMode = 'desktop'): number {
+    const metrics = getLayoutMetrics();
+    const blocks = layoutMode === 'mobile-portrait' ? metrics.mobileTopNavBarBlocks : metrics.topNavBarBlocks;
+    return BLOCK_SIZE * blocks;
 }
 
 // ─── Dimension Calculators ──────────────────────────────────────────
@@ -125,16 +136,18 @@ export function getLayoutMetrics(): LayoutMetrics {
 export function calcPlaySceneDimensions(layoutMode: LayoutMode, mode: string): { width: number; height: number } {
     const metrics = getLayoutMetrics();
 
+    const topNavBarHeight = getTopNavBarHeight(layoutMode);
+
     if (layoutMode === 'mobile-portrait') {
         if (mode === 'multi') {
-            return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 35 };
+            return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 35 + topNavBarHeight };
         }
-        return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 27 };
+        return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 27 + topNavBarHeight };
     }
     if (mode === 'multi') {
-        return { width: BLOCK_SIZE * (metrics.multiPlayerAreaBlocks + 11), height: BLOCK_SIZE * 22 };
+        return { width: BLOCK_SIZE * (metrics.multiPlayerAreaBlocks + 11), height: BLOCK_SIZE * 22 + topNavBarHeight };
     }
-    return { width: BLOCK_SIZE * 22, height: BLOCK_SIZE * 22 };
+    return { width: BLOCK_SIZE * 22, height: BLOCK_SIZE * 22 + topNavBarHeight };
 }
 
 /**
@@ -142,10 +155,11 @@ export function calcPlaySceneDimensions(layoutMode: LayoutMode, mode: string): {
  */
 export function calcNMultiSceneDimensions(layoutMode: LayoutMode): { width: number; height: number } {
     const metrics = getLayoutMetrics();
+    const topNavBarHeight = getTopNavBarHeight(layoutMode);
     if (layoutMode === 'mobile-portrait') {
-        return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 35 };
+        return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 35 + topNavBarHeight };
     }
-    return { width: BLOCK_SIZE * (metrics.multiPlayerAreaBlocks + 13), height: BLOCK_SIZE * 22 };
+    return { width: BLOCK_SIZE * (metrics.multiPlayerAreaBlocks + 13), height: BLOCK_SIZE * 22 + topNavBarHeight };
 }
 
 // ─── Position Calculators ───────────────────────────────────────────
@@ -153,34 +167,36 @@ export function calcNMultiSceneDimensions(layoutMode: LayoutMode): { width: numb
 /**
  * Calculate the play field position for single-player mode (centered).
  */
-export function calcSinglePlayerPosition(gameWidth: number, gameHeight: number, mainScale: number = 1) {
+export function calcSinglePlayerPosition(gameWidth: number, gameHeight: number, mainScale: number = 1, topInset: number = getTopNavBarHeight()) {
+    const usableHeight = Math.max(0, gameHeight - topInset);
     return {
         x: (gameWidth - PLAYFIELD_WIDTH * mainScale) / 2,
-        y: (gameHeight - PLAYFIELD_HEIGHT * mainScale) / 2,
+        y: topInset + (usableHeight - PLAYFIELD_HEIGHT * mainScale) / 2,
     };
 }
 
 /**
  * Calculate the play field position for N-multi mode (centered in left player area).
  */
-export function calcNMultiPlayerPosition(gameHeight: number, playerAreaBlocks: number = 23) {
+export function calcNMultiPlayerPosition(gameHeight: number, playerAreaBlocks: number = 23, topInset: number = getTopNavBarHeight()) {
     const metrics = getLayoutMetrics();
     const areaBlocks = playerAreaBlocks ?? metrics.multiPlayerAreaBlocks;
     const leftArea = BLOCK_SIZE * areaBlocks;
+    const usableHeight = Math.max(0, gameHeight - topInset);
     return {
         x: (leftArea - PLAYFIELD_WIDTH) / 2,
-        y: (gameHeight - PLAYFIELD_HEIGHT) / 2,
+        y: topInset + (usableHeight - PLAYFIELD_HEIGHT) / 2,
     };
 }
 
 /**
  * Portrait position: playfield centered horizontally, below hold+next row.
  */
-export function calcPortraitPosition(gameWidth: number): { x: number; y: number } {
+export function calcPortraitPosition(gameWidth: number, topInset: number = getTopNavBarHeight('mobile-portrait')): { x: number; y: number } {
     const metrics = getLayoutMetrics();
     return {
         x: (gameWidth - PLAYFIELD_WIDTH) / 2,
-        y: BLOCK_SIZE * metrics.portraitFieldTopBlocks,
+        y: topInset + BLOCK_SIZE * metrics.portraitFieldTopBlocks,
     };
 }
 
@@ -203,25 +219,29 @@ export function calcPlaySceneOpponentLayout(
     const playerAreaWidth = BLOCK_SIZE * metrics.multiPlayerAreaBlocks;
     const rightAreaWidth = gameWidth - playerAreaWidth;
     const x = playerAreaWidth + (rightAreaWidth - PLAYFIELD_WIDTH) / 2;
-    const y = (gameHeight - PLAYFIELD_HEIGHT) / 2;
+    const topInset = getTopNavBarHeight(layoutMode);
+    const usableHeight = Math.max(0, gameHeight - topInset);
+    const y = topInset + (usableHeight - PLAYFIELD_HEIGHT) / 2;
     return { x, y, scale: 1, labelOffset: 30 };
 }
 
 export function calcNMultiOpponentArea(layoutMode: LayoutMode, gameWidth: number, gameHeight: number): OpponentAreaLayout {
     const metrics = getLayoutMetrics();
 
+    const topInset = getTopNavBarHeight(layoutMode);
+
     if (layoutMode === 'mobile-portrait') {
         const x = BLOCK_SIZE * metrics.nMultiPortraitAreaXBlocks;
-        const y = BLOCK_SIZE * metrics.nMultiPortraitAreaYBlocks;
+        const y = topInset + BLOCK_SIZE * metrics.nMultiPortraitAreaYBlocks;
         const width = gameWidth - BLOCK_SIZE * metrics.nMultiPortraitAreaHorizontalPaddingBlocks;
         const height = gameHeight - y - BLOCK_SIZE * metrics.nMultiPortraitAreaBottomPaddingBlocks;
         return { x, y, width, height };
     }
 
     const x = BLOCK_SIZE * metrics.nMultiDesktopAreaXBlocks;
-    const y = BLOCK_SIZE * metrics.nMultiDesktopAreaYBlocks;
+    const y = topInset + BLOCK_SIZE * metrics.nMultiDesktopAreaYBlocks;
     const width = gameWidth - x - BLOCK_SIZE * metrics.nMultiDesktopAreaRightPaddingBlocks;
-    const height = gameHeight - BLOCK_SIZE * metrics.nMultiDesktopAreaBottomPaddingBlocks;
+    const height = gameHeight - y - BLOCK_SIZE * metrics.nMultiDesktopAreaBottomPaddingBlocks;
     return { x, y, width, height };
 }
 

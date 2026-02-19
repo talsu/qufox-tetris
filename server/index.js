@@ -321,7 +321,11 @@ io.on('connection', (socket) => {
         if (!data || !data.roomId || !data.targetId || !data.count) return;
         const room = nMultiRooms[data.roomId];
         if (!room || !room.players[socket.id]) return;
-        if (!room.players[data.targetId]) return;
+        const sender = room.players[socket.id];
+        const target = room.players[data.targetId];
+        if (!target) return;
+        if (data.targetId === socket.id) return;
+        if (sender.isAlive === false || target.isAlive === false) return;
         io.to(data.targetId).emit('nmulti_receive_garbage', {
             count: data.count,
             fromId: socket.id
@@ -420,7 +424,7 @@ io.on('connection', (socket) => {
         if (!room || !room.players[socket.id]) return;
 
         socket.emit('nmulti_snapshot', {
-            players: getPlayersMap(room),
+            players: getPlayersMap(room, socket.id),
             isDelta: false
         });
     });
@@ -510,9 +514,10 @@ function getNMultiRoomList() {
     }));
 }
 
-function getPlayersMap(room) {
+function getPlayersMap(room, excludeId = null) {
     const map = {};
     for (const [sid, p] of Object.entries(room.players)) {
+        if (excludeId && sid === excludeId) continue;
         map[sid] = {
             name: p.name,
             score: p.score,

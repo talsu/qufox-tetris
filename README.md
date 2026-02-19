@@ -5,7 +5,7 @@ qufox-tetris is a web-based Tetris game built with the Phaser 3 framework. It is
 Unlike many Tetris clones that fork existing repositories or follow common tutorials, the core engine of **qufox-tetris** was built independently from the ground up. By strictly interpreting the official Tetris Guideline 2009 documentation, all mechanics—including piece movement, the Super Rotation System (SRS), and the scoring engine—are original implementations designed to ensure a clean, unique, and idiomatic codebase.
 
 ## Play Online
-Live service available at: [https://talsu.github.io/qufox-tetris/](https://talsu.github.io/qufox-tetris/)
+Live service available at: [https://tetris.qufox.com/](https://tetris.qufox.com/)
 
 ## Features
 - **Responsive Design:** Automatically adjusts layout and block sizes to fit various screen resolutions and aspect ratios.

@@ -37,6 +37,16 @@ describe('N-Multi Server Logic', () => {
         return map;
     }
 
+    function canSendGarbage(room: any, senderId: string, targetId: string, count: number) {
+        if (!room || !senderId || !targetId || !count) return false;
+        const sender = room.players[senderId];
+        const target = room.players[targetId];
+        if (!sender || !target) return false;
+        if (senderId === targetId) return false;
+        if (sender.isAlive === false || target.isAlive === false) return false;
+        return true;
+    }
+
     function buildSnapshot(room: any, excludeId: string) {
         const playerIds = Object.keys(room.players);
         const snapshot: Record<string, any> = {};
@@ -447,6 +457,38 @@ describe('N-Multi Server Logic', () => {
             // Missing fields
             const noCount = { roomId, targetId: 'target', count: 0 };
             expect(!noCount.count).toBe(true); // Server checks !data.count
+        });
+
+        test('rejects sending garbage to self', () => {
+            const room = {
+                players: {
+                    sender: { isAlive: true }
+                }
+            };
+
+            expect(canSendGarbage(room, 'sender', 'sender', 2)).toBe(false);
+        });
+
+        test('rejects sending garbage to dead target', () => {
+            const room = {
+                players: {
+                    sender: { isAlive: true },
+                    target: { isAlive: false }
+                }
+            };
+
+            expect(canSendGarbage(room, 'sender', 'target', 2)).toBe(false);
+        });
+
+        test('rejects dead sender from sending garbage', () => {
+            const room = {
+                players: {
+                    sender: { isAlive: false },
+                    target: { isAlive: true }
+                }
+            };
+
+            expect(canSendGarbage(room, 'sender', 'target', 2)).toBe(false);
         });
     });
 

@@ -136,7 +136,12 @@ export class NMultiPlayScene extends BaseScene {
 
             // Merge delta or replace full state
             if (!isDelta) {
-                this.snapshotPlayers = data.players;
+                const nextSnapshotPlayers: Record<string, any> = {};
+                for (const [id, p] of Object.entries(data.players) as [string, any][]) {
+                    if (id === this.playerId) continue; // Ignore self
+                    nextSnapshotPlayers[id] = p;
+                }
+                this.snapshotPlayers = nextSnapshotPlayers;
             } else {
                 for (const [id, p] of Object.entries(data.players) as [string, any][]) {
                     if (id === this.playerId) continue; // Ignore self
@@ -276,6 +281,7 @@ export class NMultiPlayScene extends BaseScene {
 
         // Add opponents from snapshot
         for (const [id, p] of Object.entries(this.snapshotPlayers) as [string, any][]) {
+            if (id === this.playerId) continue;
             entries.push({ playerId: id, score: p.score || 0 });
         }
 
@@ -401,14 +407,8 @@ export class NMultiPlayScene extends BaseScene {
         // Send garbage to a random alive opponent
         this.engine.setAttackHandler((count) => {
             if (!this.socket) return;
-            const aliveOpponents: string[] = [];
-            for (const [id, p] of Object.entries(this.snapshotPlayers) as [string, any][]) {
-                if (p.isAlive !== false) {
-                    aliveOpponents.push(id);
-                }
-            }
-            if (aliveOpponents.length === 0) return;
-            const targetId = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
+            const targetId = this.pickRandomAliveOpponentId();
+            if (!targetId) return;
             this.socket.emit('nmulti_send_garbage', {
                 roomId: this.roomId,
                 targetId,
@@ -478,5 +478,16 @@ export class NMultiPlayScene extends BaseScene {
         if (this.engine) {
             this.engine.onInput(direction, state);
         }
+    }
+
+    private pickRandomAliveOpponentId(): string | null {
+        const aliveOpponents: string[] = [];
+        for (const [id, p] of Object.entries(this.snapshotPlayers) as [string, any][]) {
+            if (id !== this.playerId && p.isAlive !== false) {
+                aliveOpponents.push(id);
+            }
+        }
+        if (aliveOpponents.length === 0) return null;
+        return aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
     }
 }

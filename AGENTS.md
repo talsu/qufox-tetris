@@ -12,11 +12,16 @@ Guide for coding agents operating in this repository.
 Read these before making non-trivial changes:
 1. `AGENTS.md` (this file)
 2. Domain guides:
+   - `src/tetris/const/AGENTS.md`
+   - `src/tetris/input/AGENTS.md`
+   - `src/tetris/net/AGENTS.md`
    - `src/tetris/scenes/AGENTS.md`
    - `src/tetris/objects/AGENTS.md`
    - `src/tetris/logic/AGENTS.md`
    - `src/tetris/ui/AGENTS.md`
+   - `src/tetris/view/AGENTS.md`
    - `server/AGENTS.md`
+   - `test/unit/AGENTS.md`
 
 ## Architecture Quick Map
 ```text
@@ -30,8 +35,11 @@ src/tetris/
   input/                 Keyboard/touch translation with DAS behavior
   net/                   Board codec + socket utility
   ui/                    Layout calculators + in-game overlays/helpers
+  view/                  Gameplay visual effects
 server/
   index.js               Express + Socket.io room state and protocol
+test/unit/
+  ...                    Domain-oriented unit tests
 ```
 
 ## Gameplay / Networking Baseline
@@ -97,11 +105,16 @@ Notes:
 - Do not invent lint steps; follow local file style.
 
 ## Ownership Boundaries
+- `src/tetris/const/`: shared constants, enums, lookup tables
+- `src/tetris/input/`: keyboard/touch translation + DAS behavior
+- `src/tetris/net/`: board codec and socket helper utilities
 - `src/tetris/scenes/`: orchestration and mode flow
 - `src/tetris/objects/`: board/piece state and object rendering
 - `src/tetris/logic/`: deterministic rule/scoring logic
 - `src/tetris/ui/`: layout calculators and UI helpers
+- `src/tetris/view/`: visual effects tied to gameplay events
 - `server/`: socket protocol and room state
+- `test/unit/`: deterministic unit tests by domain
 Do not duplicate gameplay logic in scenes/UI when it belongs in logic/objects.
 
 ## Code Style Conventions

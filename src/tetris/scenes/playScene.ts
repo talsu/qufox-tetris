@@ -47,7 +47,7 @@ export class PlayScene extends BaseScene {
     private botManager: BotManager;
     private disconnectNoticeDOM: Phaser.GameObjects.DOMElement | null = null;
     private startImmediately: boolean = false;
-    private overlayControls: GameOverlayControls;
+    private overlayControls: GameOverlayControls | null = null;
 
     // Configurable Scales
     private readonly MAIN_SCALE = 1;
@@ -114,6 +114,7 @@ export class PlayScene extends BaseScene {
         this.overlayControls = new GameOverlayControls({
             scene: this,
             onMenuClick: () => this.toggleMenu(),
+            isMobilePortrait: this.layoutMode === 'mobile-portrait',
         });
 
         if (this.mode === 'single') {
@@ -267,6 +268,7 @@ export class PlayScene extends BaseScene {
         }
         if (this.overlayControls) {
             this.overlayControls.destroy();
+            this.overlayControls = null;
         }
     }
 
@@ -349,6 +351,7 @@ export class PlayScene extends BaseScene {
         let pos: { x: number; y: number };
         if (isPortrait) {
             pos = calcPortraitPosition(this.GAME_WIDTH);
+            pos.y -= getBlockSize() * 0.75;
         } else if (this.mode === 'single') {
             pos = calcSinglePlayerPosition(this.GAME_WIDTH, this.GAME_HEIGHT, currentMainScale);
         } else {
@@ -399,11 +402,6 @@ export class PlayScene extends BaseScene {
             const opponentLayout = calcPlaySceneOpponentLayout(this.layoutMode, this.GAME_WIDTH, this.GAME_HEIGHT, pos.y);
             this.opponentPlayField = new PlayField(this, opponentLayout.x, opponentLayout.y, rawPlayFieldWidth, rawPlayFieldHeight);
             this.opponentPlayField.setScale(opponentLayout.scale);
-            this.add.text(opponentLayout.x, opponentLayout.y - opponentLayout.labelOffset, 'Opponent', {
-                fontFamily: GAME_FONT_FAMILY,
-                fontSize: isPortrait ? '16px' : '20px',
-                color: '#ffffff',
-            });
         }
     }
 

@@ -41,6 +41,7 @@ export interface LayoutMetrics {
     nMultiPortraitAreaHorizontalPaddingBlocks: number;
     topNavBarBlocks: number;
     mobileTopNavBarBlocks: number;
+    mobileInfoGapBlocks: number;
 }
 
 export interface PlaySceneOpponentLayout {
@@ -94,6 +95,7 @@ export interface GameLayoutOptions {
     isInputBlocked: () => boolean;
     /** Layout mode for responsive positioning */
     layoutMode?: LayoutMode;
+    compactShowRank?: boolean;
 }
 
 export function getLayoutMetrics(): LayoutMetrics {
@@ -106,18 +108,19 @@ export function getLayoutMetrics(): LayoutMetrics {
         mobileUiScale: MOBILE_UI_SCALE,
         portraitFieldTopBlocks: 4.7,
         multiPlayerAreaBlocks: 23,
-        multiPortraitOpponentOffsetBlocks: 4.5,
+        multiPortraitOpponentOffsetBlocks: 1.5,
         multiPortraitOpponentBottomMarginBlocks: 0.5,
         nMultiDesktopAreaXBlocks: 23.5,
         nMultiDesktopAreaYBlocks: 1,
         nMultiDesktopAreaBottomPaddingBlocks: 2,
         nMultiDesktopAreaRightPaddingBlocks: 0.5,
         nMultiPortraitAreaXBlocks: 0.5,
-        nMultiPortraitAreaYBlocks: 28.5,
+        nMultiPortraitAreaYBlocks: 25.5,
         nMultiPortraitAreaBottomPaddingBlocks: 0.5,
         nMultiPortraitAreaHorizontalPaddingBlocks: 1,
         topNavBarBlocks: 1.5,
         mobileTopNavBarBlocks: 1.0,
+        mobileInfoGapBlocks: 0.2,
     };
 }
 
@@ -140,9 +143,9 @@ export function calcPlaySceneDimensions(layoutMode: LayoutMode, mode: string): {
 
     if (layoutMode === 'mobile-portrait') {
         if (mode === 'multi') {
-            return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 35 + topNavBarHeight };
+            return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 34 + topNavBarHeight };
         }
-        return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 27 + topNavBarHeight };
+        return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 26 + topNavBarHeight };
     }
     if (mode === 'multi') {
         return { width: BLOCK_SIZE * (metrics.multiPlayerAreaBlocks + 11), height: BLOCK_SIZE * 22 + topNavBarHeight };
@@ -157,7 +160,7 @@ export function calcNMultiSceneDimensions(layoutMode: LayoutMode): { width: numb
     const metrics = getLayoutMetrics();
     const topNavBarHeight = getTopNavBarHeight(layoutMode);
     if (layoutMode === 'mobile-portrait') {
-        return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 35 + topNavBarHeight };
+        return { width: BLOCK_SIZE * 12, height: BLOCK_SIZE * 34 + topNavBarHeight };
     }
     return { width: BLOCK_SIZE * (metrics.multiPlayerAreaBlocks + 13), height: BLOCK_SIZE * 22 + topNavBarHeight };
 }
@@ -264,7 +267,7 @@ export function calcPortraitHudLayout(fieldX: number, fieldY: number): PortraitH
         queueWidth,
         queueHeight,
         infoX: fieldX,
-        infoY: fieldY + PLAYFIELD_HEIGHT + metrics.gap,
+        infoY: fieldY + PLAYFIELD_HEIGHT + BLOCK_SIZE * metrics.mobileInfoGapBlocks,
     };
 }
 
@@ -357,7 +360,10 @@ function createPortraitLayout(options: GameLayoutOptions): GameLayoutResult {
     const playField = new PlayField(scene, fieldX, fieldY, PLAYFIELD_WIDTH, PLAYFIELD_HEIGHT);
 
     // Level Indicator (compact, below play field)
-    const levelIndicator = new LevelIndicator(scene, hudLayout.infoX, hudLayout.infoY, { compact: true });
+    const levelIndicator = new LevelIndicator(scene, hudLayout.infoX, hudLayout.infoY, {
+        compact: true,
+        compactShowRank: options.compactShowRank ?? false,
+    });
 
     // Engine
     const engine = new Engine(playField, holdBox, tetrominoQueue, levelIndicator);

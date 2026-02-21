@@ -45,7 +45,7 @@ interface RoomUiRow {
 
 const MULTI_CONFIG: LobbyConfig = {
     sceneKey: 'LobbyScene',
-    title: 'LOBBY',
+    title: '1 : 1',
     playScene: 'PlayScene',
     maxPlayers: 2,
     urlPrefix: '/multi',
@@ -68,7 +68,7 @@ const MULTI_CONFIG: LobbyConfig = {
 
 const NMULTI_CONFIG: LobbyConfig = {
     sceneKey: 'NMultiLobbyScene',
-    title: 'N-MULTI',
+    title: 'Battle Royale',
     playScene: 'NMultiPlayScene',
     maxPlayers: 100,
     urlPrefix: '/n-multi',

@@ -110,8 +110,8 @@ export class MenuScene extends BaseScene {
 
         this.buttons = [
             this.createButton('single', 'Single Player', 'red', () => this.scene.start('PlayScene', { mode: 'single' })),
-            this.createButton('multi', 'Multiplayer', 'blue', () => this.scene.start('LobbyScene')),
-            this.createButton('nmulti', 'N-Multiplay', 'green', () => this.scene.start('NMultiLobbyScene')),
+            this.createButton('multi', '1 : 1', 'blue', () => this.scene.start('LobbyScene')),
+            this.createButton('nmulti', 'Battle Royale', 'green', () => this.scene.start('NMultiLobbyScene')),
         ];
 
         this.root.add([

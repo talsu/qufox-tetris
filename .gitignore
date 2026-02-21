@@ -70,3 +70,7 @@ package-lock.json
 
 # yarn.lock file
 yarn.lock
+
+# Playwright artifacts
+playwright-report/
+test-results/

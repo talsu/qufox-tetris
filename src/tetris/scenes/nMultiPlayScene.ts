@@ -1,5 +1,5 @@
 import { PlayField } from '../objects/playField';
-import { CONST, InputState } from "../const/const";
+import { CONST, getBlockSize, InputState } from "../const/const";
 import { Engine } from '../engine';
 import { Socket } from "socket.io-client";
 import { InputManager } from "../input/inputManager";
@@ -35,7 +35,7 @@ export class NMultiPlayScene extends BaseScene {
     private isGameEnded: boolean = false;
     private botLevel: number = 0;
     private botManager: BotManager;
-    private overlayControls: GameOverlayControls;
+    private overlayControls: GameOverlayControls | null = null;
 
     // Opponents
     private miniFields: Map<string, MiniPlayField> = new Map();
@@ -112,6 +112,7 @@ export class NMultiPlayScene extends BaseScene {
         this.overlayControls = new GameOverlayControls({
             scene: this,
             onMenuClick: () => this.toggleMenu(),
+            isMobilePortrait: this.layoutMode === 'mobile-portrait',
         });
 
         this.opponentContainer = this.add.container(0, 0);
@@ -292,6 +293,10 @@ export class NMultiPlayScene extends BaseScene {
         const rankMap = new Map<string, number>();
         entries.forEach((e, i) => rankMap.set(e.playerId, i + 1));
 
+        if (this.engine) {
+            this.engine.setRank(rankMap.get(this.playerId) ?? null);
+        }
+
         // Update mini fields with their rank
         for (const [id, mini] of this.miniFields) {
             const rank = rankMap.get(id);
@@ -317,6 +322,7 @@ export class NMultiPlayScene extends BaseScene {
         }
         if (this.overlayControls) {
             this.overlayControls.destroy();
+            this.overlayControls = null;
         }
         for (const [, mini] of this.miniFields) {
             mini.destroy();
@@ -388,8 +394,9 @@ export class NMultiPlayScene extends BaseScene {
         this.inputManager.isEnabled = true;
 
         const isPortrait = this.layoutMode === 'mobile-portrait';
+        const portraitPos = calcPortraitPosition(this.GAME_WIDTH);
         const pos = isPortrait
-            ? calcPortraitPosition(this.GAME_WIDTH)
+            ? { x: portraitPos.x, y: portraitPos.y - getBlockSize() * 0.75 }
             : calcNMultiPlayerPosition(this.GAME_HEIGHT);
 
         const layout = createGameLayout({
@@ -399,10 +406,12 @@ export class NMultiPlayScene extends BaseScene {
             onHoldInput: (dir, state) => this.onInput(dir, state),
             isInputBlocked: () => !this.isGameRunning || this.isPause || this.inGameMenu.isMenuOpen || this.isGameEnded,
             layoutMode: this.layoutMode,
+            compactShowRank: true,
         });
 
         this.playField = layout.playField;
         this.engine = layout.engine;
+        this.engine.setPlayerName(this.playerName);
 
         // Send garbage to a random alive opponent
         this.engine.setAttackHandler((count) => {
@@ -430,6 +439,7 @@ export class NMultiPlayScene extends BaseScene {
         }
 
         this.relayoutOpponents();
+        this.updateRanks();
     }
 
     resize(gameSize, baseSize?, displaySize?, resolution?) {

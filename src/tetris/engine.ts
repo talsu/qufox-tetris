@@ -183,6 +183,14 @@ export class Engine {
         return this.scoreSystem.getStats(this.gameTime);
     }
 
+    public setRank(rank: number | null) {
+        this.levelIndicator.setRank(rank);
+    }
+
+    public setPlayerName(name: string | null) {
+        this.levelIndicator.setPlayerName(name);
+    }
+
     /**
      * Game over. emit from play field, when can not create tetromino anymore.
      */

@@ -24,10 +24,13 @@ This project now includes Kenney assets under CC0.
 
 ## Production Permission Note
 
-When deploying behind Nginx, ensure new asset files are world-readable and directories are traversable.
+When deploying behind Nginx, use the verified production fix after deployment:
 
-- Directories: `755`
-- Files: `644`
+```bash
+chmod -R 755 ./assets/
+```
+
+- Recursive mode: `755`
 
 Repository helper:
 

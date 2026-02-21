@@ -93,6 +93,7 @@ class BaseLobbyScene extends BaseScene {
 
     create(): void {
         this.scale.on('resize', this.resize, this);
+        this.events.once('shutdown', this.shutdown, this);
         this.createBackground();
         this.createDOMUI();
 
@@ -143,13 +144,13 @@ class BaseLobbyScene extends BaseScene {
             <div class="lobby-container">
                 <div class="lobby-header">
                     <div class="lobby-title">${title}</div>
-                    <div>
-                        <button class="puyo-btn green" style="font-size: 20px; padding: 10px 20px; min-width: auto;" id="createBtn">Create Room</button>
-                        <button class="puyo-btn red" style="font-size: 20px; padding: 10px 20px; min-width: auto;" id="backBtn">Back</button>
+                    <div class="lobby-actions">
+                        <button class="puyo-btn green lobby-action-btn" id="createBtn">Create Room</button>
+                        <button class="puyo-btn red lobby-action-btn" id="backBtn">Back</button>
                     </div>
                 </div>
                 <div class="room-list" id="roomListContainer">
-                    <div style="text-align: center; color: #888; margin-top: 50px;">Loading rooms...</div>
+                    <div class="room-list-empty">Loading rooms...</div>
                 </div>
             </div>
         </div>
@@ -188,7 +189,7 @@ class BaseLobbyScene extends BaseScene {
         if (!container) return;
 
         if (this.roomList.length === 0) {
-            container.innerHTML = '<div style="text-align: center; color: #888; margin-top: 50px;">No rooms found. Create one!</div>';
+            container.innerHTML = '<div class="room-list-empty">No rooms found. Create one!</div>';
             return;
         }
 

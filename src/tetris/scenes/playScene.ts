@@ -254,6 +254,7 @@ export class PlayScene extends BasePlayScene {
 
         this.playField = layout.playField;
         this.engine = layout.engine;
+        this.bindKenneyImpactEvents();
 
         this.engine.setAttackHandler((count) => {
             if (this.mode === 'multi' && this.socket) {

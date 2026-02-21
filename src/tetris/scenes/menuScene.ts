@@ -4,6 +4,7 @@ import { io, Socket } from "socket.io-client";
 import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
 import { GAME_FONT_FAMILY } from "../ui/uiStyles";
 import { ensureGameFontReady } from "../ui/fontLoader";
+import { preloadKenneyAssets } from "../ui/kenneyAssets";
 
 
 export class MenuScene extends BaseScene {
@@ -24,6 +25,7 @@ export class MenuScene extends BaseScene {
 
     preload(): void {
         this.load.spritesheet('blockSheet', '/assets/image/PPTdefaultMinoOnly.png', { frameHeight: CONST.SCREEN.BLOCK_IMAGE_SIZE, frameWidth: CONST.SCREEN.BLOCK_IMAGE_SIZE, margin: 4, spacing: 8 });
+        preloadKenneyAssets(this);
     }
 
     create(): void {
@@ -163,6 +165,13 @@ export class MenuScene extends BaseScene {
         <div class="menu-container">
             <div class="main-menu-wrapper">
                 <h1 class="game-title">QUFOX<br>TETRIS</h1>
+                <div class="menu-badge-row" aria-hidden="true">
+                    <img class="menu-badge-icon" src="/assets/image/ui-pack/PNG/Extra/Double/icon_play_light.png" alt="" />
+                    <img class="menu-badge-icon" src="/assets/image/ui-pack/PNG/Blue/Double/star.png" alt="" />
+                    <img class="menu-badge-icon" src="/assets/image/ui-pack/PNG/Yellow/Double/star.png" alt="" />
+                    <img class="menu-badge-icon" src="/assets/image/ui-pack/PNG/Red/Double/star.png" alt="" />
+                </div>
+                <div class="menu-subtitle">KENNEY UI EDITION</div>
                 <button class="puyo-btn accent" id="singleBtn">Single Player</button>
                 <button class="puyo-btn" id="multiBtn">Multiplayer</button>
                 <button class="puyo-btn green" id="nMultiBtn">N-Multiplay</button>

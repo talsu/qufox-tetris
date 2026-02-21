@@ -258,6 +258,7 @@ export class NMultiPlayScene extends BasePlayScene {
 
         this.playField = layout.playField;
         this.engine = layout.engine;
+        this.bindKenneyImpactEvents();
         this.engine.setPlayerName(this.playerName);
 
         this.engine.setAttackHandler((count) => {

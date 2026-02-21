@@ -8,6 +8,7 @@ import { BotManager } from '../logic/botManager';
 import { CONST, InputState } from '../const/const';
 import { GAME_FONT_FAMILY } from '../ui/uiStyles';
 import { Socket } from 'socket.io-client';
+import { playKenneyImpactSound } from '../ui/kenneyAssets';
 
 /**
  * Shared base for play scenes (PlayScene, NMultiPlayScene).
@@ -34,6 +35,12 @@ export abstract class BasePlayScene extends BaseScene {
 
     protected createBaseUI(callbacks: MenuCallbacks): void {
         this.createBackground();
+
+        const unlockAudio = () => {
+            this.sound.unlock();
+        };
+        this.input.once('pointerdown', unlockAudio);
+        this.input.keyboard.once('keydown', unlockAudio);
 
         this.input.keyboard.on('keydown-ESC', () => {
             if (!this.isGameEnded) this.toggleMenu();
@@ -80,7 +87,30 @@ export abstract class BasePlayScene extends BaseScene {
     }
 
     protected onInput(direction: string, state: InputState): void {
+        if (state === InputState.PRESS && direction === 'hardDrop') {
+            playKenneyImpactSound(this, 'hardDrop', 0.35);
+        }
         if (this.engine) this.engine.onInput(direction, state);
+    }
+
+    protected bindKenneyImpactEvents(): void {
+        if (!this.playField) return;
+
+        this.playField.on('hold', () => {
+            playKenneyImpactSound(this, 'hold', 0.3);
+        });
+
+        this.playField.on('lock', (clearedLineCount: number) => {
+            if (clearedLineCount > 0) {
+                playKenneyImpactSound(this, 'lineClear', 0.45);
+                return;
+            }
+            playKenneyImpactSound(this, 'lock', 0.35);
+        });
+
+        this.playField.on('gameOver', () => {
+            playKenneyImpactSound(this, 'gameOver', 0.5);
+        });
     }
 
     protected shutdownBase(): void {

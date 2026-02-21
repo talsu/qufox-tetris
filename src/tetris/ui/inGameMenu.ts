@@ -40,8 +40,9 @@ export class InGameMenu {
         this.hideMenu();
 
         const html = `
-            <div class="menu-panel">
+            <div class="menu-panel menu-panel--pause">
                 <div class="menu-title">PAUSED</div>
+                <div class="menu-divider" aria-hidden="true"></div>
                 <button class="puyo-btn" id="resumeBtn">RESUME</button>
                 <button class="puyo-btn" id="bgBtn">Background: ON</button>
                 <button class="puyo-btn red" id="exitBtn">EXIT GAME</button>
@@ -65,8 +66,9 @@ export class InGameMenu {
         this.hideMenu();
 
         const html = `
-            <div class="menu-panel">
+            <div class="menu-panel menu-panel--endgame">
                 <div class="menu-title" style="-webkit-text-stroke-color: ${color}">${mainText}</div>
+                <div class="menu-divider" aria-hidden="true"></div>
                 ${score !== undefined ? `<div class="menu-score">SCORE: ${score}</div>` : ''}
                 <button class="puyo-btn green" id="restartBtn">RESTART</button>
                 <button class="puyo-btn red" id="exitBtn">EXIT</button>

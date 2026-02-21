@@ -152,6 +152,7 @@ class BaseLobbyScene extends BaseScene {
             this.socket = io(getSocketUrl(), { path: SOCKET_PATH });
             this.setupSocketEvents();
         } else {
+            this.setupSocketEvents();
             this.socket.emit(this.lobbyConfig.events.getRooms);
         }
 

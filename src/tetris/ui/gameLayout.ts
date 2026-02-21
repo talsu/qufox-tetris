@@ -203,6 +203,11 @@ export function calcPortraitPosition(gameWidth: number, topInset: number = getTo
     };
 }
 
+export function calcPortraitPlayFieldPosition(gameWidth: number): { x: number; y: number } {
+    const pos = calcPortraitPosition(gameWidth);
+    return { x: pos.x, y: pos.y - BLOCK_SIZE * 0.75 };
+}
+
 export function calcPlaySceneOpponentLayout(
     layoutMode: LayoutMode,
     gameWidth: number,

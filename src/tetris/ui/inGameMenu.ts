@@ -98,6 +98,12 @@ export class InGameMenu {
         }
     }
 
+    public resetState(): void {
+        this.hideMenu();
+        this.isMenuOpen = false;
+        this.isGameEnded = false;
+    }
+
     public destroy() {
         this.hideMenu();
     }

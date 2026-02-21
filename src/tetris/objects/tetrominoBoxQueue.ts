@@ -101,6 +101,11 @@ export class TetrominoBoxQueue extends ObjectBase {
         return this.typeQueue[0];
     }
 
+    peekMany(count: number): TetrominoType[] {
+        if (count <= 0) return [];
+        return this.typeQueue.slice(0, count);
+    }
+
     /**
      * Clear type queue and boxes.
      */

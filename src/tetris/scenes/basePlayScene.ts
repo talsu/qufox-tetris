@@ -73,14 +73,12 @@ export abstract class BasePlayScene extends BaseScene {
         this.inputManager.isEnabled = !this.inGameMenu.isMenuOpen;
     }
 
-    protected toggleBackground(): boolean {
-        const isVisible = this.backgroundGraphics.visible;
-        this.backgroundGraphics.setVisible(!isVisible);
-        return !isVisible;
+    protected cycleBackgroundThemeLabel(): string {
+        return this.cycleBackgroundTheme();
     }
 
-    protected isBackgroundVisible(): boolean {
-        return this.backgroundGraphics.visible;
+    protected getBackgroundThemeLabelValue(): string {
+        return this.getBackgroundThemeLabel();
     }
 
     protected showEndGameMessage(mainText: string, color: string, score?: number): void {
@@ -144,6 +142,7 @@ export abstract class BasePlayScene extends BaseScene {
     }
 
     update(time: number, delta: number): void {
+        this.updateBackgroundAnimation(delta);
         if (this.inGameMenu.isMenuOpen || this.isGameEnded) return;
         if (!this.isGameRunning || this.isPause) return;
 

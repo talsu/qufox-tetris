@@ -4,6 +4,19 @@ export enum RotateType { UP = "0", LEFT = "L", DOWN = "2", RIGHT = "R" }
 
 export enum InputState { PRESS = "press", RELEASE = "release", HOLD = "hold" }
 
+export enum BackgroundTheme {
+    AURORA = "aurora",
+    LASER_GRID = "laser-grid",
+    COSMIC_PULSE = "cosmic-pulse",
+    SUNSET_STREAM = "sunset-stream",
+    OCEAN_DRIFT = "ocean-drift",
+    VOLCANIC_CORE = "volcanic-core",
+    CYBER_SWIRL = "cyber-swirl",
+    FOREST_CANOPY = "forest-canopy",
+    NEON_RAIN = "neon-rain",
+    MONO_CHROME = "mono-chrome"
+}
+
 export interface ColRow extends Array<number> {
     [key: number]: number;
 }

@@ -54,8 +54,8 @@ export class NMultiPlayScene extends BasePlayScene {
             onResume: () => this.toggleMenu(),
             onExit: () => this.exitGame(),
             onRestart: () => this.restartGame(),
-            onToggleBackground: () => this.toggleBackground(),
-            getBackgroundVisible: () => this.isBackgroundVisible(),
+            onCycleBackgroundTheme: () => this.cycleBackgroundThemeLabel(),
+            getBackgroundThemeLabel: () => this.getBackgroundThemeLabelValue(),
         });
 
         this.opponentContainer = this.add.container(0, 0);
@@ -187,7 +187,9 @@ export class NMultiPlayScene extends BasePlayScene {
         entries.sort((a, b) => b.score - a.score);
 
         const rankMap = new Map<string, number>();
-        entries.forEach((e, i) => rankMap.set(e.playerId, i + 1));
+        entries.forEach((e, i) => {
+            rankMap.set(e.playerId, i + 1);
+        });
 
         if (this.engine) {
             this.engine.setRank(rankMap.get(this.playerId) ?? null);

@@ -1,12 +1,12 @@
-import { GAME_FONT_FAMILY } from './uiStyles';
+import { GAME_FONT_FAMILY, PANEL_BG } from './uiStyles';
 import { KENNEY_UI_IMAGE_KEYS } from './kenneyAssets';
 
 export interface MenuCallbacks {
     onResume: () => void;
     onExit: () => void;
     onRestart: () => void;
-    onToggleBackground: () => boolean;
-    getBackgroundVisible: () => boolean;
+    onCycleBackgroundTheme: () => string;
+    getBackgroundThemeLabel: () => string;
 }
 
 type MenuButtonKind = 'blue' | 'green' | 'red';
@@ -214,16 +214,15 @@ export class InGameMenu {
         this.titleText.setStroke('#3559a5', 8);
         this.scoreText.setVisible(false);
 
-        const backgroundVisible = this.callbacks.getBackgroundVisible();
-        const bgLabel = `BACKGROUND: ${backgroundVisible ? 'ON' : 'OFF'}`;
+        const themeLabel = `THEME: ${this.callbacks.getBackgroundThemeLabel()}`;
 
         this.buttons = [
             this.createButton('resume', 'RESUME', 'blue', () => this.callbacks.onResume()),
-            this.createButton('bg', bgLabel, 'blue', () => {
-                const isOn = this.callbacks.onToggleBackground();
-                const target = this.buttons.find((button) => button.key === 'bg');
+            this.createButton('theme', themeLabel, 'blue', () => {
+                const nextThemeLabel = this.callbacks.onCycleBackgroundTheme();
+                const target = this.buttons.find((button) => button.key === 'theme');
                 if (target) {
-                    target.label.setText(`BACKGROUND: ${isOn ? 'ON' : 'OFF'}`);
+                    target.label.setText(`THEME: ${nextThemeLabel}`);
                     this.layout();
                 }
             }),
@@ -313,24 +312,17 @@ export class InGameMenu {
         this.panelInner.clear();
         this.panelBorder.clear();
 
-        this.panelBg.fillStyle(0x4b71c2, 0.96);
-        this.panelBg.fillRoundedRect(x, y, width, height, 14);
+        this.panelBg.fillStyle(PANEL_BG.fillColor, PANEL_BG.fillAlpha);
+        this.panelBg.fillRoundedRect(x, y, width, height, 10);
 
-        this.panelInner.fillGradientStyle(0xfbfeff, 0xfbfeff, 0xdfecff, 0xdfecff, 0.98);
-        this.panelInner.fillRoundedRect(x + 6, y + 6, Math.max(1, width - 12), Math.max(1, height - 12), 10);
-
-        this.panelBorder.lineStyle(3, 0x84a9ed, 0.95);
-        this.panelBorder.strokeRoundedRect(x + 2, y + 2, Math.max(1, width - 4), Math.max(1, height - 4), 12);
-        this.panelBorder.lineStyle(2, 0x325491, 0.9);
-        this.panelBorder.strokeRoundedRect(x + 8, y + 8, Math.max(1, width - 16), Math.max(1, height - 16), 8);
+        this.panelBorder.lineStyle(PANEL_BG.lineWidth, PANEL_BG.strokeColor, PANEL_BG.strokeAlpha);
+        this.panelBorder.strokeRoundedRect(x, y, Math.max(1, width), Math.max(1, height), 10);
     }
 
     private drawDivider(x: number, y: number, width: number, height: number): void {
         this.divider.clear();
-        this.divider.fillStyle(0x4e72c4, 0.72);
-        this.divider.fillRoundedRect(x, y, width, height, 3);
-        this.divider.fillStyle(0xffffff, 0.24);
-        this.divider.fillRoundedRect(x + 3, y + 1, Math.max(1, width - 6), Math.max(1, height - 2), 2);
+        this.divider.fillStyle(PANEL_BG.strokeColor, 0.22);
+        this.divider.fillRoundedRect(x, y, width, height, 2);
     }
 
     private clearButtons(): void {

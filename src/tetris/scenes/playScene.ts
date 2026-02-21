@@ -61,8 +61,8 @@ export class PlayScene extends BasePlayScene {
             onResume: () => this.toggleMenu(),
             onExit: () => this.exitGame(),
             onRestart: () => this.restartGame(),
-            onToggleBackground: () => this.toggleBackground(),
-            getBackgroundVisible: () => this.isBackgroundVisible(),
+            onCycleBackgroundTheme: () => this.cycleBackgroundThemeLabel(),
+            getBackgroundThemeLabel: () => this.getBackgroundThemeLabelValue(),
         });
 
         if (this.mode === 'single') {

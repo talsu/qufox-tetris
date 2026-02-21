@@ -2,7 +2,7 @@ import { CONST } from "../const/const";
 import { BaseScene } from "./baseScene";
 import { io, Socket } from "socket.io-client";
 import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
-import { GAME_FONT_FAMILY } from "../ui/uiStyles";
+import { GAME_FONT_FAMILY, PANEL_BG } from "../ui/uiStyles";
 import { ensureGameFontReady } from "../ui/fontLoader";
 import { KENNEY_UI_IMAGE_KEYS, preloadKenneyAssets } from "../ui/kenneyAssets";
 
@@ -244,16 +244,11 @@ export class MenuScene extends BaseScene {
         this.panelInner.clear();
         this.panelBorder.clear();
 
-        this.panelBg.fillStyle(0x4b71c2, 0.96);
-        this.panelBg.fillRoundedRect(panelX, panelY, panelWidth, panelHeight, 14);
+        this.panelBg.fillStyle(PANEL_BG.fillColor, PANEL_BG.fillAlpha);
+        this.panelBg.fillRoundedRect(panelX, panelY, panelWidth, panelHeight, 10);
 
-        this.panelInner.fillGradientStyle(0xfbfeff, 0xfbfeff, 0xdfecff, 0xdfecff, 0.98);
-        this.panelInner.fillRoundedRect(panelX + 6, panelY + 6, Math.max(1, panelWidth - 12), Math.max(1, panelHeight - 12), 10);
-
-        this.panelBorder.lineStyle(3, 0x84a9ed, 0.95);
-        this.panelBorder.strokeRoundedRect(panelX + 2, panelY + 2, Math.max(1, panelWidth - 4), Math.max(1, panelHeight - 4), 12);
-        this.panelBorder.lineStyle(2, 0x325491, 0.9);
-        this.panelBorder.strokeRoundedRect(panelX + 8, panelY + 8, Math.max(1, panelWidth - 16), Math.max(1, panelHeight - 16), 8);
+        this.panelBorder.lineStyle(PANEL_BG.lineWidth, PANEL_BG.strokeColor, PANEL_BG.strokeAlpha);
+        this.panelBorder.strokeRoundedRect(panelX, panelY, Math.max(1, panelWidth), Math.max(1, panelHeight), 10);
 
         const logoSource = this.logo.texture.getSourceImage() as { width?: number; height?: number };
         const logoAspect = (logoSource?.width && logoSource?.height)
@@ -467,7 +462,9 @@ export class MenuScene extends BaseScene {
         this.layoutUI();
     }
 
-    update(_time: number, _delta: number): void {}
+    update(_time: number, delta: number): void {
+        this.updateBackgroundAnimation(delta);
+    }
 
     private destroyPhaserUI(): void {
         this.buttons.forEach((button) => {

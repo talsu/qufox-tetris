@@ -3,7 +3,7 @@ import {TetrominoBox} from "./objects/tetrominoBox";
 import {TetrominoBoxQueue} from "./objects/tetrominoBoxQueue";
 import {LevelIndicator} from "./objects/levelIndicator";
 import {InputState, TetrominoType, RotateType} from "./const/const";
-import {ScoreSystem} from "./logic/scoreSystem";
+import {ScoreSystem, GameStats} from "./logic/scoreSystem";
 
 /**
  * Tetris game engine.
@@ -147,10 +147,7 @@ export class Engine {
         // Update indicator.
         this.levelIndicator.setAction(result.actionName);
         this.levelIndicator.setCombo(result.combo);
-        // this.levelIndicator.setLevel(result.level);
-        // this.levelIndicator.setLine(this.scoreSystem.getClearedLines(), this.scoreSystem.getNextLevelRequireClearedLines());
-        // this.levelIndicator.setScore(this.scoreSystem.getScore());
-        
+
         // Immediate update stats
         const stats = this.scoreSystem.getStats(this.gameTime);
         this.levelIndicator.updateStats(stats);
@@ -182,14 +179,14 @@ export class Engine {
     /**
      * Get current game stats (score, level, lines, etc.)
      */
-    public getStats(): any {
+    public getStats(): GameStats {
         return this.scoreSystem.getStats(this.gameTime);
     }
 
     /**
      * Game over. emit from play field, when can not create tetromino anymore.
      */
-    gameOver(gameOverType) {
+    gameOver(gameOverType: string) {
         if (this.isDebugLogging) {
             console.log(`Game Over - ${gameOverType}`);
         }

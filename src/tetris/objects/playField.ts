@@ -310,7 +310,7 @@ export class PlayField extends ObjectBase {
      * @param {number[]} rows - Rows to animate.
      * @param {Function} onComplete - Callback when animation finishes.
      */
-    playClearAnimation(rows: number[], onComplete: Function) {
+    playClearAnimation(rows: number[], onComplete: () => void) {
         this.effects.playClearAnimation(this.inactiveTetrominos, rows, onComplete);
     }
 
@@ -344,13 +344,7 @@ export class PlayField extends ObjectBase {
 
         // Move all blocks up.
         this.inactiveTetrominos.forEach(tetromino => {
-            // Check if forceMoveUp exists (it should now)
-            if (tetromino['forceMoveUp']) {
-                tetromino.forceMoveUp(count);
-            } else {
-                 // Fallback or error
-                 tetromino.moveUp(); // Incorrect but fallback
-            }
+            tetromino.forceMoveUp(count);
         });
 
         // Update pending cleared rows indices
@@ -490,10 +484,6 @@ export class PlayField extends ObjectBase {
     deserializeEncoded(encodedBoard: string | null) {
         this.deserialize(BoardCodec.decode(encodedBoard || ''));
     }
-
-    /**
-     * Lock tetromino.
-     */
 
     /**
      * Lock tetromino.

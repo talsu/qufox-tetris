@@ -1,6 +1,7 @@
 import {CONST, getBlockSize, TetrominoType, RotateType, ColRow} from '../const/const';
 import {ObjectBase} from './objectBase';
 import {GameRules} from "../logic/gameRules";
+import {BoardBlock} from "../net/boardCodec";
 import Container = Phaser.GameObjects.Container;
 const BLOCK_SIZE = getBlockSize();
 
@@ -12,6 +13,7 @@ export class Tetromino extends ObjectBase {
     public row: number;
     private inactiveBlocks: ColRow[] = null;
     private blockedPositions: ColRow[];
+    private blockedSet: Set<string> = new Set();
     private lockAnimationTween: Phaser.Tweens.Tween;
     private readonly ghostBlockGraphics: Phaser.GameObjects.Graphics;
     private readonly blockImages: Phaser.GameObjects.Container;
@@ -45,6 +47,7 @@ export class Tetromino extends ObjectBase {
         this.type = type;
         // Set blocked position array.
         this.blockedPositions = blockedPositions || [];
+        this.blockedSet = new Set(this.blockedPositions.map(([c, r]) => `${c},${r}`));
 
         // Create ghost block graphics.
         this.ghostBlockImages = this.scene.add.container(0, 0);
@@ -88,19 +91,14 @@ export class Tetromino extends ObjectBase {
         const initRow = row ?? -2;
 
         // Move to initial position and set spawn state.
-        this.isSpawnSuccess = this.move(initCol, initRow, 'spwan');
+        this.isSpawnSuccess = this.move(initCol, initRow, 'spawn');
     }
 
     /**
      * Set inactive blocks directly.
      * @param {any[]} blocks - Block positions with type info.
      */
-    setInactiveBlocks(blocks: any[]) {
-        // We don't store inactiveBlocks as ColRow[] anymore in this context, 
-        // or we just map back to ColRow[] for internal logic if needed?
-        // Actually, for dummy tetromino, we just need to render.
-        // But for collision (not needed for dummy), we might need inactiveBlocks.
-        // Let's populate inactiveBlocks with just coords for safety.
+    setInactiveBlocks(blocks: BoardBlock[]) {
         this.inactiveBlocks = blocks.map(b => [b.col, b.row]);
         
         // Clear existing images
@@ -142,6 +140,7 @@ export class Tetromino extends ObjectBase {
      */
     setBlockedPositions(blockedPositions: ColRow[]) {
         this.blockedPositions = blockedPositions;
+        this.blockedSet = new Set(blockedPositions.map(([c, r]) => `${c},${r}`));
     }
 
     /**
@@ -434,9 +433,7 @@ export class Tetromino extends ObjectBase {
      * @returns {boolean} - Is valid.
      */
     isValidBlockPosition(col: number, row: number): boolean {
-        // If any block is duplicate, return false. (invalid)
-        if (this.blockedPositions.some(colRow => colRow[0] === col && colRow[1] === row)) return false;
-        // If position is out of range, return false. (invalid)
+        if (this.blockedSet.has(`${col},${row}`)) return false;
         return !(
             (col < 0 || CONST.PLAY_FIELD.COL_COUNT <= col) ||
             (row < (-CONST.PLAY_FIELD.ROW_COUNT) || CONST.PLAY_FIELD.ROW_COUNT <= row)

@@ -1,6 +1,19 @@
 import { GameRules } from "./gameRules";
 import { TetrominoType, RotateType } from "../const/const";
 
+export interface GameStats {
+    score: number;
+    level: number;
+    lines: number;
+    time: string;
+    goal: number;
+    tetrises: number;
+    tspins: number;
+    combos: number;
+    tpm: number;
+    lpm: number;
+}
+
 export interface LockResult {
     scoreAdded: number;
     actionName: string | null;
@@ -207,7 +220,7 @@ export class ScoreSystem {
         return Math.pow((0.8 - ((this.level - 1) * 0.007)), (this.level - 1)) * 1000;
     }
 
-    getStats(gameTime: number) {
+    getStats(gameTime: number): GameStats {
         // Format Time: MM:SS.ms
         const minutes = Math.floor(gameTime / 60000);
         const seconds = Math.floor((gameTime % 60000) / 1000);

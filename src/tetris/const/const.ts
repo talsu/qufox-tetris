@@ -8,7 +8,7 @@ export interface ColRow extends Array<number> {
     [key: number]: number;
 }
 
-export let CONST = {
+export const CONST = {
     SCORE: {
         'Single': 100,
         'T-Spin Mini': 100,

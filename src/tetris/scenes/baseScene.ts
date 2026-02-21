@@ -27,7 +27,7 @@ export abstract class BaseScene extends Phaser.Scene {
 
     protected backgroundGraphics: Phaser.GameObjects.Graphics;
 
-    protected resize(gameSize, baseSize?, displaySize?, resolution?) {
+    protected resize(gameSize: { width: number; height: number } | number, baseSize?: number, displaySize?: unknown, resolution?: unknown) {
         if (!this.cameras || !this.cameras.main) {
             return;
         }

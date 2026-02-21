@@ -31,10 +31,10 @@ const io = new Server(server, {
     }
 });
 
-app.use(express.static(path.join(__dirname, '../dist')));
+app.use(express.static(path.join(__dirname, '../build')));
 
 app.get('*path', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+    res.sendFile(path.join(__dirname, '../build/index.html'));
 });
 
 // rooms = { roomId: { id, name, p1: socketId, p2: socketId, status: 'waiting'|'playing' } }

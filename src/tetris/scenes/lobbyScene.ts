@@ -193,32 +193,38 @@ class BaseLobbyScene extends BaseScene {
         }
 
         const maxPlayers = this.lobbyConfig.maxPlayers;
-        let listHtml = '';
+        container.innerHTML = '';
+
         this.roomList.forEach((room) => {
             const playerCount = room.playerCount ?? room.players ?? 0;
-            listHtml += `
-            <div class="room-item">
-                <div class="room-name">${room.name}</div>
-                <div style="display: flex; align-items: center;">
-                    <div class="room-players">${playerCount}/${maxPlayers}</div>
-                    <button class="join-btn" data-room-id="${room.id}">JOIN</button>
-                </div>
-            </div>
-            `;
-        });
 
-        container.innerHTML = listHtml;
+            const item = document.createElement('div');
+            item.className = 'room-item';
 
-        // Bind join buttons
-        const joinBtns = container.querySelectorAll('.join-btn');
-        joinBtns.forEach((btn: HTMLElement) => {
-            btn.addEventListener('click', (e) => {
-                const roomId = (e.target as HTMLElement).getAttribute('data-room-id');
-                if (roomId && this.socket) {
-                    const payload = this.lobbyConfig.maxPlayers > 2 ? { roomId } : roomId;
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'room-name';
+            nameDiv.textContent = room.name;
+
+            const rightDiv = document.createElement('div');
+            rightDiv.style.cssText = 'display: flex; align-items: center;';
+
+            const playersDiv = document.createElement('div');
+            playersDiv.className = 'room-players';
+            playersDiv.textContent = `${playerCount}/${maxPlayers}`;
+
+            const joinBtn = document.createElement('button');
+            joinBtn.className = 'join-btn';
+            joinBtn.textContent = 'JOIN';
+            joinBtn.addEventListener('click', () => {
+                if (this.socket) {
+                    const payload = this.lobbyConfig.maxPlayers > 2 ? { roomId: room.id } : room.id;
                     this.socket.emit(this.lobbyConfig.events.joinRoom, payload);
                 }
             });
+
+            rightDiv.append(playersDiv, joinBtn);
+            item.append(nameDiv, rightDiv);
+            container.appendChild(item);
         });
     }
 

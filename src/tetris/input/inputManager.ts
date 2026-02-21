@@ -155,22 +155,8 @@ export class InputManager {
         }
     }
 
-    /**
-     * Should be called in Scene.update()
-     */
     update(time: number, delta: number) {
-        if (!this.isEnabled) return;
-
-        this.chargeDAS("left", this.keys.LEFT.isDown, delta);
-        this.chargeDAS("right", this.keys.RIGHT.isDown, delta);
-        // SoftDrop has specific delays in original code: autoDropDelay / 20.
-        // We might need to parameterize this or use defaults.
-        // Using standard DAS constants for now unless specified.
-        this.chargeDAS("softDrop", this.keys.DOWN.isDown, delta, CONST.PLAY_FIELD.DAS_MS, CONST.PLAY_FIELD.AR_MS);
-        this.chargeDAS("hardDrop", this.keys.SPACE.isDown, delta);
-        this.chargeDAS("anticlockwise", this.keys.Z.isDown || this.keys.CTRL.isDown, delta);
-        this.chargeDAS("clockwise", this.keys.X.isDown || this.keys.UP.isDown, delta);
-        this.chargeDAS("hold", this.keys.C.isDown || this.keys.SHIFT.isDown, delta);
+        this.updateCustom(time, delta, CONST.PLAY_FIELD.DAS_MS, CONST.PLAY_FIELD.AR_MS);
     }
 
     /*
@@ -204,9 +190,6 @@ export class InputManager {
         }
     }
 
-    // Custom DAS for Soft Drop requires dynamic delays based on PlayField speed.
-    // For now we expose a method to set specific DAS params if needed, or just update the update call in PlayScene to pass them.
-    // Actually, let's allow passing custom delays in update() or a separate setter.
     public updateCustom(time: number, delta: number, softDropInit: number, softDropRepeat: number) {
         if (!this.isEnabled) return;
 

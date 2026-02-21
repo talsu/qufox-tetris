@@ -1,5 +1,6 @@
 import { Engine } from "../engine";
 import { PlayField } from "../objects/playField";
+import { Tetromino } from "../objects/tetromino";
 import { TetrominoType, RotateType, InputState, CONST, ColRow } from "../const/const";
 import { GameRules } from "./gameRules";
 
@@ -73,7 +74,7 @@ export class BotManager {
         }
     }
 
-    private calculateBestMove(active: any): BotTarget {
+    private calculateBestMove(active: Tetromino): BotTarget {
         const inactiveBlocks = this.playField.getInactiveBlocks();
         const nextType = this.engine.queueInstance.peek();
         const holdType = this.engine.holdBoxInstance.type;
@@ -211,7 +212,7 @@ export class BotManager {
         return (a * clearedLines) + (b * aggregateHeight) + (c * holes) + (d * bumpiness);
     }
 
-    private generateInputQueue(active: any) {
+    private generateInputQueue(active: Tetromino) {
         this.inputQueue = [];
         if (!this.currentTarget) return;
 

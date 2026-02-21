@@ -1,5 +1,6 @@
 import { ObjectBase } from "./objectBase";
 import { getBlockSize } from "../const/const";
+import { GameStats } from "../logic/scoreSystem";
 import {
     TextStyles,
     drawPanelBackground,
@@ -195,7 +196,7 @@ export class LevelIndicator extends ObjectBase {
         return y;
     }
 
-    updateStats(stats: any) {
+    updateStats(stats: GameStats) {
         if (!stats) return;
         this.scoreValueText.setText(stats.score.toString());
         this.timeValueText.setText(stats.time);
@@ -208,10 +209,6 @@ export class LevelIndicator extends ObjectBase {
         this.tpmValueText.setText(stats.tpm.toString());
         this.lpmValueText.setText(stats.lpm.toString());
     }
-
-    setLevel(level: number) { }
-    setLine(cleared, nextGoal) { }
-    setScore(score: number) { }
 
     setAction(action?: string | null) {
         this.actionTextShowEvent?.destroy();

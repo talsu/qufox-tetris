@@ -10,12 +10,18 @@ import {
     calcPortraitPlayFieldPosition,
     calcPlaySceneOpponentLayout,
 } from "../ui/gameLayout";
+import { preloadKenneyAssets } from '../ui/kenneyAssets';
 
 export class PlayScene extends BasePlayScene {
     private opponentPlayField: PlayField;
     private mode: string = 'single';
     private startImmediately: boolean = false;
-    private disconnectNoticeDOM: Phaser.GameObjects.DOMElement | null = null;
+    private disconnectNoticeContainer: Phaser.GameObjects.Container | null = null;
+    private disconnectNoticeBg: Phaser.GameObjects.Rectangle | null = null;
+    private disconnectNoticePanel: Phaser.GameObjects.Graphics | null = null;
+    private disconnectNoticeTitle: Phaser.GameObjects.Text | null = null;
+    private disconnectNoticeMessage: Phaser.GameObjects.Text | null = null;
+    private disconnectNoticeTimer: Phaser.Time.TimerEvent | null = null;
 
     private readonly MAIN_SCALE = 1;
     private readonly SIDE_SCALE = 1;
@@ -46,14 +52,17 @@ export class PlayScene extends BasePlayScene {
         this.startImmediately = data.startImmediately || false;
     }
 
-    preload(): void {}
+    preload(): void {
+        preloadKenneyAssets(this);
+    }
 
     create(): void {
         this.createBaseUI({
             onResume: () => this.toggleMenu(),
             onExit: () => this.exitGame(),
             onRestart: () => this.restartGame(),
-            onToggleBackground: (btn) => this.toggleBackground(btn),
+            onToggleBackground: () => this.toggleBackground(),
+            getBackgroundVisible: () => this.isBackgroundVisible(),
         });
 
         if (this.mode === 'single') {
@@ -72,19 +81,18 @@ export class PlayScene extends BasePlayScene {
     protected toggleMenu(): void {
         this.inGameMenu.togglePauseMenu();
         const isOpen = this.inGameMenu.isMenuOpen;
+        this.inputManager.isEnabled = !isOpen;
         if (this.mode === 'single') {
             if (isOpen) {
                 this.isPause = true;
                 this.time.paused = true;
                 this.tweens.pauseAll();
                 this.physics.world.pause();
-                this.inputManager.isEnabled = false;
             } else {
                 this.isPause = false;
                 this.time.paused = false;
                 this.tweens.resumeAll();
                 this.physics.world.resume();
-                this.inputManager.isEnabled = true;
             }
         }
     }
@@ -108,10 +116,7 @@ export class PlayScene extends BasePlayScene {
                 return;
             }
 
-            if (this.disconnectNoticeDOM) {
-                this.disconnectNoticeDOM.destroy();
-                this.disconnectNoticeDOM = null;
-            }
+            this.hideDisconnectNotice();
             this.statusText.setVisible(false);
             this.startGame();
         });
@@ -163,34 +168,95 @@ export class PlayScene extends BasePlayScene {
     }
 
     private showDisconnectNotice(message: string): void {
-        if (this.disconnectNoticeDOM) {
-            this.disconnectNoticeDOM.destroy();
-            this.disconnectNoticeDOM = null;
-        }
+        this.hideDisconnectNotice();
 
         this.statusText.setText('Waiting for opponent...').setVisible(true).setDepth(1000);
 
-        const html = `
-        <div class="disconnect-notice-overlay" style="width: ${this.GAME_WIDTH}px; height: ${this.GAME_HEIGHT}px;">
-            <div class="menu-panel disconnect-notice-panel">
-                <div class="menu-title disconnect-notice-title">NOTICE</div>
-                <div class="disconnect-notice-message"></div>
-            </div>
-        </div>
-        `;
+        this.disconnectNoticeContainer = this.add.container(0, 0).setDepth(1001);
+        this.disconnectNoticeBg = this.add.rectangle(0, 0, 1, 1, 0x0b1635, 0.8).setOrigin(0);
+        this.disconnectNoticePanel = this.add.graphics();
+        this.disconnectNoticeTitle = this.add.text(0, 0, 'NOTICE', {
+            fontFamily: 'Connection, Pretendard, sans-serif',
+            fontSize: '56px',
+            color: '#ffffff',
+            fontStyle: 'bold',
+        }).setOrigin(0.5, 0);
+        this.disconnectNoticeTitle.setStroke('#3559a5', 8);
+        this.disconnectNoticeMessage = this.add.text(0, 0, message, {
+            fontFamily: 'Pretendard, sans-serif',
+            fontSize: '30px',
+            color: '#1e376a',
+            fontStyle: 'bold',
+            align: 'center',
+            wordWrap: { width: 540 },
+        }).setOrigin(0.5, 0);
 
-        this.disconnectNoticeDOM = this.add.dom(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2).createFromHTML(html);
-        const msgEl = this.disconnectNoticeDOM.node.querySelector('.disconnect-notice-message');
-        if (msgEl) msgEl.textContent = message;
+        this.disconnectNoticeContainer.add([
+            this.disconnectNoticeBg,
+            this.disconnectNoticePanel,
+            this.disconnectNoticeTitle,
+            this.disconnectNoticeMessage,
+        ]);
 
-        this.disconnectNoticeDOM.setDepth(1001);
-        this.disconnectNoticeDOM.setScale(this.cameras.main.zoom);
+        this.layoutDisconnectNotice();
 
-        this.time.delayedCall(2500, () => {
-            if (!this.disconnectNoticeDOM) return;
-            this.disconnectNoticeDOM.destroy();
-            this.disconnectNoticeDOM = null;
+        this.disconnectNoticeTimer = this.time.delayedCall(2500, () => {
+            this.hideDisconnectNotice();
         });
+    }
+
+    private layoutDisconnectNotice(): void {
+        if (!this.disconnectNoticeContainer || !this.disconnectNoticeBg || !this.disconnectNoticePanel || !this.disconnectNoticeTitle || !this.disconnectNoticeMessage) {
+            return;
+        }
+
+        const cam = this.cameras.main;
+        cam.preRender();
+        const worldPerPixel = 1 / (cam.zoom || 1);
+        const viewWidth = cam.width * worldPerPixel;
+        const viewHeight = cam.height * worldPerPixel;
+        const isPortrait = cam.height > cam.width;
+
+        this.disconnectNoticeContainer.setPosition(cam.worldView.x, cam.worldView.y);
+        this.disconnectNoticeBg.setPosition(0, 0);
+        this.disconnectNoticeBg.setSize(viewWidth, viewHeight);
+
+        const panelWidth = Math.min(viewWidth * (isPortrait ? 0.9 : 0.66), 640 * worldPerPixel);
+        const panelHeight = Math.min(viewHeight * (isPortrait ? 0.42 : 0.5), 340 * worldPerPixel);
+        const panelX = (viewWidth - panelWidth) / 2;
+        const panelY = (viewHeight - panelHeight) / 2;
+
+        this.disconnectNoticePanel.clear();
+        this.disconnectNoticePanel.fillStyle(0x4b71c2, 0.96);
+        this.disconnectNoticePanel.fillRoundedRect(panelX, panelY, panelWidth, panelHeight, 14);
+        this.disconnectNoticePanel.fillGradientStyle(0xfbfeff, 0xfbfeff, 0xdfecff, 0xdfecff, 0.98);
+        this.disconnectNoticePanel.fillRoundedRect(panelX + 6, panelY + 6, Math.max(1, panelWidth - 12), Math.max(1, panelHeight - 12), 10);
+        this.disconnectNoticePanel.lineStyle(3, 0x84a9ed, 0.95);
+        this.disconnectNoticePanel.strokeRoundedRect(panelX + 2, panelY + 2, Math.max(1, panelWidth - 4), Math.max(1, panelHeight - 4), 12);
+        this.disconnectNoticePanel.lineStyle(2, 0x325491, 0.9);
+        this.disconnectNoticePanel.strokeRoundedRect(panelX + 8, panelY + 8, Math.max(1, panelWidth - 16), Math.max(1, panelHeight - 16), 8);
+
+        this.disconnectNoticeTitle.setFontSize(Math.round((isPortrait ? 46 : 56) * worldPerPixel));
+        this.disconnectNoticeTitle.setPosition(panelX + panelWidth / 2, panelY + 28 * worldPerPixel);
+
+        this.disconnectNoticeMessage.setFontSize(Math.round((isPortrait ? 20 : 26) * worldPerPixel));
+        this.disconnectNoticeMessage.setWordWrapWidth(Math.max(140 * worldPerPixel, panelWidth - 68 * worldPerPixel));
+        this.disconnectNoticeMessage.setPosition(panelX + panelWidth / 2, panelY + 118 * worldPerPixel);
+    }
+
+    private hideDisconnectNotice(): void {
+        if (this.disconnectNoticeTimer) {
+            this.disconnectNoticeTimer.remove(false);
+            this.disconnectNoticeTimer = null;
+        }
+        if (this.disconnectNoticeContainer) {
+            this.disconnectNoticeContainer.destroy(true);
+            this.disconnectNoticeContainer = null;
+            this.disconnectNoticeBg = null;
+            this.disconnectNoticePanel = null;
+            this.disconnectNoticeTitle = null;
+            this.disconnectNoticeMessage = null;
+        }
     }
 
     private shutdown(): void {
@@ -202,10 +268,7 @@ export class PlayScene extends BasePlayScene {
             this.socket.off('restart_signal');
             this.socket.off('opponent_disconnected');
         }
-        if (this.disconnectNoticeDOM) {
-            this.disconnectNoticeDOM.destroy();
-            this.disconnectNoticeDOM = null;
-        }
+        this.hideDisconnectNotice();
         this.shutdownBase();
     }
 
@@ -301,8 +364,6 @@ export class PlayScene extends BasePlayScene {
 
     resize(gameSize, baseSize?, displaySize?, resolution?) {
         super.resize(gameSize, baseSize, displaySize, resolution);
-        if (this.disconnectNoticeDOM && this.cameras && this.cameras.main) {
-            this.disconnectNoticeDOM.setScale(this.cameras.main.zoom);
-        }
+        this.layoutDisconnectNotice();
     }
 }

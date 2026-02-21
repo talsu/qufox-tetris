@@ -10,6 +10,7 @@ import {
     calcPortraitPlayFieldPosition,
     calcNMultiOpponentArea,
 } from "../ui/gameLayout";
+import { preloadKenneyAssets } from "../ui/kenneyAssets";
 
 export class NMultiPlayScene extends BasePlayScene {
     private playerId: string;
@@ -44,14 +45,17 @@ export class NMultiPlayScene extends BasePlayScene {
         this.lastUpdateSend = 0;
     }
 
-    preload(): void {}
+    preload(): void {
+        preloadKenneyAssets(this);
+    }
 
     create(): void {
         this.createBaseUI({
             onResume: () => this.toggleMenu(),
             onExit: () => this.exitGame(),
             onRestart: () => this.restartGame(),
-            onToggleBackground: (btn) => this.toggleBackground(btn),
+            onToggleBackground: () => this.toggleBackground(),
+            getBackgroundVisible: () => this.isBackgroundVisible(),
         });
 
         this.opponentContainer = this.add.container(0, 0);

@@ -32,6 +32,7 @@ export abstract class BasePlayScene extends BaseScene {
     protected botLevel: number = 0;
     protected botManager: BotManager;
     protected overlayControls: GameOverlayControls | null = null;
+    private escKeyHandler: (() => void) | null = null;
 
     protected createBaseUI(callbacks: MenuCallbacks): void {
         this.createBackground();
@@ -42,12 +43,10 @@ export abstract class BasePlayScene extends BaseScene {
         this.input.once('pointerdown', unlockAudio);
         this.input.keyboard.once('keydown', unlockAudio);
 
-        this.input.keyboard.on('keydown-ESC', () => {
+        this.escKeyHandler = () => {
             if (!this.isGameEnded) this.toggleMenu();
-        });
-
-        this.scale.on('resize', this.resize, this);
-        this.resize(window.innerWidth, window.innerHeight);
+        };
+        this.input.keyboard.on('keydown-ESC', this.escKeyHandler);
 
         this.statusText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, '', {
             fontFamily: GAME_FONT_FAMILY,
@@ -65,16 +64,24 @@ export abstract class BasePlayScene extends BaseScene {
             onMenuClick: () => this.toggleMenu(),
             isMobilePortrait: this.layoutMode === 'mobile-portrait',
         });
+
+        this.scale.on('resize', this.resize, this);
+        this.resize(window.innerWidth, window.innerHeight);
     }
 
     protected toggleMenu(): void {
         this.inGameMenu.togglePauseMenu();
+        this.inputManager.isEnabled = !this.inGameMenu.isMenuOpen;
     }
 
-    protected toggleBackground(btn: HTMLElement): void {
+    protected toggleBackground(): boolean {
         const isVisible = this.backgroundGraphics.visible;
         this.backgroundGraphics.setVisible(!isVisible);
-        btn.innerText = `Background: ${!isVisible ? 'ON' : 'OFF'}`;
+        return !isVisible;
+    }
+
+    protected isBackgroundVisible(): boolean {
+        return this.backgroundGraphics.visible;
     }
 
     protected showEndGameMessage(mainText: string, color: string, score?: number): void {
@@ -87,6 +94,7 @@ export abstract class BasePlayScene extends BaseScene {
     }
 
     protected onInput(direction: string, state: InputState): void {
+        if (this.inGameMenu?.isMenuOpen || this.isGameEnded) return;
         if (state === InputState.PRESS && direction === 'hardDrop') {
             playKenneyImpactSound(this, 'hardDrop', 0.35);
         }
@@ -115,6 +123,10 @@ export abstract class BasePlayScene extends BaseScene {
 
     protected shutdownBase(): void {
         this.scale.off('resize', this.resize, this);
+        if (this.escKeyHandler) {
+            this.input.keyboard.off('keydown-ESC', this.escKeyHandler);
+            this.escKeyHandler = null;
+        }
         if (this.botManager) this.botManager.stop();
         if (this.inGameMenu) this.inGameMenu.destroy();
         if (this.overlayControls) {
@@ -125,7 +137,11 @@ export abstract class BasePlayScene extends BaseScene {
 
     resize(gameSize, baseSize?, displaySize?, resolution?) {
         super.resize(gameSize, baseSize, displaySize, resolution);
+        if (!this.cameras || !this.cameras.main) {
+            return;
+        }
         if (this.overlayControls) this.overlayControls.layout();
+        if (this.inGameMenu) this.inGameMenu.layout();
     }
 
     update(time: number, delta: number): void {

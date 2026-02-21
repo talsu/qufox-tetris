@@ -1,9 +1,9 @@
 import { PANEL_BG, TextStyles } from "./uiStyles";
+import { getBlockSize } from "../const/const";
 
 interface OverlayControlOptions {
     scene: Phaser.Scene;
     onMenuClick: () => void;
-    isMobilePortrait: boolean;
 }
 
 type GuidePartKind = 'action' | 'key' | 'sep';
@@ -16,7 +16,6 @@ interface GuidePart {
 export class GameOverlayControls {
     private readonly scene: Phaser.Scene;
     private readonly onMenuClick: () => void;
-    private readonly isMobilePortrait: boolean;
 
     private root: Phaser.GameObjects.Container;
     private navBackground: Phaser.GameObjects.Graphics;
@@ -32,7 +31,6 @@ export class GameOverlayControls {
     constructor(options: OverlayControlOptions) {
         this.scene = options.scene;
         this.onMenuClick = options.onMenuClick;
-        this.isMobilePortrait = options.isMobilePortrait;
 
         this.root = this.scene.add.container(0, 0).setDepth(3000);
 
@@ -85,10 +83,8 @@ export class GameOverlayControls {
         const viewY = cam.worldView.y;
         const viewWidthPx = cam.width;
 
-        const baseBarHeight = this.isMobilePortrait ? 34 : 44;
-        const referenceWidth = this.isMobilePortrait ? 420 : 980;
-        const widthScale = Phaser.Math.Clamp(viewWidthPx / referenceWidth, 0.55, 1);
-        const barHeightPx = Math.max(22, Math.round(baseBarHeight * widthScale));
+        const isMobilePortrait = this.resolveIsMobilePortrait();
+        const barHeightPx = Math.round(getBlockSize() * 1.5);
 
         const horizontalPaddingPx = Math.max(8, Math.round(barHeightPx * 0.35));
         const verticalPaddingPx = Math.max(2, Math.round(barHeightPx * 0.12));
@@ -98,9 +94,9 @@ export class GameOverlayControls {
         const menuFontSizePx = Math.max(11, Math.round(menuHeightPx * 0.52));
         this.menuLabel.setFontSize(`${Math.round(menuFontSizePx * worldPerPixel)}px`);
 
-        const guideFontSizePx = this.isMobilePortrait
+        const guideFontSizePx = isMobilePortrait
             ? Math.max(10, Math.round(menuHeightPx * 0.45))
-            : Math.max(11, Math.round(menuHeightPx * 0.4));
+            : Math.max(13, Math.round(menuHeightPx * 0.5));
 
         const barHeight = barHeightPx * worldPerPixel;
         const horizontalPadding = horizontalPaddingPx * worldPerPixel;
@@ -118,7 +114,7 @@ export class GameOverlayControls {
         this.drawMenuButton();
 
         const availableGuideWidth = Math.max(80 * worldPerPixel, viewWidth - (horizontalPadding * 3 + menuWidth));
-        const guideParts = this.resolveGuideParts(viewWidthPx);
+        const guideParts = this.resolveGuideParts(isMobilePortrait, viewWidthPx);
         this.renderGuide(guideParts, guideFontSizePx * worldPerPixel, availableGuideWidth);
         this.guideContainer.setPosition(viewWidth - horizontalPadding, barHeight / 2);
     }
@@ -187,17 +183,17 @@ export class GameOverlayControls {
         this.root.bringToTop(this.menuLabel);
     }
 
-    private resolveGuideParts(viewWidth: number): GuidePart[] {
-        if (this.isMobilePortrait) {
+    private resolveGuideParts(isMobilePortrait: boolean, viewWidth: number): GuidePart[] {
+        if (isMobilePortrait) {
             return [
                 { text: 'Move ', kind: 'action' },
-                { text: '← → Swipe', kind: 'key' },
+                { text: '← →', kind: 'key' },
+                { text: '  |  ', kind: 'sep' },
+                { text: 'Drop ', kind: 'action' },
+                { text: '↓', kind: 'key' },
                 { text: '  |  ', kind: 'sep' },
                 { text: 'Rotate ', kind: 'action' },
                 { text: 'Tap', kind: 'key' },
-                { text: '  |  ', kind: 'sep' },
-                { text: 'Drop ', kind: 'action' },
-                { text: '↓ Swipe', kind: 'key' },
             ];
         }
         if (viewWidth < 860) {
@@ -222,12 +218,18 @@ export class GameOverlayControls {
             { text: 'Rotate ', kind: 'action' },
             { text: 'Z X', kind: 'key' },
             { text: '  |  ', kind: 'sep' },
-            { text: 'Hard Drop ', kind: 'action' },
+            { text: 'Drop ', kind: 'action' },
             { text: 'Space', kind: 'key' },
             { text: '  |  ', kind: 'sep' },
             { text: 'Hold ', kind: 'action' },
             { text: 'C', kind: 'key' },
         ];
+    }
+
+    private resolveIsMobilePortrait(): boolean {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        return Math.min(w, h) < 768 && w < h;
     }
 
     private renderGuide(parts: GuidePart[], fontSize: number, availableWidth: number) {

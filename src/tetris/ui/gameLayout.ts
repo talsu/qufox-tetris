@@ -119,7 +119,7 @@ export function getLayoutMetrics(): LayoutMetrics {
         nMultiPortraitAreaBottomPaddingBlocks: 0.5,
         nMultiPortraitAreaHorizontalPaddingBlocks: 1,
         topNavBarBlocks: 1.5,
-        mobileTopNavBarBlocks: 1.0,
+        mobileTopNavBarBlocks: 1.5,
         mobileInfoGapBlocks: 0.2,
     };
 }

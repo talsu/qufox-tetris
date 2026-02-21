@@ -62,7 +62,6 @@ export abstract class BasePlayScene extends BaseScene {
         this.overlayControls = new GameOverlayControls({
             scene: this,
             onMenuClick: () => this.toggleMenu(),
-            isMobilePortrait: this.layoutMode === 'mobile-portrait',
         });
 
         this.scale.on('resize', this.resize, this);

@@ -21,3 +21,16 @@ This project now includes Kenney assets under CC0.
 - Preload entry: `src/tetris/scenes/menuScene.ts`
 - Shared preload helper: `src/tetris/ui/kenneyAssets.ts`
 - Shared SFX playback hooks: `src/tetris/scenes/basePlayScene.ts`
+
+## Production Permission Note
+
+When deploying behind Nginx, ensure new asset files are world-readable and directories are traversable.
+
+- Directories: `755`
+- Files: `644`
+
+Repository helper:
+
+```bash
+bash scripts/fix-static-permissions.sh /var/www/qufox-tetris
+```

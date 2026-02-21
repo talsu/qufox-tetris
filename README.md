@@ -46,6 +46,25 @@ To generate a production-ready bundle:
 npm run build
 ```
 
+## Deployment File Permissions (Nginx)
+If newly deployed image/sound assets return `403` or `permission denied` under Nginx, normalize static file permissions after deployment.
+
+```bash
+# From repository root on the deployment server
+bash scripts/fix-static-permissions.sh /var/www/qufox-tetris
+```
+
+Recommended deploy defaults:
+- Use `umask 022` before copying build/assets (new files become `644`, directories `755`).
+- Keep static files read-only for others (`644`) and directories traversable (`755`).
+- If needed, set ownership to the Nginx worker account with env vars:
+
+```bash
+WEB_USER=www-data WEB_GROUP=www-data bash scripts/fix-static-permissions.sh /var/www/qufox-tetris
+```
+
+Avoid `chmod -R 777`; it is unnecessary and unsafe for static assets.
+
 ## Running Tests
 To execute the unit tests:
 ```bash

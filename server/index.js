@@ -237,7 +237,7 @@ io.on('connection', (socket) => {
             playerId: socket.id,
             playerName,
             roomName: room.name,
-            players: getPlayersMap(room)
+            players: getPlayersMap(room, socket.id)
         });
 
         io.emit('nmulti_room_list', getNMultiRoomList());
@@ -282,7 +282,7 @@ io.on('connection', (socket) => {
             playerId: socket.id,
             playerName,
             roomName: room.name,
-            players: getPlayersMap(room)
+            players: getPlayersMap(room, socket.id)
         });
 
         // Notify others
@@ -387,7 +387,7 @@ io.on('connection', (socket) => {
                 playerId: socket.id,
                 playerName,
                 roomName: room.name,
-                players: getPlayersMap(room)
+                players: getPlayersMap(room, socket.id)
             });
 
             socket.to(existingRoomId).emit('nmulti_player_joined', {
@@ -410,7 +410,7 @@ io.on('connection', (socket) => {
                 playerId: socket.id,
                 playerName,
                 roomName,
-                players: getPlayersMap(room)
+                players: getPlayersMap(room, socket.id)
             });
 
             io.emit('nmulti_room_list', getNMultiRoomList());

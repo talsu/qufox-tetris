@@ -22,9 +22,10 @@ describe('N-Multi Server Logic', () => {
         }));
     }
 
-    function getPlayersMap(room: any) {
+    function getPlayersMap(room: any, excludeId: string | null = null) {
         const map: Record<string, any> = {};
         for (const [sid, p] of Object.entries(room.players) as [string, any][]) {
+            if (excludeId && sid === excludeId) continue;
             map[sid] = {
                 name: p.name,
                 score: p.score,
@@ -582,7 +583,7 @@ describe('N-Multi Server Logic', () => {
                 playerId: socketId,
                 playerName,
                 roomName: room.name,
-                players: getPlayersMap(room)
+                players: getPlayersMap(room, socketId)
             };
         }
 
@@ -602,6 +603,7 @@ describe('N-Multi Server Logic', () => {
             expect(response.roomName).toBe('Created Room');
             expect(response.roomId).toBe(roomId);
             expect(response.playerId).toBe(socketId);
+            expect(Object.keys(response.players)).toHaveLength(0);
         });
 
         test('nmulti_join_room response includes roomName', () => {
@@ -618,6 +620,9 @@ describe('N-Multi Server Logic', () => {
 
             const response = buildRoomJoinedResponse(nMultiRooms[roomId], 'socket2', 'Player2');
             expect(response.roomName).toBe('Existing Room');
+            expect(Object.keys(response.players)).toHaveLength(1);
+            expect(response.players['socket1']).toBeDefined();
+            expect(response.players['socket2']).toBeUndefined();
         });
 
         test('nmulti_join_or_create response includes roomName on create', () => {
@@ -637,6 +642,7 @@ describe('N-Multi Server Logic', () => {
 
             const response = buildRoomJoinedResponse(nMultiRooms[roomId], socketId, 'Player1');
             expect(response.roomName).toBe(roomName);
+            expect(Object.keys(response.players)).toHaveLength(0);
         });
 
         test('nmulti_join_or_create response includes roomName on join', () => {
@@ -658,7 +664,9 @@ describe('N-Multi Server Logic', () => {
             const response = buildRoomJoinedResponse(room, 'socket2', 'Player2');
             expect(response.roomName).toBe('Popular Room');
             expect(response.players).toBeDefined();
-            expect(Object.keys(response.players)).toHaveLength(2);
+            expect(Object.keys(response.players)).toHaveLength(1);
+            expect(response.players['socket1']).toBeDefined();
+            expect(response.players['socket2']).toBeUndefined();
         });
 
         test('roomName with special characters is preserved', () => {

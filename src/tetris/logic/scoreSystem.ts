@@ -85,6 +85,27 @@ export class ScoreSystem {
         return this.comboCount;
     }
 
+    setAuthoritativeState(score: number, level: number, lines: number) {
+        const normalizedScore = Number.isFinite(score) ? Math.max(0, Math.floor(score)) : 0;
+        const normalizedLevel = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
+        const normalizedLines = Number.isFinite(lines) ? Math.max(0, Math.floor(lines)) : 0;
+
+        this.score = normalizedScore;
+        this.level = normalizedLevel;
+        this.clearedLines = normalizedLines;
+        this.totalLinesCleared = normalizedLines;
+
+        let nextRequired = 5;
+        for (let lv = 2; lv <= this.level; lv += 1) {
+            nextRequired += lv * 5;
+        }
+        this.nextLevelRequireClearedLines = nextRequired;
+
+        this.comboCount = -1;
+        this.isBackToBackChain = false;
+        this.maxCombo = Math.max(0, this.maxCombo);
+    }
+
     /**
      * Calculate score and stats when a piece locks.
      */

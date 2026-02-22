@@ -139,4 +139,25 @@ describe('PlayField Delay', () => {
         expect(stopSpy).toHaveBeenCalledTimes(1);
         expect(startSpy).toHaveBeenCalledTimes(1);
     });
+
+    test('spawnTetromino ignores stale spawn call when active tetromino already exists', () => {
+        const emitSpy = jest.spyOn(playField, 'emit');
+        const existingActive = { id: 'existing-active' } as unknown as Tetromino;
+        (playField as any).activeTetromino = existingActive;
+
+        playField.spawnTetromino();
+
+        expect((playField as any).activeTetromino).toBe(existingActive);
+        expect(emitSpy).not.toHaveBeenCalledWith('generateRandomType', expect.any(Function));
+    });
+
+    test('stop clears pending ARE spawn timer', () => {
+        const destroy = jest.fn();
+        (playField as any).areSpawnTimer = { destroy };
+
+        playField.stop();
+
+        expect(destroy).toHaveBeenCalledTimes(1);
+        expect((playField as any).areSpawnTimer).toBeNull();
+    });
 });

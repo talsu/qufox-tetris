@@ -4,6 +4,7 @@ import {TetrominoBoxQueue} from "./objects/tetrominoBoxQueue";
 import {LevelIndicator} from "./objects/levelIndicator";
 import {InputState, TetrominoType, RotateType} from "./const/const";
 import {ScoreSystem, GameStats} from "./logic/scoreSystem";
+import { AuthSyncState } from '../shared/types/socketPayloads';
 
 /**
  * Tetris game engine.
@@ -189,6 +190,33 @@ export class Engine {
 
     public setPlayerName(name: string | null) {
         this.levelIndicator.setPlayerName(name);
+    }
+
+    public applyAuthoritativeSync(sync: AuthSyncState, stats: { score: number; level: number; lines: number }): void {
+        const isPlayableType = (value: string): value is Exclude<TetrominoType, TetrominoType.GARBAGE> => {
+            return value === TetrominoType.I
+                || value === TetrominoType.J
+                || value === TetrominoType.L
+                || value === TetrominoType.O
+                || value === TetrominoType.S
+                || value === TetrominoType.T
+                || value === TetrominoType.Z;
+        };
+
+        const queue = sync.queue.filter(isPlayableType);
+        const bag = sync.bag.filter(isPlayableType);
+        this.queue.setAuthoritativeState(queue, bag, sync.queueRngState);
+
+        this.holdBox.clear();
+        if (sync.hold && isPlayableType(sync.hold)) {
+            this.holdBox.hold(sync.hold);
+        }
+
+        this.playField.applyAuthoritativeState(sync.boardCore, sync.active, sync.canHold);
+
+        this.scoreSystem.setAuthoritativeState(stats.score, stats.level, stats.lines);
+        this.playField.autoDropDelay = this.scoreSystem.getAutoDropDelay();
+        this.levelIndicator.updateStats(this.scoreSystem.getStats(this.gameTime));
     }
 
     /**

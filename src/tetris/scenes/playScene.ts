@@ -1,4 +1,4 @@
-import { PlayField } from '../objects/playField';
+import { EnginePhase, PlayField } from '../objects/playField';
 import { CONST, getBlockSize } from "../const/const";
 import { BasePlayScene } from "./basePlayScene";
 import { BotManager } from "../logic/botManager";
@@ -11,6 +11,14 @@ import {
     calcPlaySceneOpponentLayout,
 } from "../ui/gameLayout";
 import { preloadKenneyAssets } from '../ui/kenneyAssets';
+import {
+    type AuthSnapshotPayload,
+    isAuthRoundOverPayload,
+    isAuthSnapshotPayload,
+    isGameStartPayload,
+    isNMultiReceiveGarbagePayload,
+    isRoomResumedPayload,
+} from '../../shared/types/socketPayloads';
 
 export class PlayScene extends BasePlayScene {
     private opponentPlayField: PlayField;
@@ -22,9 +30,114 @@ export class PlayScene extends BasePlayScene {
     private disconnectNoticeTitle: Phaser.GameObjects.Text | null = null;
     private disconnectNoticeMessage: Phaser.GameObjects.Text | null = null;
     private disconnectNoticeTimer: Phaser.Time.TimerEvent | null = null;
+    private resumeToken: string | null = null;
+    private useAuthoritativeServer: boolean = false;
+    private inputSeq: number = 0;
+    private isHost: boolean = false;
+    private authQueueSeed: number | null = null;
+    private needsAuthoritativeResync: boolean = false;
+    private localMismatchStreak: number = 0;
+    private lastOpponentBoardSnapshot: string | null = null;
+    private visibilityHandler: (() => void) | null = null;
 
     private readonly MAIN_SCALE = 1;
     private readonly SIDE_SCALE = 1;
+
+    private resolveEndGameScore(authoritativeScore?: number): number {
+        if (this.engine) {
+            return this.engine.getScore();
+        }
+        if (Number.isFinite(authoritativeScore)) {
+            return Number(authoritativeScore);
+        }
+        return 0;
+    }
+
+    private bindVisibilitySync(): void {
+        if (!this.useAuthoritativeServer || typeof document === 'undefined' || this.visibilityHandler) {
+            return;
+        }
+
+        this.visibilityHandler = () => {
+            const hidden = document.visibilityState === 'hidden';
+            if (hidden) {
+                this.needsAuthoritativeResync = true;
+                this.localMismatchStreak = 0;
+                if (this.inputManager) {
+                    this.inputManager.isEnabled = false;
+                }
+                return;
+            }
+
+            if (this.isGameRunning && !this.isGameEnded && this.inputManager) {
+                this.inputManager.isEnabled = !this.inGameMenu.isMenuOpen;
+            }
+
+            if (this.needsAuthoritativeResync && this.socket && this.resumeToken) {
+                this.socket.emit('resume_auth', { resumeToken: this.resumeToken });
+            }
+        };
+
+        document.addEventListener('visibilitychange', this.visibilityHandler);
+    }
+
+    private unbindVisibilitySync(): void {
+        if (!this.visibilityHandler || typeof document === 'undefined') {
+            return;
+        }
+        document.removeEventListener('visibilitychange', this.visibilityHandler);
+        this.visibilityHandler = null;
+    }
+
+    private maybeResyncLocalStateFromSnapshot(data: AuthSnapshotPayload): void {
+        if (!this.useAuthoritativeServer || !this.playField || !this.engine || !this.isGameRunning || this.isGameEnded) {
+            return;
+        }
+
+        const phase = this.playField.phase;
+        const isTransitionPhase = phase === EnginePhase.PATTERN
+            || phase === EnginePhase.ITERATE
+            || phase === EnginePhase.ANIMATE
+            || phase === EnginePhase.ELIMINATE;
+        if (isTransitionPhase) {
+            this.localMismatchStreak = 0;
+            return;
+        }
+
+        const localBoard = this.playField.serializeEncoded();
+        if (localBoard === data.self.board) {
+            this.localMismatchStreak = 0;
+        } else {
+            this.localMismatchStreak += 1;
+            if (data.tick >= 4 && this.localMismatchStreak >= 3) {
+                this.needsAuthoritativeResync = true;
+            }
+        }
+
+        if (this.needsAuthoritativeResync && data.self.sync) {
+            this.engine.applyAuthoritativeSync(data.self.sync, {
+                score: data.self.score,
+                level: data.self.level,
+                lines: data.self.lines,
+            });
+            this.localMismatchStreak = 0;
+            this.needsAuthoritativeResync = false;
+        }
+    }
+
+    private applyOpponentBoardSnapshot(encodedBoard: string): void {
+        if (!this.opponentPlayField) return;
+        if (encodedBoard === this.lastOpponentBoardSnapshot) return;
+        this.opponentPlayField.deserializeEncoded(encodedBoard);
+        this.lastOpponentBoardSnapshot = encodedBoard;
+    }
+
+    private isOneShotInput(direction: string): boolean {
+        return direction === 'hardDrop'
+            || direction === 'hold'
+            || direction === 'clockwise'
+            || direction === 'anticlockwise';
+    }
 
     constructor() {
         super({ key: "PlayScene", mapAdd: { game: 'game' } });
@@ -36,9 +149,15 @@ export class PlayScene extends BasePlayScene {
         this.mode = data.mode || 'single';
         this.roomName = data.roomName;
         this.botLevel = data.botLevel || 0;
+        this.isHost = false;
+        this.authQueueSeed = null;
         if (this.mode === 'multi') {
             this.socket = data.socket;
             this.roomId = data.roomId;
+            this.resumeToken = data.resumeToken || null;
+            this.isHost = Boolean(data.isHost);
+            this.authQueueSeed = Number.isFinite(data.authQueueSeed) ? Number(data.authQueueSeed) : null;
+            this.useAuthoritativeServer = true;
         }
 
         const dims = calcPlaySceneDimensions(this.layoutMode, this.mode);
@@ -49,6 +168,9 @@ export class PlayScene extends BasePlayScene {
         this.isGameRunning = false;
         this.isGameEnded = false;
         this.lastUpdateSend = 0;
+        this.needsAuthoritativeResync = false;
+        this.localMismatchStreak = 0;
+        this.lastOpponentBoardSnapshot = null;
         this.startImmediately = data.startImmediately || false;
     }
 
@@ -100,9 +222,34 @@ export class PlayScene extends BasePlayScene {
     private setupMultiplayer(): void {
         this.statusText.setText('Waiting for opponent...');
         if (!this.socket) return;
+        this.bindVisibilitySync();
 
-        this.socket.on('game_start', () => {
+        this.socket.on('connect', () => {
+            if (this.resumeToken) {
+                this.socket.emit('resume_auth', { resumeToken: this.resumeToken });
+            }
+        });
+
+        this.socket.on('room_resumed', (data: unknown) => {
+            if (!isRoomResumedPayload(data)) return;
+            if (data.resumeToken) {
+                this.resumeToken = data.resumeToken;
+            }
+            if (typeof data.isHost === 'boolean') {
+                this.isHost = data.isHost;
+            }
+            if (Number.isFinite(data.authSeed)) {
+                this.authQueueSeed = Number(data.authSeed);
+            }
+        });
+
+        this.socket.on('game_start', (startData: unknown) => {
             if (this.isGameRunning) return;
+            if (!isGameStartPayload(startData)) return;
+
+            if (Number.isFinite(startData.authSeed)) {
+                this.authQueueSeed = Number(startData.authSeed);
+            }
 
             if (this.playField) {
                 this.scene.restart({
@@ -111,6 +258,9 @@ export class PlayScene extends BasePlayScene {
                     roomId: this.roomId,
                     roomName: this.roomName,
                     botLevel: this.botLevel,
+                    isHost: this.isHost,
+                    resumeToken: this.resumeToken,
+                    authQueueSeed: this.authQueueSeed,
                     startImmediately: true,
                 });
                 return;
@@ -122,16 +272,19 @@ export class PlayScene extends BasePlayScene {
         });
 
         this.socket.on('opponent_state_update', (data) => {
+            if (this.useAuthoritativeServer) return;
             if (this.opponentPlayField) {
                 if (typeof data.board === 'string') {
-                    this.opponentPlayField.deserializeEncoded(data.board);
+                    this.applyOpponentBoardSnapshot(data.board);
                 } else {
                     this.opponentPlayField.deserialize(data.board);
+                    this.lastOpponentBoardSnapshot = null;
                 }
             }
         });
 
         this.socket.on('receive_garbage', (data) => {
+            if (this.useAuthoritativeServer) return;
             if (this.playField) {
                 this.playField.insertGarbage(data.count);
                 this.cameras.main.shake(200, 0.01);
@@ -139,12 +292,65 @@ export class PlayScene extends BasePlayScene {
         });
 
         this.socket.on('opponent_game_over', () => {
+            if (this.useAuthoritativeServer) return;
             const score = this.engine ? this.engine.getScore() : 0;
             this.showEndGameMessage('YOU WIN!', '#00ff00', score);
         });
 
+        this.socket.on('auth_snapshot', (data: unknown) => {
+            if (!this.useAuthoritativeServer || !this.playField || !this.opponentPlayField) return;
+            if (!isAuthSnapshotPayload(data)) return;
+
+            this.maybeResyncLocalStateFromSnapshot(data);
+
+            if (data.opponent.board) {
+                this.applyOpponentBoardSnapshot(data.opponent.board);
+            }
+
+            if (this.isGameRunning && data.self.isAlive === false && !this.isGameEnded) {
+                this.showEndGameMessage('GAME OVER', '#ff0000', this.resolveEndGameScore(data.self.score));
+            }
+            if (this.isGameRunning && data.opponent.isAlive === false && !this.isGameEnded) {
+                this.showEndGameMessage('YOU WIN!', '#00ff00', this.resolveEndGameScore(data.self.score));
+            }
+        });
+
+        this.socket.on('auth_receive_garbage', (data: unknown) => {
+            if (!this.useAuthoritativeServer || !this.playField || !this.isGameRunning || this.isGameEnded) return;
+            if (!isNMultiReceiveGarbagePayload(data)) return;
+            const count = Number(data.count || 0);
+            if (count <= 0) return;
+            this.playField.insertGarbage(count);
+            this.cameras.main.shake(200, 0.01);
+        });
+
+        this.socket.on('auth_round_over', (data: unknown) => {
+            if (!this.useAuthoritativeServer || !this.isGameRunning || this.isGameEnded) return;
+            if (!isAuthRoundOverPayload(data)) return;
+
+            if (data.winner === null) {
+                const score = this.resolveEndGameScore();
+                this.showEndGameMessage('DRAW', '#ffd166', score);
+                return;
+            }
+
+            const localSeat = this.isHost ? 'p1' : 'p2';
+            const didWin = data.winner === localSeat;
+            const score = this.resolveEndGameScore();
+            this.showEndGameMessage(didWin ? 'YOU WIN!' : 'GAME OVER', didWin ? '#00ff00' : '#ff0000', score);
+        });
+
         this.socket.on('restart_signal', () => {
-            this.scene.restart({ mode: 'multi', socket: this.socket, roomId: this.roomId, roomName: this.roomName, botLevel: this.botLevel });
+            this.scene.restart({
+                mode: 'multi',
+                socket: this.socket,
+                roomId: this.roomId,
+                roomName: this.roomName,
+                botLevel: this.botLevel,
+                isHost: this.isHost,
+                resumeToken: this.resumeToken,
+                authQueueSeed: this.authQueueSeed,
+            });
         });
 
         this.socket.on('opponent_disconnected', (data?: { message?: string }) => {
@@ -152,6 +358,9 @@ export class PlayScene extends BasePlayScene {
         });
 
         this.socket.emit('player_ready', { roomId: this.roomId });
+        if (this.resumeToken) {
+            this.socket.emit('resume_auth', { resumeToken: this.resumeToken });
+        }
     }
 
     private handleOpponentDisconnected(message?: string): void {
@@ -260,13 +469,19 @@ export class PlayScene extends BasePlayScene {
     }
 
     private shutdown(): void {
+        this.unbindVisibilitySync();
         if (this.socket) {
             this.socket.off('game_start');
+            this.socket.off('connect');
+            this.socket.off('room_resumed');
             this.socket.off('opponent_state_update');
             this.socket.off('receive_garbage');
             this.socket.off('opponent_game_over');
             this.socket.off('restart_signal');
             this.socket.off('opponent_disconnected');
+            this.socket.off('auth_snapshot');
+            this.socket.off('auth_receive_garbage');
+            this.socket.off('auth_round_over');
         }
         this.hideDisconnectNotice();
         this.shutdownBase();
@@ -319,24 +534,34 @@ export class PlayScene extends BasePlayScene {
         this.engine = layout.engine;
         this.bindKenneyImpactEvents();
 
-        this.engine.setAttackHandler((count) => {
-            if (this.mode === 'multi' && this.socket) {
-                this.socket.emit('send_garbage', { roomId: this.roomId, count });
+        if (this.engine) {
+            if (this.mode === 'multi' && this.useAuthoritativeServer && this.authQueueSeed !== null) {
+                this.engine.queueInstance.setSeed(this.authQueueSeed);
             }
-        });
+            this.engine.setAttackHandler((count) => {
+                if (this.mode === 'multi' && this.socket && !this.useAuthoritativeServer) {
+                    this.socket.emit('send_garbage', { roomId: this.roomId, count });
+                }
+            });
+        }
 
         this.playField.on('gameOver', () => {
-            if (this.mode === 'multi' && this.socket) {
+            if (this.mode === 'multi' && this.useAuthoritativeServer) {
+                return;
+            }
+            if (this.mode === 'multi' && this.socket && !this.useAuthoritativeServer) {
                 this.socket.emit('game_over', { roomId: this.roomId });
             }
             const score = this.engine ? this.engine.getScore() : 0;
             this.showEndGameMessage('GAME OVER', '#ff0000', score);
         });
 
-        this.engine.start();
+        if (this.engine) {
+            this.engine.start();
+        }
         this.inputManager.setDragThresholdScale(isPortrait ? 1 : currentMainScale);
 
-        if (this.botLevel > 0) {
+        if (this.botLevel > 0 && this.engine) {
             this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
             this.botManager.start();
         }
@@ -351,6 +576,9 @@ export class PlayScene extends BasePlayScene {
     }
 
     protected networkUpdate(time: number): void {
+        if (this.mode === 'multi' && this.useAuthoritativeServer) {
+            return;
+        }
         if (this.mode === 'multi' && time - this.lastUpdateSend > 100) {
             this.lastUpdateSend = time;
             if (this.playField && this.socket) {
@@ -360,6 +588,23 @@ export class PlayScene extends BasePlayScene {
                 });
             }
         }
+    }
+
+    protected onInput(direction: string, state: any): void {
+        if (this.mode === 'multi' && this.useAuthoritativeServer && this.socket && this.isGameRunning && !this.isGameEnded) {
+            if (this.isOneShotInput(direction) && state !== 'press') {
+                super.onInput(direction, state);
+                return;
+            }
+            this.inputSeq += 1;
+            this.socket.emit('auth_input', {
+                roomId: this.roomId,
+                direction,
+                state,
+                seq: this.inputSeq,
+            });
+        }
+        super.onInput(direction, state);
     }
 
     resize(gameSize, baseSize?, displaySize?, resolution?) {

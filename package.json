@@ -43,7 +43,9 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:install": "playwright install chromium",
-    "server": "node server/index.js"
+    "server:build": "tsc -p tsconfig.server.json",
+    "server:dev": "npm run server:build && node dist/server/index.js",
+    "server": "npm run server:build && node server/index.js"
   },
   "repository": {
     "type": "git",

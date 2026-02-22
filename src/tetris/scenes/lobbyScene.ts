@@ -63,6 +63,7 @@ const MULTI_CONFIG: LobbyConfig = {
         roomId: data.roomId,
         isHost: data.isHost,
         roomName: data.roomName,
+        resumeToken: data.resumeToken,
     }),
 };
 

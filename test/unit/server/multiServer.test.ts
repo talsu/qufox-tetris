@@ -391,4 +391,22 @@ describe('1v1 Multi Server Logic', () => {
             expect(result.response.roomName).toBe('URL Room');
         });
     });
+
+    describe('Authoritative round over payload', () => {
+        function buildRoundOverPayload(p1Alive: boolean, p2Alive: boolean) {
+            return { winner: p1Alive ? 'p1' : (p2Alive ? 'p2' : null) };
+        }
+
+        test('declares p1 as winner when p2 is dead', () => {
+            expect(buildRoundOverPayload(true, false)).toEqual({ winner: 'p1' });
+        });
+
+        test('declares p2 as winner when p1 is dead', () => {
+            expect(buildRoundOverPayload(false, true)).toEqual({ winner: 'p2' });
+        });
+
+        test('declares draw when both are dead', () => {
+            expect(buildRoundOverPayload(false, false)).toEqual({ winner: null });
+        });
+    });
 });

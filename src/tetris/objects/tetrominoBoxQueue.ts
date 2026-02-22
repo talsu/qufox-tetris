@@ -1,6 +1,7 @@
 import { CONST, getBlockSize, TetrominoType } from "../const/const";
 import { ObjectBase } from './objectBase';
 import { TetrominoBox } from "./tetrominoBox";
+import { nextLcg, normalizeSeed } from '../../shared/core/random';
 const BLOCK_SIZE = getBlockSize();
 
 export class TetrominoBoxQueue extends ObjectBase {
@@ -8,6 +9,7 @@ export class TetrominoBoxQueue extends ObjectBase {
     private boxes: TetrominoBox[] = [];
     private randomBag: TetrominoType[] = [];
     private typeQueue: TetrominoType[] = [];
+    private seedState: number | null = null;
 
     // Layout Constants
     private readonly BOX_WIDTH = 5 * BLOCK_SIZE;
@@ -67,6 +69,34 @@ export class TetrominoBoxQueue extends ObjectBase {
         this.container.add(box.container);
     }
 
+    private nextRandom(): number {
+        if (this.seedState === null) {
+            return Math.random();
+        }
+        const next = nextLcg(this.seedState);
+        this.seedState = next.state;
+        return next.value;
+    }
+
+    public setSeed(seed: number | null): void {
+        if (seed === null || seed === undefined || !Number.isFinite(seed)) {
+            this.seedState = null;
+            this.randomBag = [];
+            this.typeQueue = [];
+            this.boxes.forEach((box) => {
+                box.hold();
+            });
+            return;
+        }
+
+        this.seedState = normalizeSeed(seed);
+        this.randomBag = [];
+        this.typeQueue = [];
+        this.boxes.forEach((box) => {
+            box.hold();
+        });
+    }
+
     /**
      * Random tetromino type generator.
      * Push new type to Queue and return shifted item.
@@ -79,7 +109,7 @@ export class TetrominoBoxQueue extends ObjectBase {
             // If random bag is empty. copy tetromino types to random bag.
             if (!this.randomBag.length) this.randomBag = CONST.TETROMINO.TYPES.slice();
             // Get random item (type) from random bag.
-            let type = this.randomBag.splice(Math.floor(Math.random() * this.randomBag.length), 1)[0];
+            let type = this.randomBag.splice(Math.floor(this.nextRandom() * this.randomBag.length), 1)[0];
             // Push random type to type queue.
             this.typeQueue.push(type);
         }
@@ -88,7 +118,9 @@ export class TetrominoBoxQueue extends ObjectBase {
         let gotType = this.typeQueue.shift();
 
         // Update boxes for UI.
-        this.boxes.forEach((box, index) => box.hold(this.typeQueue[index]));
+        this.boxes.forEach((box, index) => {
+            box.hold(this.typeQueue[index]);
+        });
 
         // Return shifted type.
         return gotType;
@@ -106,11 +138,26 @@ export class TetrominoBoxQueue extends ObjectBase {
         return this.typeQueue.slice(0, count);
     }
 
+    public setAuthoritativeState(queue: TetrominoType[], bag: TetrominoType[], queueRngState: number): void {
+        this.typeQueue = queue.slice();
+        this.randomBag = bag.slice();
+        if (Number.isFinite(queueRngState)) {
+            this.seedState = normalizeSeed(queueRngState);
+        }
+
+        this.boxes.forEach((box, index) => {
+            box.hold(this.typeQueue[index]);
+        });
+    }
+
     /**
      * Clear type queue and boxes.
      */
     clear() {
         this.typeQueue = [];
-        this.boxes.forEach(box => box.hold());
+        this.randomBag = [];
+        this.boxes.forEach((box) => {
+            box.hold();
+        });
     }
 }

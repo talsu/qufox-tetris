@@ -432,6 +432,7 @@ export class MenuScene extends BaseScene {
                 roomId: data.roomId,
                 isHost: data.isHost,
                 roomName,
+                resumeToken: data.resumeToken,
                 botLevel,
             });
         });

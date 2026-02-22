@@ -11,6 +11,12 @@ import {
     calcNMultiOpponentArea,
 } from "../ui/gameLayout";
 import { preloadKenneyAssets } from "../ui/kenneyAssets";
+import {
+    isNMultiPlayerJoinedPayload,
+    isNMultiPlayerLeftPayload,
+    isNMultiReceiveGarbagePayload,
+    isNMultiSnapshotPayload,
+} from "../../shared/types/socketPayloads";
 
 export class NMultiPlayScene extends BasePlayScene {
     private playerId: string;
@@ -71,8 +77,8 @@ export class NMultiPlayScene extends BasePlayScene {
     }
 
     private setupSocketEvents(): void {
-        this.socket.on('nmulti_snapshot', (data: any) => {
-            if (!data?.players) return;
+        this.socket.on('nmulti_snapshot', (data: unknown) => {
+            if (!isNMultiSnapshotPayload(data)) return;
 
             const { needsFullSync } = this.snapshotManager.applySnapshot(data);
             if (needsFullSync) {
@@ -101,14 +107,16 @@ export class NMultiPlayScene extends BasePlayScene {
             this.updateRanks();
         });
 
-        this.socket.on('nmulti_player_joined', (data: any) => {
+        this.socket.on('nmulti_player_joined', (data: unknown) => {
+            if (!isNMultiPlayerJoinedPayload(data)) return;
             if (!this.miniFields.has(data.playerId)) {
                 this.addMiniField(data.playerId, data.playerName);
                 this.relayoutOpponents();
             }
         });
 
-        this.socket.on('nmulti_player_left', (data: any) => {
+        this.socket.on('nmulti_player_left', (data: unknown) => {
+            if (!isNMultiPlayerLeftPayload(data)) return;
             const mini = this.miniFields.get(data.playerId);
             if (mini) {
                 mini.destroy();
@@ -119,7 +127,8 @@ export class NMultiPlayScene extends BasePlayScene {
             }
         });
 
-        this.socket.on('nmulti_receive_garbage', (data: any) => {
+        this.socket.on('nmulti_receive_garbage', (data: unknown) => {
+            if (!isNMultiReceiveGarbagePayload(data)) return;
             if (this.playField && this.isGameRunning && !this.isGameEnded) {
                 this.playField.insertGarbage(data.count);
                 this.cameras.main.shake(200, 0.01);

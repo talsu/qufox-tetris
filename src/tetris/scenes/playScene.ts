@@ -50,6 +50,8 @@ export class PlayScene extends BasePlayScene {
     private forceAuthoritativeResyncOnce: boolean = false;
     private lastOpponentBoardSnapshot: string | null = null;
     private visibilityHandler: (() => void) | null = null;
+    private bootstrapRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> | null = null;
+    private awaitingInitialAuthSnapshot: boolean = false;
 
     private readonly MAIN_SCALE = 1;
     private readonly SIDE_SCALE = 1;
@@ -221,6 +223,45 @@ export class PlayScene extends BasePlayScene {
         this.initialAuthSnapshot = null;
     }
 
+    private revealBootstrapRenderObjectsIfReady(): void {
+        if (!this.bootstrapRenderObjects) {
+            return;
+        }
+
+        this.bootstrapRenderObjects.forEach((obj) => {
+            obj.setVisible(true);
+        });
+        this.bootstrapRenderObjects = null;
+
+        if (this.inputManager && this.isGameRunning && !this.isGameEnded) {
+            this.inputManager.isEnabled = !this.inGameMenu.isMenuOpen;
+        }
+    }
+
+    private applyInitialAuthoritativeSnapshotFromLiveTick(data: AuthSnapshotPayload): void {
+        if (!this.awaitingInitialAuthSnapshot || !this.useAuthoritativeServer || !this.engine || !this.playField) {
+            return;
+        }
+
+        if (data.self.sync) {
+            this.engine.applyAuthoritativeSync(data.self.sync, {
+                score: data.self.score,
+                level: data.self.level,
+                lines: data.self.lines,
+            });
+        }
+
+        if (data.opponent.board && this.opponentPlayField) {
+            this.applyOpponentBoardSnapshot(data.opponent.board);
+        }
+
+        this.localMismatchStreak = 0;
+        this.needsAuthoritativeResync = false;
+        this.forceAuthoritativeResyncOnce = false;
+        this.awaitingInitialAuthSnapshot = false;
+        this.revealBootstrapRenderObjectsIfReady();
+    }
+
     preload(): void {
         preloadKenneyAssets(this);
     }
@@ -370,6 +411,8 @@ export class PlayScene extends BasePlayScene {
         this.socket.on('auth_snapshot', (data: unknown) => {
             if (!this.useAuthoritativeServer || !this.playField || !this.opponentPlayField) return;
             if (!isAuthSnapshotPayload(data)) return;
+
+            this.applyInitialAuthoritativeSnapshotFromLiveTick(data);
 
             if (!data.shadowRelay) {
                 this.maybeResyncLocalStateFromSnapshot(data);
@@ -613,9 +656,14 @@ export class PlayScene extends BasePlayScene {
             layout.tetrominoQueue.container,
         ];
         if (shouldGateBootstrapRender) {
+            this.bootstrapRenderObjects = localRenderObjects;
+            this.awaitingInitialAuthSnapshot = true;
             localRenderObjects.forEach((obj) => {
                 obj.setVisible(false);
             });
+        } else {
+            this.bootstrapRenderObjects = null;
+            this.awaitingInitialAuthSnapshot = false;
         }
 
         if (this.engine) {
@@ -654,14 +702,14 @@ export class PlayScene extends BasePlayScene {
             this.applyInitialAuthoritativeBootstrap();
         }
 
-        if (shouldGateBootstrapRender) {
+        if (!shouldGateBootstrapRender) {
             localRenderObjects.forEach((obj) => {
                 obj.setVisible(true);
             });
         }
 
         this.inputManager.setDragThresholdScale(isPortrait ? 1 : currentMainScale);
-        this.inputManager.isEnabled = true;
+        this.inputManager.isEnabled = shouldGateBootstrapRender ? false : true;
 
         if (this.mode === 'single' && this.botLevel > 0 && this.engine) {
             this.botManager = new BotManager(this.engine, this.playField, this.botLevel);

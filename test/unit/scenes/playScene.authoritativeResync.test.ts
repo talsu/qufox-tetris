@@ -373,4 +373,65 @@ describe('PlayScene authoritative resync', () => {
         expect(Reflect.get(scene, 'forceAuthoritativeResyncOnce')).toBe(false);
         expect(Reflect.get(scene, 'localMismatchStreak')).toBe(0);
     });
+
+    test('keeps local board hidden and input disabled until first authoritative live snapshot', () => {
+        const scene = new PlayScene();
+        const handlers: HandlerMap = {};
+        const emit = jest.fn();
+        const setVisibleA = jest.fn();
+        const setVisibleB = jest.fn();
+        const applyAuthoritativeSync = jest.fn();
+
+        Reflect.set(scene, 'mode', 'multi');
+        Reflect.set(scene, 'useAuthoritativeServer', true);
+        Reflect.set(scene, 'isGameRunning', true);
+        Reflect.set(scene, 'isGameEnded', false);
+        Reflect.set(scene, 'roomId', 'room-1');
+        Reflect.set(scene, 'resumeToken', 'resume-token');
+        Reflect.set(scene, 'statusText', {
+            setText: jest.fn().mockReturnThis(),
+            setVisible: jest.fn().mockReturnThis(),
+            setDepth: jest.fn().mockReturnThis(),
+        });
+        Reflect.set(scene, 'inputManager', { isEnabled: false });
+        Reflect.set(scene, 'inGameMenu', { isMenuOpen: false });
+        Reflect.set(scene, 'bootstrapRenderObjects', [
+            { setVisible: setVisibleA },
+            { setVisible: setVisibleB },
+        ]);
+        Reflect.set(scene, 'awaitingInitialAuthSnapshot', true);
+        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn() });
+        Reflect.set(scene, 'playField', {
+            serializeEncoded: jest.fn(() => '9'.repeat(200)),
+            stop: jest.fn(),
+            phase: EnginePhase.FALLING,
+        });
+        Reflect.set(scene, 'engine', {
+            applyAuthoritativeSync,
+            getScore: jest.fn(() => 120),
+        });
+        Reflect.set(scene, 'socket', {
+            on: jest.fn((event: string, cb: (data: unknown) => void) => {
+                handlers[event] = cb;
+            }),
+            off: jest.fn(),
+            emit,
+        });
+
+        const setupMultiplayer = Reflect.get(scene, 'setupMultiplayer') as () => void;
+        setupMultiplayer.call(scene);
+
+        const snapshot = buildSyncSnapshot('0'.repeat(200), 0);
+        handlers.auth_snapshot(snapshot);
+
+        expect(applyAuthoritativeSync).toHaveBeenCalledWith(snapshot.self.sync, {
+            score: snapshot.self.score,
+            level: snapshot.self.level,
+            lines: snapshot.self.lines,
+        });
+        expect(setVisibleA).toHaveBeenCalledWith(true);
+        expect(setVisibleB).toHaveBeenCalledWith(true);
+        expect(Reflect.get(scene, 'awaitingInitialAuthSnapshot')).toBe(false);
+        expect((Reflect.get(scene, 'inputManager') as { isEnabled: boolean }).isEnabled).toBe(true);
+    });
 });

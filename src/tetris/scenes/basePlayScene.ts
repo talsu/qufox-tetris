@@ -98,6 +98,13 @@ export abstract class BasePlayScene extends BaseScene {
         if (this.engine) this.engine.onInput(direction, state);
     }
 
+    protected isOneShotInput(direction: string): boolean {
+        return direction === 'hardDrop'
+            || direction === 'hold'
+            || direction === 'clockwise'
+            || direction === 'anticlockwise';
+    }
+
     protected bindKenneyImpactEvents(): void {
         if (!this.playField) return;
 

@@ -1,4 +1,4 @@
-import { EnginePhase, PlayField } from '../objects/playField';
+import { PlayField } from '../objects/playField';
 import { CONST, getBlockSize } from "../const/const";
 import { BasePlayScene } from "./basePlayScene";
 import { BotManager } from "../logic/botManager";
@@ -18,7 +18,16 @@ import {
     isGameStartPayload,
     isNMultiReceiveGarbagePayload,
     isRoomResumedPayload,
+    toFiniteNumberOrNull,
 } from '../../shared/types/socketPayloads';
+import {
+    applyAuthoritativeBootstrapSnapshot,
+    bindDocumentVisibilityHandler,
+    computeResyncMismatchState,
+    isResyncTransitionPhase,
+    shouldSkipResyncByAck,
+    unbindDocumentVisibilityHandler,
+} from './multiplayerSyncUtils';
 
 export class PlayScene extends BasePlayScene {
     private opponentPlayField: PlayField;
@@ -35,13 +44,23 @@ export class PlayScene extends BasePlayScene {
     private inputSeq: number = 0;
     private isHost: boolean = false;
     private authQueueSeed: number | null = null;
+    private initialAuthSnapshot: AuthSnapshotPayload | null = null;
     private needsAuthoritativeResync: boolean = false;
     private localMismatchStreak: number = 0;
+    private forceAuthoritativeResyncOnce: boolean = false;
     private lastOpponentBoardSnapshot: string | null = null;
     private visibilityHandler: (() => void) | null = null;
 
     private readonly MAIN_SCALE = 1;
     private readonly SIDE_SCALE = 1;
+    private emitAuthPresence(state: 'active' | 'inactive'): void {
+        if (!this.socket || !this.roomId) return;
+        this.socket.emit('auth_presence', {
+            roomId: this.roomId,
+            state,
+            lastInputSeq: this.inputSeq,
+        });
+    }
 
     private resolveEndGameScore(authoritativeScore?: number): number {
         if (this.engine) {
@@ -58,14 +77,16 @@ export class PlayScene extends BasePlayScene {
             return;
         }
 
-        this.visibilityHandler = () => {
+        this.visibilityHandler = bindDocumentVisibilityHandler(this.visibilityHandler, () => {
             const hidden = document.visibilityState === 'hidden';
             if (hidden) {
                 this.needsAuthoritativeResync = true;
                 this.localMismatchStreak = 0;
+                this.forceAuthoritativeResyncOnce = false;
                 if (this.inputManager) {
                     this.inputManager.isEnabled = false;
                 }
+                this.emitAuthPresence('inactive');
                 return;
             }
 
@@ -73,20 +94,17 @@ export class PlayScene extends BasePlayScene {
                 this.inputManager.isEnabled = !this.inGameMenu.isMenuOpen;
             }
 
+            this.emitAuthPresence('active');
+
             if (this.needsAuthoritativeResync && this.socket && this.resumeToken) {
+                this.forceAuthoritativeResyncOnce = true;
                 this.socket.emit('resume_auth', { resumeToken: this.resumeToken });
             }
-        };
-
-        document.addEventListener('visibilitychange', this.visibilityHandler);
+        });
     }
 
     private unbindVisibilitySync(): void {
-        if (!this.visibilityHandler || typeof document === 'undefined') {
-            return;
-        }
-        document.removeEventListener('visibilitychange', this.visibilityHandler);
-        this.visibilityHandler = null;
+        this.visibilityHandler = unbindDocumentVisibilityHandler(this.visibilityHandler);
     }
 
     private maybeResyncLocalStateFromSnapshot(data: AuthSnapshotPayload): void {
@@ -94,27 +112,36 @@ export class PlayScene extends BasePlayScene {
             return;
         }
 
-        const phase = this.playField.phase;
-        const isTransitionPhase = phase === EnginePhase.PATTERN
-            || phase === EnginePhase.ITERATE
-            || phase === EnginePhase.ANIMATE
-            || phase === EnginePhase.ELIMINATE;
-        if (isTransitionPhase) {
+        if (shouldSkipResyncByAck(data.serverAckInputSeq, this.inputSeq)) {
+            return;
+        }
+
+        if (isResyncTransitionPhase(this.playField.phase)) {
             this.localMismatchStreak = 0;
             return;
         }
 
-        const localBoard = this.playField.serializeEncoded();
-        if (localBoard === data.self.board) {
-            this.localMismatchStreak = 0;
-        } else {
-            this.localMismatchStreak += 1;
-            if (data.tick >= 4 && this.localMismatchStreak >= 3) {
-                this.needsAuthoritativeResync = true;
-            }
+        const mismatch = computeResyncMismatchState({
+            localBoard: this.playField.serializeEncoded(),
+            remoteBoard: data.self.board,
+            tick: data.tick,
+            mismatchStreak: this.localMismatchStreak,
+            needsAuthoritativeResync: this.needsAuthoritativeResync,
+            mismatchThreshold: 3,
+        });
+        this.localMismatchStreak = mismatch.mismatchStreak;
+        this.needsAuthoritativeResync = mismatch.needsAuthoritativeResync;
+        const shouldApplyForcedResync = this.forceAuthoritativeResyncOnce && this.needsAuthoritativeResync;
+
+        if (!this.needsAuthoritativeResync) {
+            return;
         }
 
-        if (this.needsAuthoritativeResync && data.self.sync) {
+        if (this.localMismatchStreak === 0 && !shouldApplyForcedResync) {
+            return;
+        }
+
+        if (data.self.sync) {
             this.engine.applyAuthoritativeSync(data.self.sync, {
                 score: data.self.score,
                 level: data.self.level,
@@ -122,6 +149,7 @@ export class PlayScene extends BasePlayScene {
             });
             this.localMismatchStreak = 0;
             this.needsAuthoritativeResync = false;
+            this.forceAuthoritativeResyncOnce = false;
         }
     }
 
@@ -130,13 +158,6 @@ export class PlayScene extends BasePlayScene {
         if (encodedBoard === this.lastOpponentBoardSnapshot) return;
         this.opponentPlayField.deserializeEncoded(encodedBoard);
         this.lastOpponentBoardSnapshot = encodedBoard;
-    }
-
-    private isOneShotInput(direction: string): boolean {
-        return direction === 'hardDrop'
-            || direction === 'hold'
-            || direction === 'clockwise'
-            || direction === 'anticlockwise';
     }
 
     constructor() {
@@ -151,12 +172,14 @@ export class PlayScene extends BasePlayScene {
         this.botLevel = data.botLevel || 0;
         this.isHost = false;
         this.authQueueSeed = null;
+        this.initialAuthSnapshot = null;
         if (this.mode === 'multi') {
             this.socket = data.socket;
             this.roomId = data.roomId;
             this.resumeToken = data.resumeToken || null;
             this.isHost = Boolean(data.isHost);
-            this.authQueueSeed = Number.isFinite(data.authQueueSeed) ? Number(data.authQueueSeed) : null;
+            this.authQueueSeed = toFiniteNumberOrNull(data.authQueueSeed);
+            this.initialAuthSnapshot = isAuthSnapshotPayload(data.authSnapshot) ? data.authSnapshot : null;
             this.useAuthoritativeServer = true;
         }
 
@@ -170,8 +193,32 @@ export class PlayScene extends BasePlayScene {
         this.lastUpdateSend = 0;
         this.needsAuthoritativeResync = false;
         this.localMismatchStreak = 0;
+        this.forceAuthoritativeResyncOnce = false;
         this.lastOpponentBoardSnapshot = null;
         this.startImmediately = data.startImmediately || false;
+    }
+
+    private applyInitialAuthoritativeBootstrap(): void {
+        if (!this.useAuthoritativeServer || !this.initialAuthSnapshot || !this.engine) {
+            return;
+        }
+
+        const snapshot = this.initialAuthSnapshot;
+        applyAuthoritativeBootstrapSnapshot(snapshot, {
+            applySelfSync: (sync, stats) => {
+                this.engine.applyAuthoritativeSync(sync, stats);
+            },
+            applyOpponent: (opponent) => {
+                if (opponent.board && this.opponentPlayField) {
+                    this.applyOpponentBoardSnapshot(opponent.board);
+                }
+            },
+        });
+
+        this.localMismatchStreak = 0;
+        this.needsAuthoritativeResync = false;
+        this.forceAuthoritativeResyncOnce = false;
+        this.initialAuthSnapshot = null;
     }
 
     preload(): void {
@@ -232,14 +279,35 @@ export class PlayScene extends BasePlayScene {
 
         this.socket.on('room_resumed', (data: unknown) => {
             if (!isRoomResumedPayload(data)) return;
+            const shouldApplyResumeSync = this.needsAuthoritativeResync;
             if (data.resumeToken) {
                 this.resumeToken = data.resumeToken;
             }
             if (typeof data.isHost === 'boolean') {
                 this.isHost = data.isHost;
             }
-            if (Number.isFinite(data.authSeed)) {
-                this.authQueueSeed = Number(data.authSeed);
+            this.authQueueSeed = toFiniteNumberOrNull(data.authSeed) ?? this.authQueueSeed;
+
+            if (shouldApplyResumeSync && data.shadowSelf && data.shadowSelf.sync && this.engine) {
+                this.engine.applyAuthoritativeSync(data.shadowSelf.sync, {
+                    score: Number(data.shadowSelf.score || 0),
+                    level: Number(data.shadowSelf.level || 1),
+                    lines: Number(data.shadowSelf.lines || 0),
+                });
+                this.needsAuthoritativeResync = false;
+                this.localMismatchStreak = 0;
+                this.forceAuthoritativeResyncOnce = false;
+            }
+            if (shouldApplyResumeSync && data.shadowOpponent && typeof data.shadowOpponent.board === 'string') {
+                this.applyOpponentBoardSnapshot(data.shadowOpponent.board);
+            }
+            if (shouldApplyResumeSync && Array.isArray(data.pendingGarbage) && this.playField) {
+                for (const pending of data.pendingGarbage) {
+                    const count = Number(pending.count || 0);
+                    if (count > 0) {
+                        this.playField.insertGarbage(count);
+                    }
+                }
             }
         });
 
@@ -247,8 +315,9 @@ export class PlayScene extends BasePlayScene {
             if (this.isGameRunning) return;
             if (!isGameStartPayload(startData)) return;
 
-            if (Number.isFinite(startData.authSeed)) {
-                this.authQueueSeed = Number(startData.authSeed);
+            this.authQueueSeed = toFiniteNumberOrNull(startData.authSeed) ?? this.authQueueSeed;
+            if (startData.authSnapshot && isAuthSnapshotPayload(startData.authSnapshot)) {
+                this.initialAuthSnapshot = startData.authSnapshot;
             }
 
             if (this.playField) {
@@ -261,6 +330,7 @@ export class PlayScene extends BasePlayScene {
                     isHost: this.isHost,
                     resumeToken: this.resumeToken,
                     authQueueSeed: this.authQueueSeed,
+                    authSnapshot: this.initialAuthSnapshot,
                     startImmediately: true,
                 });
                 return;
@@ -292,7 +362,7 @@ export class PlayScene extends BasePlayScene {
         });
 
         this.socket.on('opponent_game_over', () => {
-            if (this.useAuthoritativeServer) return;
+            if (!this.isGameRunning || this.isGameEnded) return;
             const score = this.engine ? this.engine.getScore() : 0;
             this.showEndGameMessage('YOU WIN!', '#00ff00', score);
         });
@@ -301,7 +371,9 @@ export class PlayScene extends BasePlayScene {
             if (!this.useAuthoritativeServer || !this.playField || !this.opponentPlayField) return;
             if (!isAuthSnapshotPayload(data)) return;
 
-            this.maybeResyncLocalStateFromSnapshot(data);
+            if (!data.shadowRelay) {
+                this.maybeResyncLocalStateFromSnapshot(data);
+            }
 
             if (data.opponent.board) {
                 this.applyOpponentBoardSnapshot(data.opponent.board);
@@ -350,6 +422,7 @@ export class PlayScene extends BasePlayScene {
                 isHost: this.isHost,
                 resumeToken: this.resumeToken,
                 authQueueSeed: this.authQueueSeed,
+                authSnapshot: this.initialAuthSnapshot,
             });
         });
 
@@ -358,9 +431,7 @@ export class PlayScene extends BasePlayScene {
         });
 
         this.socket.emit('player_ready', { roomId: this.roomId });
-        if (this.resumeToken) {
-            this.socket.emit('resume_auth', { resumeToken: this.resumeToken });
-        }
+        this.emitAuthPresence('active');
     }
 
     private handleOpponentDisconnected(message?: string): void {
@@ -504,7 +575,7 @@ export class PlayScene extends BasePlayScene {
 
     protected startGame(): void {
         this.isGameRunning = true;
-        this.inputManager.isEnabled = true;
+        this.inputManager.isEnabled = false;
 
         const isPortrait = this.layoutMode === 'mobile-portrait';
         const currentMainScale = this.mode === 'single' ? this.MAIN_SCALE : 1;
@@ -534,22 +605,36 @@ export class PlayScene extends BasePlayScene {
         this.engine = layout.engine;
         this.bindKenneyImpactEvents();
 
+        const shouldGateBootstrapRender = this.mode === 'multi' && this.useAuthoritativeServer;
+        const localRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> = [
+            layout.playField.container,
+            layout.holdBox.container,
+            layout.levelIndicator.container,
+            layout.tetrominoQueue.container,
+        ];
+        if (shouldGateBootstrapRender) {
+            localRenderObjects.forEach((obj) => {
+                obj.setVisible(false);
+            });
+        }
+
         if (this.engine) {
             if (this.mode === 'multi' && this.useAuthoritativeServer && this.authQueueSeed !== null) {
                 this.engine.queueInstance.setSeed(this.authQueueSeed);
             }
             this.engine.setAttackHandler((count) => {
-                if (this.mode === 'multi' && this.socket && !this.useAuthoritativeServer) {
-                    this.socket.emit('send_garbage', { roomId: this.roomId, count });
+                if (this.mode === 'multi' && this.socket) {
+                    if (this.useAuthoritativeServer) {
+                        this.socket.emit('auth_send_garbage', { roomId: this.roomId, count });
+                    } else {
+                        this.socket.emit('send_garbage', { roomId: this.roomId, count });
+                    }
                 }
             });
         }
 
         this.playField.on('gameOver', () => {
-            if (this.mode === 'multi' && this.useAuthoritativeServer) {
-                return;
-            }
-            if (this.mode === 'multi' && this.socket && !this.useAuthoritativeServer) {
+            if (this.mode === 'multi' && this.socket) {
                 this.socket.emit('game_over', { roomId: this.roomId });
             }
             const score = this.engine ? this.engine.getScore() : 0;
@@ -559,12 +644,6 @@ export class PlayScene extends BasePlayScene {
         if (this.engine) {
             this.engine.start();
         }
-        this.inputManager.setDragThresholdScale(isPortrait ? 1 : currentMainScale);
-
-        if (this.botLevel > 0 && this.engine) {
-            this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
-            this.botManager.start();
-        }
 
         if (this.mode === 'multi') {
             const rawPlayFieldWidth = getBlockSize() * CONST.PLAY_FIELD.COL_COUNT;
@@ -572,11 +651,28 @@ export class PlayScene extends BasePlayScene {
             const opponentLayout = calcPlaySceneOpponentLayout(this.layoutMode, this.GAME_WIDTH, this.GAME_HEIGHT, pos.y);
             this.opponentPlayField = new PlayField(this, opponentLayout.x, opponentLayout.y, rawPlayFieldWidth, rawPlayFieldHeight);
             this.opponentPlayField.setScale(opponentLayout.scale);
+            this.applyInitialAuthoritativeBootstrap();
         }
+
+        if (shouldGateBootstrapRender) {
+            localRenderObjects.forEach((obj) => {
+                obj.setVisible(true);
+            });
+        }
+
+        this.inputManager.setDragThresholdScale(isPortrait ? 1 : currentMainScale);
+        this.inputManager.isEnabled = true;
+
+        if (this.botLevel > 0 && this.engine) {
+            this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
+            this.botManager.start();
+        }
+
     }
 
     protected networkUpdate(time: number): void {
         if (this.mode === 'multi' && this.useAuthoritativeServer) {
+            void time;
             return;
         }
         if (this.mode === 'multi' && time - this.lastUpdateSend > 100) {

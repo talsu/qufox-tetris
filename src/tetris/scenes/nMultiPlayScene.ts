@@ -1,4 +1,4 @@
-import { CONST } from "../const/const";
+import { CONST, InputState } from "../const/const";
 import { MiniPlayField } from "../objects/miniPlayField";
 import { BotManager } from "../logic/botManager";
 import { BasePlayScene } from "./basePlayScene";
@@ -12,11 +12,22 @@ import {
 } from "../ui/gameLayout";
 import { preloadKenneyAssets } from "../ui/kenneyAssets";
 import {
+    type NMultiAuthSnapshotPayload,
+    isNMultiAuthSnapshotPayload,
     isNMultiPlayerJoinedPayload,
     isNMultiPlayerLeftPayload,
     isNMultiReceiveGarbagePayload,
     isNMultiSnapshotPayload,
+    toFiniteNumberOrNull,
 } from "../../shared/types/socketPayloads";
+import {
+    applyAuthoritativeBootstrapSnapshot,
+    bindDocumentVisibilityHandler,
+    computeResyncMismatchState,
+    isResyncTransitionPhase,
+    shouldSkipResyncByAck,
+    unbindDocumentVisibilityHandler,
+} from './multiplayerSyncUtils';
 
 export class NMultiPlayScene extends BasePlayScene {
     private playerId: string;
@@ -24,6 +35,13 @@ export class NMultiPlayScene extends BasePlayScene {
     private miniFields: Map<string, MiniPlayField> = new Map();
     private opponentContainer: Phaser.GameObjects.Container;
     private snapshotManager: SnapshotManager;
+    private visibilityHandler: (() => void) | null = null;
+    private inputSeq: number = 0;
+    private needsAuthoritativeResync: boolean = false;
+    private localMismatchStreak: number = 0;
+    private forceAuthoritativeResyncOnce: boolean = false;
+    private authQueueSeed: number | null = null;
+    private initialAuthSnapshot: NMultiAuthSnapshotPayload | null = null;
 
     constructor() {
         super({ key: "NMultiPlayScene" });
@@ -42,6 +60,8 @@ export class NMultiPlayScene extends BasePlayScene {
         this.playerId = data.playerId;
         this.playerName = data.playerName;
         this.botLevel = data.botLevel || 0;
+        this.authQueueSeed = toFiniteNumberOrNull(data.authSeed);
+        this.initialAuthSnapshot = isNMultiAuthSnapshotPayload(data.authSnapshot) ? data.authSnapshot : null;
 
         this.snapshotManager = new SnapshotManager(this.playerId, data.initialPlayers ?? {});
 
@@ -49,6 +69,27 @@ export class NMultiPlayScene extends BasePlayScene {
         this.isGameRunning = false;
         this.isGameEnded = false;
         this.lastUpdateSend = 0;
+        this.inputSeq = 0;
+        this.needsAuthoritativeResync = false;
+        this.localMismatchStreak = 0;
+        this.forceAuthoritativeResyncOnce = false;
+    }
+
+    private applyInitialAuthoritativeBootstrap(): void {
+        if (!this.initialAuthSnapshot || !this.engine) {
+            return;
+        }
+
+        applyAuthoritativeBootstrapSnapshot(this.initialAuthSnapshot, {
+            applySelfSync: (sync, stats) => {
+                this.engine.applyAuthoritativeSync(sync, stats);
+            },
+        });
+
+        this.localMismatchStreak = 0;
+        this.needsAuthoritativeResync = false;
+        this.forceAuthoritativeResyncOnce = false;
+        this.initialAuthSnapshot = null;
     }
 
     preload(): void {
@@ -67,6 +108,7 @@ export class NMultiPlayScene extends BasePlayScene {
         this.opponentContainer = this.add.container(0, 0);
 
         this.setupSocketEvents();
+        this.bindVisibilitySync();
 
         for (const [id, p] of this.snapshotManager.getPlayers()) {
             this.addMiniField(id, p.name);
@@ -107,6 +149,42 @@ export class NMultiPlayScene extends BasePlayScene {
             this.updateRanks();
         });
 
+        this.socket.on('nmulti_auth_snapshot', (data: unknown) => {
+            if (!isNMultiAuthSnapshotPayload(data)) return;
+            this.maybeResyncLocalStateFromSnapshot(data);
+
+            if (this.isGameRunning && data.self.isAlive === false && !this.isGameEnded) {
+                const score = this.engine ? this.engine.getScore() : data.self.score;
+                this.showEndGameMessage('GAME OVER', '#ff0000', score);
+            }
+        });
+
+        this.socket.on('nmulti_restarted', (data: unknown) => {
+            if (!data || typeof data !== 'object') {
+                return;
+            }
+            const payload = data as Record<string, unknown>;
+            if (typeof payload.roomId !== 'string' || payload.roomId !== this.roomId) {
+                return;
+            }
+            const restartSnapshot = isNMultiAuthSnapshotPayload(payload.authSnapshot)
+                ? payload.authSnapshot
+                : null;
+            const restartSeed = toFiniteNumberOrNull(payload.authSeed);
+
+            this.scene.restart({
+                socket: this.socket,
+                roomId: this.roomId,
+                roomName: this.roomName,
+                playerId: this.playerId,
+                playerName: this.playerName,
+                initialPlayers: this.snapshotManager.getAllPlayers(),
+                botLevel: this.botLevel,
+                authSeed: restartSeed,
+                authSnapshot: restartSnapshot,
+            });
+        });
+
         this.socket.on('nmulti_player_joined', (data: unknown) => {
             if (!isNMultiPlayerJoinedPayload(data)) return;
             if (!this.miniFields.has(data.playerId)) {
@@ -134,6 +212,90 @@ export class NMultiPlayScene extends BasePlayScene {
                 this.cameras.main.shake(200, 0.01);
             }
         });
+    }
+
+    private maybeResyncLocalStateFromSnapshot(data: NMultiAuthSnapshotPayload): void {
+        if (!this.playField || !this.engine || !this.isGameRunning || this.isGameEnded) {
+            return;
+        }
+
+        if (shouldSkipResyncByAck(data.serverAckInputSeq, this.inputSeq)) {
+            return;
+        }
+
+        if (isResyncTransitionPhase(this.playField.phase)) {
+            this.localMismatchStreak = 0;
+            return;
+        }
+
+        const mismatch = computeResyncMismatchState({
+            localBoard: this.playField.serializeEncoded(),
+            remoteBoard: data.self.board,
+            tick: data.tick,
+            mismatchStreak: this.localMismatchStreak,
+            needsAuthoritativeResync: this.needsAuthoritativeResync,
+            mismatchThreshold: 2,
+        });
+        this.localMismatchStreak = mismatch.mismatchStreak;
+        this.needsAuthoritativeResync = mismatch.needsAuthoritativeResync;
+
+        const shouldApplyForcedResync = this.forceAuthoritativeResyncOnce && this.needsAuthoritativeResync;
+
+        if (this.localMismatchStreak === 0 && !shouldApplyForcedResync) {
+            return;
+        }
+
+        if (!this.needsAuthoritativeResync || !data.self.sync) {
+            return;
+        }
+
+        this.engine.applyAuthoritativeSync(data.self.sync, {
+            score: data.self.score,
+            level: data.self.level,
+            lines: data.self.lines,
+        });
+        this.localMismatchStreak = 0;
+        this.needsAuthoritativeResync = false;
+        this.forceAuthoritativeResyncOnce = false;
+    }
+
+    private emitPresence(state: 'active' | 'inactive'): void {
+        if (!this.socket || !this.roomId) return;
+        this.socket.emit('nmulti_presence', {
+            roomId: this.roomId,
+            state,
+        });
+    }
+
+    private bindVisibilitySync(): void {
+        if (typeof document === 'undefined' || this.visibilityHandler) {
+            return;
+        }
+
+        this.visibilityHandler = bindDocumentVisibilityHandler(this.visibilityHandler, () => {
+            const hidden = document.visibilityState === 'hidden';
+            if (hidden) {
+                this.emitPresence('inactive');
+                this.needsAuthoritativeResync = true;
+                this.localMismatchStreak = 0;
+                this.forceAuthoritativeResyncOnce = false;
+                if (this.inputManager) this.inputManager.isEnabled = false;
+                return;
+            }
+
+            this.emitPresence('active');
+            if (this.isGameRunning && !this.isGameEnded && this.inputManager) {
+                this.inputManager.isEnabled = !this.inGameMenu.isMenuOpen;
+            }
+            if (this.socket) {
+                this.forceAuthoritativeResyncOnce = this.needsAuthoritativeResync;
+                this.socket.emit('nmulti_request_full_sync', { roomId: this.roomId });
+            }
+        });
+    }
+
+    private unbindVisibilitySync(): void {
+        this.visibilityHandler = unbindDocumentVisibilityHandler(this.visibilityHandler);
     }
 
     private addMiniField(id: string, name: string): void {
@@ -211,8 +373,11 @@ export class NMultiPlayScene extends BasePlayScene {
     }
 
     private shutdown(): void {
+        this.unbindVisibilitySync();
         if (this.socket) {
             this.socket.off('nmulti_snapshot');
+            this.socket.off('nmulti_auth_snapshot');
+            this.socket.off('nmulti_restarted');
             this.socket.off('nmulti_player_joined');
             this.socket.off('nmulti_player_left');
             this.socket.off('nmulti_receive_garbage');
@@ -235,16 +400,11 @@ export class NMultiPlayScene extends BasePlayScene {
         if (this.socket) this.socket.emit('nmulti_restart', { roomId: this.roomId });
         this.inGameMenu.resetState();
         this.isGameEnded = false;
+        this.isGameRunning = false;
+        this.statusText.setText('Restarting...').setVisible(true);
+        this.inputManager.isEnabled = false;
         if (this.playField) this.playField.stop();
-        this.scene.restart({
-            socket: this.socket,
-            roomId: this.roomId,
-            roomName: this.roomName,
-            playerId: this.playerId,
-            playerName: this.playerName,
-            initialPlayers: this.snapshotManager.getAllPlayers(),
-            botLevel: this.botLevel,
-        });
+        if (this.botManager) this.botManager.stop();
     }
 
     protected showEndGameMessage(mainText: string, color: string, score?: number): void {
@@ -254,7 +414,7 @@ export class NMultiPlayScene extends BasePlayScene {
 
     protected startGame(): void {
         this.isGameRunning = true;
-        this.inputManager.isEnabled = true;
+        this.inputManager.isEnabled = false;
 
         const isPortrait = this.layoutMode === 'mobile-portrait';
         const pos = isPortrait
@@ -276,11 +436,22 @@ export class NMultiPlayScene extends BasePlayScene {
         this.bindKenneyImpactEvents();
         this.engine.setPlayerName(this.playerName);
 
-        this.engine.setAttackHandler((count) => {
-            if (!this.socket) return;
-            const targetId = this.pickRandomAliveOpponentId();
-            if (!targetId) return;
-            this.socket.emit('nmulti_send_garbage', { roomId: this.roomId, targetId, count });
+        const localRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> = [
+            layout.playField.container,
+            layout.holdBox.container,
+            layout.levelIndicator.container,
+            layout.tetrominoQueue.container,
+        ];
+        localRenderObjects.forEach((obj) => {
+            obj.setVisible(false);
+        });
+
+        if (this.authQueueSeed !== null) {
+            this.engine.queueInstance.setSeed(this.authQueueSeed);
+        }
+
+        this.engine.setAttackHandler(() => {
+            // Server-authoritative mode: attacks are computed on server simulation only.
         });
 
         this.playField.on('gameOver', () => {
@@ -289,7 +460,12 @@ export class NMultiPlayScene extends BasePlayScene {
         });
 
         this.engine.start();
+        this.applyInitialAuthoritativeBootstrap();
         this.inputManager.setDragThresholdScale(1);
+        localRenderObjects.forEach((obj) => {
+            obj.setVisible(true);
+        });
+        this.inputManager.isEnabled = true;
 
         if (this.botLevel > 0) {
             this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
@@ -301,19 +477,7 @@ export class NMultiPlayScene extends BasePlayScene {
     }
 
     protected networkUpdate(time: number): void {
-        if (time - this.lastUpdateSend > 200) {
-            this.lastUpdateSend = time;
-            if (this.playField && this.socket) {
-                const stats = this.engine.getStats();
-                this.socket.emit('nmulti_update_state', {
-                    roomId: this.roomId,
-                    score: stats.score,
-                    level: stats.level,
-                    lines: stats.lines,
-                    board: this.playField.serializeEncoded(),
-                });
-            }
-        }
+        void time;
     }
 
     private pickRandomAliveOpponentId(): string | null {
@@ -324,4 +488,21 @@ export class NMultiPlayScene extends BasePlayScene {
         if (alive.length === 0) return null;
         return alive[Math.floor(Math.random() * alive.length)];
     }
+
+    protected onInput(direction: string, state: InputState): void {
+        if (this.socket && this.isGameRunning && !this.isGameEnded) {
+            const isOneShot = this.isOneShotInput(direction);
+            if (!isOneShot || state === InputState.PRESS) {
+                this.inputSeq += 1;
+                this.socket.emit('nmulti_auth_input', {
+                    roomId: this.roomId,
+                    direction,
+                    state,
+                    seq: this.inputSeq,
+                });
+            }
+        }
+        super.onInput(direction, state);
+    }
+
 }

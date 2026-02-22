@@ -115,6 +115,14 @@ describe('AuthoritativeMatch', () => {
         expect(serverSeq.every((piece) => piece !== null)).toBe(true);
     });
 
+    test('keeps six preview queue entries in authoritative snapshot', () => {
+        const match = new AuthoritativeMatch('A', 'B', 98765, 43210);
+
+        const snapshot = match.getSnapshotFor('p1');
+
+        expect(snapshot.self.sync.queue).toHaveLength(6);
+    });
+
     test('ignores hardDrop hold state to avoid duplicate drops in same tick', () => {
         const seed = 4321;
 
@@ -158,6 +166,9 @@ describe('AuthoritativeMatch', () => {
             rotate: '0',
             col: 4,
             row: 0,
+            lowestRow: 0,
+            manipulationCount: 0,
+            lockDelayMsCounter: 0,
             droppedRotateType: '0',
             lastMovement: 'spawn',
             lastKickDataIndex: 0,
@@ -185,5 +196,41 @@ describe('AuthoritativeMatch', () => {
 
         const snapshot = match.getSnapshotFor('p1').self;
         expect(snapshot.score).toBeGreaterThan(0);
+    });
+
+    test('does not lock immediately on grounded soft drop and respects lock delay', () => {
+        const match = new AuthoritativeMatch('A', 'B', 2468, 99991);
+        const p1 = match.players.p1;
+
+        p1.active = {
+            type: 'O',
+            rotate: '0',
+            col: 3,
+            row: 18,
+            lowestRow: 18,
+            manipulationCount: 0,
+            lockDelayMsCounter: 0,
+            droppedRotateType: '0',
+            lastMovement: 'spawn',
+            lastKickDataIndex: 0,
+            dropCounter: {
+                softDrop: 0,
+                hardDrop: 0,
+                autoDrop: 0,
+            },
+        };
+
+        match.enqueue('p1', 'softDrop', 'press', 1);
+        match.step();
+
+        expect(match.players.p1.active).toBeTruthy();
+        expect(match.players.p1.active.lockDelayMsCounter).toBe(100);
+
+        for (let i = 0; i < 4; i += 1) {
+            match.step();
+        }
+
+        const bottomRow = match.players.p1.board[19];
+        expect(bottomRow.includes('O')).toBe(true);
     });
 });

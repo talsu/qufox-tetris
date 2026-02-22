@@ -5,6 +5,8 @@ import { ScoreSystem } from '../../tetris/logic/scoreSystem';
 
 const BOARD_ROWS = 20;
 const BOARD_COLS = 10;
+const AUTH_TICK_MS = 100;
+const PREVIEW_QUEUE_SIZE = 6;
 
 const ROTATIONS = CONST.TETROMINO.ROTATE_SEQ as Rotation[];
 type Rotation = RotateType;
@@ -17,6 +19,9 @@ type ActivePiece = {
     rotate: Rotation;
     col: number;
     row: number;
+    lowestRow: number;
+    manipulationCount: number;
+    lockDelayMsCounter: number;
     droppedRotateType: Rotation;
     lastMovement: string;
     lastKickDataIndex: number;
@@ -145,7 +150,7 @@ function canPlace(player: PlayerState, active: ActivePiece, col: number, row: nu
 }
 
 function ensureQueue(player: PlayerState): void {
-    while (player.queue.length < 5) {
+    while (player.queue.length < PREVIEW_QUEUE_SIZE) {
         if (player.bag.length === 0) {
             player.bag = TYPES.slice();
         }
@@ -165,6 +170,9 @@ function spawn(player: PlayerState, type?: PieceType): boolean {
         rotate: RotateType.UP,
         col: 3,
         row: -2,
+        lowestRow: -2,
+        manipulationCount: 0,
+        lockDelayMsCounter: 0,
         droppedRotateType: RotateType.UP,
         lastMovement: 'spawn',
         lastKickDataIndex: 0,
@@ -309,12 +317,36 @@ function moveDown(player: PlayerState, dropType: 'softDrop' | 'hardDrop' | 'auto
         active.row = nextRow;
         active.lastMovement = 'down';
         active.dropCounter[dropType] += 1;
+        if (active.row > active.lowestRow) {
+            active.lowestRow = active.row;
+            active.manipulationCount = 0;
+        }
         if (active.row > -2) {
             active.droppedRotateType = active.rotate;
         }
         return true;
     }
     return false;
+}
+
+function isLockable(player: PlayerState, active: ActivePiece): boolean {
+    return !canPlace(player, active, active.col, active.row + 1, active.rotate);
+}
+
+function handleSuccessfulManipulation(player: PlayerState): void {
+    if (!player.active) return;
+    const active = player.active;
+
+    if (active.row > active.lowestRow) {
+        active.lowestRow = active.row;
+        active.manipulationCount = 0;
+    } else {
+        active.manipulationCount += 1;
+    }
+
+    if (isLockable(player, active) && active.manipulationCount <= 15) {
+        active.lockDelayMsCounter = 0;
+    }
 }
 
 function applyInput(player: PlayerState, input: { direction: string; state: string }): number {
@@ -333,6 +365,7 @@ function applyInput(player: PlayerState, input: { direction: string; state: stri
         if (canPlace(player, active, col, active.row, active.rotate)) {
             active.col = col;
             active.lastMovement = 'left';
+            handleSuccessfulManipulation(player);
         }
         return 0;
     }
@@ -341,12 +374,13 @@ function applyInput(player: PlayerState, input: { direction: string; state: stri
         if (canPlace(player, active, col, active.row, active.rotate)) {
             active.col = col;
             active.lastMovement = 'right';
+            handleSuccessfulManipulation(player);
         }
         return 0;
     }
     if (direction === 'softDrop') {
-        if (!moveDown(player, 'softDrop')) {
-            return lockPiece(player);
+        if (moveDown(player, 'softDrop') && player.active && isLockable(player, player.active)) {
+            player.active.lockDelayMsCounter = 0;
         }
         return 0;
     }
@@ -378,6 +412,7 @@ function applyInput(player: PlayerState, input: { direction: string; state: stri
             active.lastMovement = 'rotate';
             active.lastKickDataIndex = attemptIndex;
             active.droppedRotateType = rotate;
+            handleSuccessfulManipulation(player);
             break;
         }
         return 0;
@@ -512,9 +547,19 @@ export class AuthoritativeMatch {
             while (player.isAlive && player.active && player.gravityMsCounter >= dropDelay) {
                 player.gravityMsCounter -= dropDelay;
                 if (!moveDown(player)) {
-                    attacks[key] += lockPiece(player);
                     break;
                 }
+            }
+
+            if (!player.isAlive || !player.active) continue;
+
+            if (isLockable(player, player.active)) {
+                player.active.lockDelayMsCounter += AUTH_TICK_MS;
+                if (player.active.lockDelayMsCounter >= CONST.PLAY_FIELD.LOCK_DELAY_MS) {
+                    attacks[key] += lockPiece(player);
+                }
+            } else {
+                player.active.lockDelayMsCounter = 0;
             }
         }
 

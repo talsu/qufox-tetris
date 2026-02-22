@@ -236,10 +236,14 @@ describe('URL Routing', () => {
                 socket: {},
                 roomId: 'room-123',
                 isHost: true,
-                roomName: 'Test Room'
+                roomName: 'Test Room',
+                authQueueSeed: 123,
+                authSnapshot: { tick: 0 },
             };
 
             expect(sceneData.roomName).toBe('Test Room');
+            expect(sceneData.authQueueSeed).toBe(123);
+            expect(sceneData.authSnapshot).toEqual({ tick: 0 });
         });
 
         test('n-multi scene data includes roomName', () => {
@@ -249,10 +253,14 @@ describe('URL Routing', () => {
                 playerId: 'player-1',
                 playerName: 'Player1',
                 initialPlayers: {},
-                roomName: 'Test Room'
+                roomName: 'Test Room',
+                authSeed: 123,
+                authSnapshot: { tick: 0 },
             };
 
             expect(sceneData.roomName).toBe('Test Room');
+            expect(sceneData.authSeed).toBe(123);
+            expect(sceneData.authSnapshot).toEqual({ tick: 0 });
         });
 
         test('restart data preserves roomName for 1v1', () => {

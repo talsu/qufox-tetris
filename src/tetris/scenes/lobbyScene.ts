@@ -1,9 +1,51 @@
-import { io, Socket } from "socket.io-client";
+import { io, type Socket } from "socket.io-client";
 import { BaseScene } from "./baseScene";
 import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
 import { GAME_FONT_FAMILY } from "../ui/uiStyles";
 import { PANEL_BG } from "../ui/uiStyles";
 import { KENNEY_UI_IMAGE_KEYS, preloadKenneyAssets } from "../ui/kenneyAssets";
+import {
+    extractSocketErrorMessage,
+    type NMultiRoomJoinedPayload,
+    type OneVsOneRoomJoinedPayload,
+    isNMultiRoomJoinedPayload,
+    isOneVsOneRoomJoinedPayload,
+} from "../../shared/types/socketPayloads";
+
+interface OneVsOneRoomListItem {
+    id: string;
+    name: string;
+    players: number;
+    status?: string;
+}
+
+interface NMultiRoomListItem {
+    id: string;
+    name: string;
+    playerCount: number;
+}
+
+type LobbyRoomListItem = OneVsOneRoomListItem | NMultiRoomListItem;
+type LobbyJoinedPayload = OneVsOneRoomJoinedPayload | NMultiRoomJoinedPayload;
+type LobbySceneData = Record<string, unknown>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+function isLobbyRoomListItem(value: unknown): value is LobbyRoomListItem {
+    if (!isRecord(value)) return false;
+    const hasBase = typeof value.id === 'string'
+        && typeof value.name === 'string';
+    if (!hasBase) return false;
+    if (Number.isFinite(value.playerCount)) return true;
+    return Number.isFinite(value.players);
+}
+
+function toLobbyRoomList(value: unknown): LobbyRoomListItem[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is LobbyRoomListItem => isLobbyRoomListItem(item));
+}
 
 interface LobbyConfig {
     sceneKey: string;
@@ -19,7 +61,7 @@ interface LobbyConfig {
         roomJoined: string;
         roomError: string;
     };
-    buildSceneData: (socket: Socket, data: any) => any;
+    buildSceneData: (socket: Socket, data: LobbyJoinedPayload) => LobbySceneData;
 }
 
 type BtnKind = 'blue' | 'green' | 'red';
@@ -57,14 +99,19 @@ const MULTI_CONFIG: LobbyConfig = {
         roomJoined: 'room_joined',
         roomError: 'room_error',
     },
-    buildSceneData: (socket, data) => ({
-        mode: 'multi',
-        socket,
-        roomId: data.roomId,
-        isHost: data.isHost,
-        roomName: data.roomName,
-        resumeToken: data.resumeToken,
-    }),
+    buildSceneData: (socket, data) => {
+        const joined = data as OneVsOneRoomJoinedPayload;
+        return {
+            mode: 'multi',
+            socket,
+            roomId: joined.roomId,
+            isHost: joined.isHost,
+            roomName: joined.roomName,
+            resumeToken: joined.resumeToken,
+            authQueueSeed: joined.authSeed,
+            authSnapshot: joined.authSnapshot,
+        };
+    },
 };
 
 const NMULTI_CONFIG: LobbyConfig = {
@@ -81,19 +128,24 @@ const NMULTI_CONFIG: LobbyConfig = {
         roomJoined: 'nmulti_room_joined',
         roomError: 'nmulti_room_error',
     },
-    buildSceneData: (socket, data) => ({
-        socket,
-        roomId: data.roomId,
-        playerId: data.playerId,
-        playerName: data.playerName,
-        initialPlayers: data.players,
-        roomName: data.roomName,
-    }),
+    buildSceneData: (socket, data) => {
+        const joined = data as NMultiRoomJoinedPayload;
+        return {
+            socket,
+            roomId: joined.roomId,
+            playerId: joined.playerId,
+            playerName: joined.playerName,
+            initialPlayers: joined.players,
+            roomName: joined.roomName,
+            authSeed: joined.authSeed,
+            authSnapshot: joined.authSnapshot,
+        };
+    },
 };
 
 class BaseLobbyScene extends BaseScene {
     private socket: Socket;
-    private roomList: any[] = [];
+    private roomList: LobbyRoomListItem[] = [];
     protected lobbyConfig: LobbyConfig;
 
     private root: Phaser.GameObjects.Container | null = null;
@@ -121,11 +173,11 @@ class BaseLobbyScene extends BaseScene {
     private lastPointerY: number = 0;
 
     private onSocketConnect: (() => void) | null = null;
-    private onRoomList: ((rooms: any[]) => void) | null = null;
-    private onRoomJoined: ((data: any) => void) | null = null;
-    private onRoomError: ((msg: string) => void) | null = null;
+    private onRoomList: ((rooms: unknown) => void) | null = null;
+    private onRoomJoined: ((data: unknown) => void) | null = null;
+    private onRoomError: ((payload: unknown) => void) | null = null;
     private onSocketDisconnect: (() => void) | null = null;
-    private onWheel: ((pointer: Phaser.Input.Pointer, over: any, dx: number, dy: number) => void) | null = null;
+    private onWheel: ((pointer: Phaser.Input.Pointer, over: unknown, dx: number, dy: number) => void) | null = null;
 
     constructor(config: LobbyConfig) {
         super({ key: config.sceneKey });
@@ -231,7 +283,7 @@ class BaseLobbyScene extends BaseScene {
             this.applyScroll(this.scrollOffset - delta / (this.cameras.main.zoom || 1));
         });
 
-        this.onWheel = (pointer: Phaser.Input.Pointer, _over: any, _dx: number, dy: number) => {
+        this.onWheel = (pointer: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
             if (!this.isPointInsideList(pointer.x, pointer.y)) return;
             this.applyScroll(this.scrollOffset + dy / (this.cameras.main.zoom || 1));
         };
@@ -245,20 +297,29 @@ class BaseLobbyScene extends BaseScene {
             this.socket.emit(events.getRooms);
         };
 
-        this.onRoomList = (rooms: any[]) => {
-            this.roomList = rooms;
+        this.onRoomList = (rooms: unknown) => {
+            this.roomList = toLobbyRoomList(rooms);
             this.refreshRoomList();
         };
 
-        this.onRoomJoined = (data: any) => {
-            if (data.roomName) {
-                history.replaceState(null, '', this.lobbyConfig.urlPrefix + '/' + encodeURIComponent(data.roomName));
+        this.onRoomJoined = (data: unknown) => {
+            const isValidPayload = this.lobbyConfig.maxPlayers > 2
+                ? isNMultiRoomJoinedPayload(data)
+                : isOneVsOneRoomJoinedPayload(data);
+            if (!isValidPayload) {
+                alert('Invalid room join payload from server. Please retry.');
+                return;
             }
-            this.scene.start(this.lobbyConfig.playScene, this.lobbyConfig.buildSceneData(this.socket, data));
+            const joinedData = data as OneVsOneRoomJoinedPayload | NMultiRoomJoinedPayload;
+            if (joinedData.roomName) {
+                history.replaceState(null, '', `${this.lobbyConfig.urlPrefix}/${encodeURIComponent(joinedData.roomName)}`);
+            }
+            this.scene.start(this.lobbyConfig.playScene, this.lobbyConfig.buildSceneData(this.socket, joinedData));
         };
 
-        this.onRoomError = (msg: string) => {
-            alert(msg);
+        this.onRoomError = (payload: unknown) => {
+            const message = extractSocketErrorMessage(payload, 'Room request failed.');
+            alert(message);
         };
 
         this.onSocketDisconnect = () => {
@@ -364,7 +425,7 @@ class BaseLobbyScene extends BaseScene {
         const rowGap = 14;
 
         this.roomList.forEach((room, idx) => {
-            const playerCount = room.playerCount ?? room.players ?? 0;
+            const playerCount = 'playerCount' in room ? room.playerCount : room.players;
             const rowRoot = this.add.container(0, 0);
             const bg = this.add.graphics();
             const name = this.add.text(0, 0, String(room.name ?? 'Room'), {

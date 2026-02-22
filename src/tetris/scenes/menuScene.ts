@@ -1,10 +1,15 @@
 import { CONST } from "../const/const";
 import { BaseScene } from "./baseScene";
-import { io, Socket } from "socket.io-client";
+import { io, type Socket } from "socket.io-client";
 import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
 import { GAME_FONT_FAMILY, PANEL_BG } from "../ui/uiStyles";
 import { ensureGameFontReady } from "../ui/fontLoader";
 import { KENNEY_UI_IMAGE_KEYS, preloadKenneyAssets } from "../ui/kenneyAssets";
+import {
+    extractSocketErrorMessage,
+    isNMultiRoomJoinedPayload,
+    isOneVsOneRoomJoinedPayload,
+} from "../../shared/types/socketPayloads";
 
 type MenuButtonKind = 'blue' | 'green' | 'red';
 type MenuButtonState = 'normal' | 'hover' | 'pressed';
@@ -380,7 +385,17 @@ export class MenuScene extends BaseScene {
             socket.emit('nmulti_join_or_create', { roomName });
         });
 
-        socket.on('nmulti_room_joined', (data: any) => {
+        socket.on('nmulti_room_joined', (data: unknown) => {
+            if (!isNMultiRoomJoinedPayload(data)) {
+                connectingText.destroy();
+                this.connectingText = null;
+                socket.disconnect();
+                alert('Failed to join room: invalid room payload.');
+                history.replaceState(null, '', '/');
+                this.createPhaserUI();
+                this.resize(window.innerWidth, window.innerHeight);
+                return;
+            }
             connectingText.destroy();
             this.connectingText = null;
             this.scene.start("NMultiPlayScene", {
@@ -391,14 +406,17 @@ export class MenuScene extends BaseScene {
                 initialPlayers: data.players,
                 roomName,
                 botLevel,
+                authSeed: data.authSeed,
+                authSnapshot: data.authSnapshot,
             });
         });
 
-        socket.on('nmulti_room_error', (msg: string) => {
+        socket.on('nmulti_room_error', (payload: unknown) => {
             connectingText.destroy();
             this.connectingText = null;
             socket.disconnect();
-            alert('Failed to join room: ' + msg);
+            const message = extractSocketErrorMessage(payload, 'Failed to join room.');
+            alert(`Failed to join room: ${message}`);
             history.replaceState(null, '', '/');
             this.createPhaserUI();
             this.resize(window.innerWidth, window.innerHeight);
@@ -423,7 +441,17 @@ export class MenuScene extends BaseScene {
             socket.emit('join_or_create', { roomName });
         });
 
-        socket.on('room_joined', (data: any) => {
+        socket.on('room_joined', (data: unknown) => {
+            if (!isOneVsOneRoomJoinedPayload(data)) {
+                connectingText.destroy();
+                this.connectingText = null;
+                socket.disconnect();
+                alert('Failed to join room: invalid room payload.');
+                history.replaceState(null, '', '/');
+                this.createPhaserUI();
+                this.resize(window.innerWidth, window.innerHeight);
+                return;
+            }
             connectingText.destroy();
             this.connectingText = null;
             this.scene.start("PlayScene", {
@@ -434,14 +462,17 @@ export class MenuScene extends BaseScene {
                 roomName,
                 resumeToken: data.resumeToken,
                 botLevel,
+                authQueueSeed: data.authSeed,
+                authSnapshot: data.authSnapshot,
             });
         });
 
-        socket.on('room_error', (msg: string) => {
+        socket.on('room_error', (payload: unknown) => {
             connectingText.destroy();
             this.connectingText = null;
             socket.disconnect();
-            alert('Failed to join room: ' + msg);
+            const message = extractSocketErrorMessage(payload, 'Failed to join room.');
+            alert(`Failed to join room: ${message}`);
             history.replaceState(null, '', '/');
             this.createPhaserUI();
             this.resize(window.innerWidth, window.innerHeight);

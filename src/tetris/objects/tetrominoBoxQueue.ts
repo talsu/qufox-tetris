@@ -150,6 +150,14 @@ export class TetrominoBoxQueue extends ObjectBase {
         });
     }
 
+    public getAuthoritativeState(): { queue: TetrominoType[]; bag: TetrominoType[]; queueRngState: number } {
+        return {
+            queue: this.typeQueue.slice(),
+            bag: this.randomBag.slice(),
+            queueRngState: this.seedState ?? 1,
+        };
+    }
+
     /**
      * Clear type queue and boxes.
      */

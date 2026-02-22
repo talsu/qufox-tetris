@@ -4,7 +4,7 @@ import {TetrominoBoxQueue} from "./objects/tetrominoBoxQueue";
 import {LevelIndicator} from "./objects/levelIndicator";
 import {InputState, TetrominoType, RotateType} from "./const/const";
 import {ScoreSystem, GameStats} from "./logic/scoreSystem";
-import { AuthSyncState } from '../shared/types/socketPayloads';
+import { AuthSnapshotSide, AuthSyncState } from '../shared/types/socketPayloads';
 
 /**
  * Tetris game engine.
@@ -217,6 +217,28 @@ export class Engine {
         this.scoreSystem.setAuthoritativeState(stats.score, stats.level, stats.lines);
         this.playField.autoDropDelay = this.scoreSystem.getAutoDropDelay();
         this.levelIndicator.updateStats(this.scoreSystem.getStats(this.gameTime));
+    }
+
+    public getShadowSnapshotSide(): AuthSnapshotSide {
+        const queueState = this.queue.getAuthoritativeState();
+        const stats = this.getStats();
+        return {
+            board: this.playField.serializeEncoded(),
+            score: stats.score,
+            level: stats.level,
+            lines: stats.lines,
+            isAlive: true,
+            sync: {
+                boardCore: this.playField.serializeEncoded(),
+                active: null,
+                hold: this.holdBox.type,
+                canHold: this.playField.canHoldFlag,
+                queue: queueState.queue,
+                bag: queueState.bag,
+                queueRngState: queueState.queueRngState,
+                gravityMsCounter: 0,
+            },
+        };
     }
 
     /**

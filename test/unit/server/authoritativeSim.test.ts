@@ -148,4 +148,42 @@ describe('AuthoritativeMatch', () => {
 
         expect(pressAndHeldSnapshot).toEqual(pressSnapshot);
     });
+
+    test('applies SRS kick for blocked wall-adjacent rotation', () => {
+        const match = new AuthoritativeMatch('A', 'B', 777, 99991);
+        const p1 = match.players.p1;
+
+        p1.active = {
+            type: 'T',
+            rotate: '0',
+            col: 4,
+            row: 0,
+            droppedRotateType: '0',
+            lastMovement: 'spawn',
+            lastKickDataIndex: 0,
+            dropCounter: {
+                softDrop: 0,
+                hardDrop: 0,
+                autoDrop: 0,
+            },
+        };
+        p1.board[1][6] = 'G';
+
+        match.enqueue('p1', 'clockwise', 'press', 1);
+        match.step();
+
+        expect(match.players.p1.active).toBeTruthy();
+        expect(match.players.p1.active.rotate).toBe('R');
+        expect(match.players.p1.active.col).toBe(3);
+    });
+
+    test('awards non-zero score on hard drop lock to match client drop scoring path', () => {
+        const match = new AuthoritativeMatch('A', 'B', 13579, 99991);
+
+        match.enqueue('p1', 'hardDrop', 'press', 1);
+        match.step();
+
+        const snapshot = match.getSnapshotFor('p1').self;
+        expect(snapshot.score).toBeGreaterThan(0);
+    });
 });

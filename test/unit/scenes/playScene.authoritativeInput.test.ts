@@ -67,4 +67,21 @@ describe('PlayScene authoritative input forwarding', () => {
             seq: 1,
         });
     });
+
+    test('does not stream client shadow snapshots in authoritative mode', () => {
+        const scene = new PlayScene() as any;
+        const emit = jest.fn();
+
+        scene.mode = 'multi';
+        scene.useAuthoritativeServer = true;
+        scene.socket = { emit };
+        scene.roomId = 'room-1';
+        scene.isPageHidden = false;
+        scene.lastShadowSnapshotSend = 0;
+
+        scene.networkUpdate(200);
+
+        const emittedEvents = emit.mock.calls.map((args: any[]) => args[0]);
+        expect(emittedEvents).not.toContain('auth_snapshot');
+    });
 });

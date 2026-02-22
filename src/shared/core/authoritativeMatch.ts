@@ -1,19 +1,26 @@
 import { nextLcg, normalizeSeed } from './random';
+import { CONST, RotateType, TetrominoType } from '../../tetris/const/const';
+import { GameRules } from '../../tetris/logic/gameRules';
+import { ScoreSystem } from '../../tetris/logic/scoreSystem';
 
 const BOARD_ROWS = 20;
 const BOARD_COLS = 10;
 
-const ROTATIONS = ['0', 'R', '2', 'L'] as const;
-type Rotation = (typeof ROTATIONS)[number];
+const ROTATIONS = CONST.TETROMINO.ROTATE_SEQ as Rotation[];
+type Rotation = RotateType;
 type PlayerKey = 'p1' | 'p2';
 
-type PieceType = 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z';
+type PieceType = Exclude<TetrominoType, TetrominoType.GARBAGE>;
 
 type ActivePiece = {
     type: PieceType;
     rotate: Rotation;
     col: number;
     row: number;
+    droppedRotateType: Rotation;
+    lastMovement: string;
+    lastKickDataIndex: number;
+    dropCounter: { softDrop: number; hardDrop: number; autoDrop: number };
 };
 
 type PlayerState = {
@@ -30,8 +37,7 @@ type PlayerState = {
     score: number;
     level: number;
     lines: number;
-    combo: number;
-    backToBack: boolean;
+    scoreSystem: ScoreSystem;
     isAlive: boolean;
     pendingGarbage: number;
     lastHole: number;
@@ -42,7 +48,12 @@ type PlayerState = {
 
 type SyncState = {
     boardCore: string;
-    active: ActivePiece | null;
+    active: {
+        type: PieceType;
+        rotate: Rotation;
+        col: number;
+        row: number;
+    } | null;
     hold: PieceType | null;
     canHold: boolean;
     queue: PieceType[];
@@ -51,50 +62,7 @@ type SyncState = {
     gravityMsCounter: number;
 };
 
-const PIECES: Record<PieceType, Record<Rotation, Array<[number, number]>>> = {
-    I: {
-        '0': [[0, 1], [1, 1], [2, 1], [3, 1]],
-        R: [[2, 0], [2, 1], [2, 2], [2, 3]],
-        '2': [[0, 2], [1, 2], [2, 2], [3, 2]],
-        L: [[1, 0], [1, 1], [1, 2], [1, 3]],
-    },
-    J: {
-        '0': [[0, 0], [0, 1], [1, 1], [2, 1]],
-        R: [[1, 0], [2, 0], [1, 1], [1, 2]],
-        '2': [[0, 1], [1, 1], [2, 1], [2, 2]],
-        L: [[1, 0], [1, 1], [0, 2], [1, 2]],
-    },
-    L: {
-        '0': [[2, 0], [0, 1], [1, 1], [2, 1]],
-        R: [[1, 0], [2, 2], [1, 1], [1, 2]],
-        '2': [[0, 1], [1, 1], [2, 1], [0, 2]],
-        L: [[1, 0], [1, 1], [0, 0], [1, 2]],
-    },
-    O: {
-        '0': [[1, 0], [2, 0], [1, 1], [2, 1]],
-        R: [[1, 0], [2, 0], [1, 1], [2, 1]],
-        '2': [[1, 0], [2, 0], [1, 1], [2, 1]],
-        L: [[1, 0], [2, 0], [1, 1], [2, 1]],
-    },
-    S: {
-        '0': [[1, 0], [2, 0], [0, 1], [1, 1]],
-        R: [[1, 0], [1, 1], [2, 1], [2, 2]],
-        '2': [[1, 1], [2, 1], [0, 2], [1, 2]],
-        L: [[0, 0], [0, 1], [1, 1], [1, 2]],
-    },
-    T: {
-        '0': [[1, 0], [0, 1], [1, 1], [2, 1]],
-        R: [[1, 0], [1, 1], [2, 1], [1, 2]],
-        '2': [[0, 1], [1, 1], [2, 1], [1, 2]],
-        L: [[1, 0], [0, 1], [1, 1], [1, 2]],
-    },
-    Z: {
-        '0': [[0, 0], [1, 0], [1, 1], [2, 1]],
-        R: [[2, 0], [1, 1], [2, 1], [1, 2]],
-        '2': [[0, 1], [1, 1], [2, 2], [1, 2]],
-        L: [[1, 0], [0, 1], [1, 1], [0, 2]],
-    },
-};
+const PIECES = CONST.TETROMINO.BLOCKS as unknown as Record<PieceType, Record<Rotation, Array<[number, number]>>>;
 
 const TYPES = Object.keys(PIECES) as PieceType[];
 
@@ -114,6 +82,8 @@ function emptyBoard(): string[][] {
 function createPlayer(name: string, seed: number): PlayerState {
     const queueSeed = normalizeSeed(seed);
     const garbageSeed = (queueSeed ^ 0x9e3779b9) >>> 0 || 1;
+    const scoreSystem = new ScoreSystem();
+    scoreSystem.start();
     return {
         name,
         seed,
@@ -128,8 +98,7 @@ function createPlayer(name: string, seed: number): PlayerState {
         score: 0,
         level: 1,
         lines: 0,
-        combo: -1,
-        backToBack: false,
+        scoreSystem,
         isAlive: true,
         pendingGarbage: 0,
         lastHole: -1,
@@ -193,9 +162,17 @@ function spawn(player: PlayerState, type?: PieceType): boolean {
     ensureQueue(player);
     const active: ActivePiece = {
         type: nextType,
-        rotate: '0',
+        rotate: RotateType.UP,
         col: 3,
         row: -2,
+        droppedRotateType: RotateType.UP,
+        lastMovement: 'spawn',
+        lastKickDataIndex: 0,
+        dropCounter: {
+            softDrop: 0,
+            hardDrop: 0,
+            autoDrop: 0,
+        },
     };
     if (!canPlace(player, active, active.col, active.row, active.rotate)) {
         player.isAlive = false;
@@ -205,6 +182,44 @@ function spawn(player: PlayerState, type?: PieceType): boolean {
     player.active = active;
     player.canHold = true;
     return true;
+}
+
+function isCellOccupied(player: PlayerState, col: number, row: number): boolean {
+    if (col < 0 || col >= BOARD_COLS || row < -BOARD_ROWS || row >= BOARD_ROWS) {
+        return true;
+    }
+    if (row < 0) {
+        return false;
+    }
+    return player.board[row][col] !== '0';
+}
+
+function getTSpinCornerOccupiedCount(player: PlayerState, active: ActivePiece): { pointSide: number; flatSide: number } {
+    if (active.type !== TetrominoType.T) {
+        return { pointSide: 0, flatSide: 0 };
+    }
+
+    const cornerOccupiedArray = CONST.TETROMINO.T_SPIN_CORNER
+        .map(([dx, dy]) => [active.col + dx, active.row + dy] as const)
+        .map(([col, row]) => isCellOccupied(player, col, row));
+
+    const rotateIndex = ROTATIONS.indexOf(active.rotate);
+    let pointSide = 0;
+    let flatSide = 0;
+
+    for (let offset = 0; offset < 4; offset += 1) {
+        const index = (ROTATIONS.length + rotateIndex + offset) % ROTATIONS.length;
+        if (!cornerOccupiedArray[index]) {
+            continue;
+        }
+        if (offset < 2) {
+            pointSide += 1;
+        } else {
+            flatSide += 1;
+        }
+    }
+
+    return { pointSide, flatSide };
 }
 
 function applyGarbage(player: PlayerState): void {
@@ -245,27 +260,6 @@ function clearLines(player: PlayerState): number {
     return cleared;
 }
 
-function garbageFromClear(cleared: number, combo: number, backToBack: boolean, didB2BAction: boolean): number {
-    let garbage = 0;
-    if (cleared === 2) garbage = 1;
-    else if (cleared === 3) garbage = 2;
-    else if (cleared === 4) garbage = 4;
-
-    if (didB2BAction && backToBack) {
-        garbage += 1;
-    }
-
-    if (combo >= 2) {
-        if (combo < 4) garbage += 1;
-        else if (combo < 6) garbage += 2;
-        else if (combo < 8) garbage += 3;
-        else if (combo < 10) garbage += 4;
-        else garbage += 5;
-    }
-
-    return garbage;
-}
-
 function lockPiece(player: PlayerState): number {
     if (!player.active || !player.isAlive) return 0;
     const blocks = cloneActiveBlocks(player.active);
@@ -278,22 +272,28 @@ function lockPiece(player: PlayerState): number {
         player.board[y][x] = player.active.type;
     }
 
+    const locked = player.active;
     const cleared = clearLines(player);
-    const didB2BAction = cleared === 4;
-    if (cleared > 0) {
-        player.combo += 1;
-        player.lines += cleared;
-        player.score += (cleared * 100) + (player.combo > 0 ? player.combo * 50 : 0);
-        player.level = Math.max(1, Math.floor(player.lines / 10) + 1);
-    } else {
-        player.combo = -1;
-    }
+    const tSpinCornerOccupiedCount = getTSpinCornerOccupiedCount(player, locked);
+    const scoreResult = player.scoreSystem.onLock(
+        cleared,
+        locked.type,
+        locked.droppedRotateType,
+        locked.rotate,
+        locked.lastMovement,
+        locked.lastKickDataIndex,
+        locked.dropCounter,
+        tSpinCornerOccupiedCount,
+    );
 
-    const garbage = garbageFromClear(cleared, player.combo, player.backToBack, didB2BAction);
-    if (didB2BAction) {
-        player.backToBack = true;
-    } else if (cleared > 0) {
-        player.backToBack = false;
+    const stats = player.scoreSystem.getStats(0);
+    player.score = stats.score;
+    player.level = stats.level;
+    player.lines = stats.lines;
+
+    let garbage = scoreResult.garbage;
+    if (player.board.every((row) => row.every((cell) => cell === '0'))) {
+        garbage += 10;
     }
 
     player.active = null;
@@ -301,12 +301,17 @@ function lockPiece(player: PlayerState): number {
     return garbage;
 }
 
-function moveDown(player: PlayerState): boolean {
+function moveDown(player: PlayerState, dropType: 'softDrop' | 'hardDrop' | 'autoDrop' = 'autoDrop'): boolean {
     if (!player.active || !player.isAlive) return false;
     const { active } = player;
     const nextRow = active.row + 1;
     if (canPlace(player, active, active.col, nextRow, active.rotate)) {
         active.row = nextRow;
+        active.lastMovement = 'down';
+        active.dropCounter[dropType] += 1;
+        if (active.row > -2) {
+            active.droppedRotateType = active.rotate;
+        }
         return true;
     }
     return false;
@@ -325,23 +330,30 @@ function applyInput(player: PlayerState, input: { direction: string; state: stri
     const { active } = player;
     if (direction === 'left') {
         const col = active.col - 1;
-        if (canPlace(player, active, col, active.row, active.rotate)) active.col = col;
+        if (canPlace(player, active, col, active.row, active.rotate)) {
+            active.col = col;
+            active.lastMovement = 'left';
+        }
         return 0;
     }
     if (direction === 'right') {
         const col = active.col + 1;
-        if (canPlace(player, active, col, active.row, active.rotate)) active.col = col;
+        if (canPlace(player, active, col, active.row, active.rotate)) {
+            active.col = col;
+            active.lastMovement = 'right';
+        }
         return 0;
     }
     if (direction === 'softDrop') {
-        if (!moveDown(player)) {
+        if (!moveDown(player, 'softDrop')) {
             return lockPiece(player);
         }
         return 0;
     }
     if (direction === 'hardDrop') {
-        while (moveDown(player)) {
+        while (moveDown(player, 'hardDrop')) {
         }
+        active.lastMovement = 'hardDrop';
         return lockPiece(player);
     }
     if (direction === 'clockwise' || direction === 'anticlockwise') {
@@ -350,8 +362,23 @@ function applyInput(player: PlayerState, input: { direction: string; state: stri
             ? (idx + 1) % ROTATIONS.length
             : (idx + ROTATIONS.length - 1) % ROTATIONS.length;
         const rotate = ROTATIONS[nextIdx];
-        if (canPlace(player, active, active.col, active.row, rotate)) {
+        const kickData = GameRules.getKickData(active.type as TetrominoType, `${active.rotate}>${rotate}`);
+        const attempts = kickData.length > 0 ? kickData : [[0, 0]];
+
+        for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
+            const [kickX, kickY] = attempts[attemptIndex];
+            const kickedCol = active.col + kickX;
+            const kickedRow = active.row - kickY;
+            if (!canPlace(player, active, kickedCol, kickedRow, rotate)) {
+                continue;
+            }
             active.rotate = rotate;
+            active.col = kickedCol;
+            active.row = kickedRow;
+            active.lastMovement = 'rotate';
+            active.lastKickDataIndex = attemptIndex;
+            active.droppedRotateType = rotate;
+            break;
         }
         return 0;
     }

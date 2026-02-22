@@ -28,6 +28,12 @@ import {
     isResumeAuthPayload,
     normalizeRoomName,
 } from '../src/shared/types/socketPayloads';
+import {
+    createBotController,
+    extractBotLevel,
+    nextBotInputs,
+    type BotControllerState,
+} from './botController';
 
 type Seat = 'p1' | 'p2';
 type PresenceState = 'active' | 'inactive';
@@ -48,6 +54,7 @@ interface OneVsOneSeatState {
     ready: boolean;
     presence: PresenceState;
     disconnectedAt: number | null;
+    bot: BotControllerState | null;
 }
 
 interface OneVsOneRoom {
@@ -76,6 +83,7 @@ interface NMultiPlayer {
     lastUpdateAt: number;
     authMatch: AuthoritativeMatch;
     lastAckInputSeq: number;
+    bot: BotControllerState | null;
 }
 
 interface NMultiRoom {
@@ -113,9 +121,18 @@ app.get('*path', (_req: express.Request, res: express.Response) => {
 
 const oneVsOneRooms: Record<string, OneVsOneRoom> = {};
 const nMultiRooms: Record<string, NMultiRoom> = {};
+const requestedBotLevelBySocket: Record<string, number> = {};
 
 function createToken(): string {
     return nodeCrypto.randomUUID();
+}
+
+function getRequestedBotLevel(socketId: string): number {
+    return requestedBotLevelBySocket[socketId] ?? 0;
+}
+
+function rememberRequestedBotLevel(socketId: string, candidate: unknown): void {
+    requestedBotLevelBySocket[socketId] = extractBotLevel(candidate);
 }
 
 function generateRandomName(room: NMultiRoom): string {
@@ -141,6 +158,38 @@ function getSeatBySocket(room: OneVsOneRoom, socketId: string): Seat | null {
 
 function getOpponentSeat(seat: Seat): Seat {
     return seat === 'p1' ? 'p2' : 'p1';
+}
+
+function enqueueBotInputsForOneVsOne(room: OneVsOneRoom): void {
+    if (!room.authMatch) return;
+    for (const seat of ['p1', 'p2'] as Seat[]) {
+        const bot = room.seats[seat].bot;
+        if (!bot) continue;
+        const playerState = room.authMatch.players[seat];
+        if (!playerState || !playerState.isAlive) continue;
+        const sync = room.authMatch.getSnapshotFor(seat).self.sync;
+        const inputs = nextBotInputs(bot, {
+            boardCore: sync.boardCore,
+            active: sync.active,
+        });
+        for (const direction of inputs) {
+            bot.inputSeq += 1;
+            room.authMatch.enqueue(seat, direction, 'press', bot.inputSeq);
+        }
+    }
+}
+
+function enqueueBotInputsForNMultiPlayer(player: NMultiPlayer): void {
+    if (!player.bot || !player.isAlive) return;
+    const sync = player.authMatch.getSnapshotFor('p1').self.sync;
+    const inputs = nextBotInputs(player.bot, {
+        boardCore: sync.boardCore,
+        active: sync.active,
+    });
+    for (const direction of inputs) {
+        player.bot.inputSeq += 1;
+        player.authMatch.enqueue('p1', direction, 'press', player.bot.inputSeq);
+    }
 }
 
 function emitRoomList(): void {
@@ -218,6 +267,7 @@ function buildNMultiRoomJoinedPayload(room: NMultiRoom, player: NMultiPlayer): {
         v: number;
     }>;
     authSeed: number;
+    botLevel: number;
     authSnapshot: {
         tick: number;
         self: ReturnType<AuthoritativeMatch['getSnapshotFor']>['self'];
@@ -232,6 +282,7 @@ function buildNMultiRoomJoinedPayload(room: NMultiRoom, player: NMultiPlayer): {
         roomName: room.name,
         players: getNMultiPlayersPayload(room, player.id),
         authSeed: player.authMatch.seeds.p1,
+        botLevel: player.bot ? player.bot.level : 0,
         authSnapshot: {
             tick: authSnapshot.tick,
             self: authSnapshot.self,
@@ -290,6 +341,11 @@ function resetNMultiPlayerMatch(player: NMultiPlayer): void {
     player.isAlive = selfSnapshot.isAlive;
     markNMultiPlayerActive(player);
     player.lastAckInputSeq = 0;
+    if (player.bot) {
+        player.bot.inputSeq = 0;
+        player.bot.plannedPiece = null;
+        player.bot.plannedActions = [];
+    }
     player.v += 1;
 }
 
@@ -321,6 +377,7 @@ function createNMultiPlayer(room: NMultiRoom | null, socketId: string, name?: st
         lastUpdateAt: now,
         authMatch,
         lastAckInputSeq: 0,
+        bot: createBotController(getRequestedBotLevel(socketId)),
     };
 }
 
@@ -337,6 +394,7 @@ function createOneVsOneRoom(roomName: string, hostSocketId: string): OneVsOneRoo
                 ready: false,
                 presence: 'active',
                 disconnectedAt: null,
+                bot: createBotController(getRequestedBotLevel(hostSocketId)),
             },
             p2: {
                 socketId: null,
@@ -344,6 +402,7 @@ function createOneVsOneRoom(roomName: string, hostSocketId: string): OneVsOneRoo
                 ready: false,
                 presence: 'inactive',
                 disconnectedAt: null,
+                bot: null,
             },
         },
         authSeeds: null,
@@ -365,6 +424,7 @@ function emitOneVsOneRoomJoined(socket: Socket, room: OneVsOneRoom, seat: Seat):
         isHost: seat === 'p1',
         roomName: room.name,
         resumeToken: room.seats[seat].token,
+        botLevel: room.seats[seat].bot ? room.seats[seat].bot.level : 0,
     });
 }
 
@@ -394,6 +454,7 @@ function joinOneVsOneRoom(socket: Socket, room: OneVsOneRoom): boolean {
     room.seats[joinSeat].socketId = socket.id;
     room.seats[joinSeat].presence = 'active';
     room.seats[joinSeat].disconnectedAt = null;
+    room.seats[joinSeat].bot = createBotController(getRequestedBotLevel(socket.id));
     room.status = 'playing';
 
     joinSocketToRoom(socket, room.id);
@@ -596,6 +657,13 @@ function startOneVsOneRound(room: OneVsOneRoom): void {
     const seedP2 = nodeCrypto.randomInt(1, 0x7fffffff);
     room.authSeeds = { p1: seedP1, p2: seedP2 };
     room.authMatch = new AuthoritativeMatch('P1', 'P2', seedP1, seedP2);
+    for (const seat of ['p1', 'p2'] as Seat[]) {
+        const bot = room.seats[seat].bot;
+        if (!bot) continue;
+        bot.inputSeq = 0;
+        bot.plannedPiece = null;
+        bot.plannedActions = [];
+    }
 
     stopOneVsOneLoop(room);
     room.authInterval = setInterval(() => tickOneVsOneRoom(room.id), AUTH_TICK_MS);
@@ -636,6 +704,8 @@ function tickOneVsOneRoom(roomId: string): void {
         return;
     }
 
+    enqueueBotInputsForOneVsOne(room);
+
     const step = room.authMatch.step();
 
     if (step.toP1 > 0 && room.seats.p1.socketId) {
@@ -674,6 +744,7 @@ function handleOneVsOneDisconnect(socketId: string): void {
         seatState.disconnectedAt = null;
         seatState.ready = false;
         seatState.token = createToken();
+        seatState.bot = null;
 
         const opponentSeat = getOpponentSeat(seat);
         room.seats[opponentSeat].ready = false;
@@ -724,6 +795,7 @@ function tickNMultiRoom(roomId: string): void {
         const wasAlive = player.isAlive;
 
         if (player.isAlive) {
+            enqueueBotInputsForNMultiPlayer(player);
             const step = match.step();
             if (step.toP2 > 0) {
                 const target = chooseNMultiAttackTarget(room, player.id);
@@ -854,14 +926,17 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('create_room', (roomName: unknown) => {
+        rememberRequestedBotLevel(socket.id, roomName);
         handleCreateWithPolicy(socket, roomName, 'My Room', oneVsOneModePolicy);
     });
 
     socket.on('join_room', (roomIdCandidate: unknown) => {
+        rememberRequestedBotLevel(socket.id, roomIdCandidate);
         handleJoinByIdWithPolicy(socket, extractRoomId(roomIdCandidate), oneVsOneModePolicy);
     });
 
     socket.on('join_or_create', (roomNameCandidate: unknown) => {
+        rememberRequestedBotLevel(socket.id, roomNameCandidate);
         handleJoinOrCreateWithPolicy(socket, roomNameCandidate, 'Room', oneVsOneModePolicy);
     });
 
@@ -882,6 +957,7 @@ io.on('connection', (socket: Socket) => {
         if (!room || !room.authMatch) return;
         const seat = getSeatBySocket(room, socket.id);
         if (!seat) return;
+        if (room.seats[seat].bot) return;
         room.authMatch.enqueue(seat, payload.direction, payload.state, payload.seq);
     });
 
@@ -942,14 +1018,17 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('nmulti_create_room', (roomNameCandidate: unknown) => {
+        rememberRequestedBotLevel(socket.id, roomNameCandidate);
         handleCreateWithPolicy(socket, roomNameCandidate, 'Room', nMultiModePolicy);
     });
 
     socket.on('nmulti_join_room', (payload: unknown) => {
+        rememberRequestedBotLevel(socket.id, payload);
         handleJoinByIdWithPolicy(socket, extractRoomId(payload), nMultiModePolicy);
     });
 
     socket.on('nmulti_join_or_create', (roomNameCandidate: unknown) => {
+        rememberRequestedBotLevel(socket.id, roomNameCandidate);
         handleJoinOrCreateWithPolicy(socket, roomNameCandidate, 'Room', nMultiModePolicy);
     });
 
@@ -985,6 +1064,7 @@ io.on('connection', (socket: Socket) => {
 
         const { player } = playerEntry;
         if (!player.isAlive) return;
+        if (player.bot) return;
 
         player.authMatch.enqueue('p1', payload.direction, payload.state, payload.seq);
         markNMultiPlayerActive(player);
@@ -1043,6 +1123,7 @@ io.on('connection', (socket: Socket) => {
     socket.on('disconnect', () => {
         handleOneVsOneDisconnect(socket.id);
         handleNMultiDisconnect(socket);
+        delete requestedBotLevelBySocket[socket.id];
     });
 });
 

@@ -41,6 +41,8 @@ export class NMultiPlayScene extends BasePlayScene {
     private forceAuthoritativeResyncOnce: boolean = false;
     private authQueueSeed: number | null = null;
     private initialAuthSnapshot: NMultiAuthSnapshotPayload | null = null;
+    private bootstrapRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> | null = null;
+    private awaitingInitialAuthSnapshot: boolean = false;
 
     constructor() {
         super({ key: "NMultiPlayScene" });
@@ -89,6 +91,41 @@ export class NMultiPlayScene extends BasePlayScene {
         this.needsAuthoritativeResync = false;
         this.forceAuthoritativeResyncOnce = false;
         this.initialAuthSnapshot = null;
+    }
+
+    private revealBootstrapRenderObjectsIfReady(): void {
+        if (!this.bootstrapRenderObjects) {
+            return;
+        }
+
+        this.bootstrapRenderObjects.forEach((obj) => {
+            obj.setVisible(true);
+        });
+        this.bootstrapRenderObjects = null;
+
+        if (this.inputManager && this.isGameRunning && !this.isGameEnded) {
+            this.inputManager.isEnabled = !this.inGameMenu.isMenuOpen;
+        }
+    }
+
+    private applyInitialAuthoritativeSnapshotFromLiveTick(data: NMultiAuthSnapshotPayload): void {
+        if (!this.awaitingInitialAuthSnapshot || !this.engine || !this.playField) {
+            return;
+        }
+
+        if (data.self.sync) {
+            this.engine.applyAuthoritativeSync(data.self.sync, {
+                score: data.self.score,
+                level: data.self.level,
+                lines: data.self.lines,
+            });
+        }
+
+        this.localMismatchStreak = 0;
+        this.needsAuthoritativeResync = false;
+        this.forceAuthoritativeResyncOnce = false;
+        this.awaitingInitialAuthSnapshot = false;
+        this.revealBootstrapRenderObjectsIfReady();
     }
 
     preload(): void {
@@ -150,6 +187,7 @@ export class NMultiPlayScene extends BasePlayScene {
 
         this.socket.on('nmulti_auth_snapshot', (data: unknown) => {
             if (!isNMultiAuthSnapshotPayload(data)) return;
+            this.applyInitialAuthoritativeSnapshotFromLiveTick(data);
             this.maybeResyncLocalStateFromSnapshot(data);
 
             if (this.isGameRunning && data.self.isAlive === false && !this.isGameEnded) {
@@ -441,6 +479,8 @@ export class NMultiPlayScene extends BasePlayScene {
             layout.levelIndicator.container,
             layout.tetrominoQueue.container,
         ];
+        this.bootstrapRenderObjects = localRenderObjects;
+        this.awaitingInitialAuthSnapshot = true;
         localRenderObjects.forEach((obj) => {
             obj.setVisible(false);
         });
@@ -461,10 +501,7 @@ export class NMultiPlayScene extends BasePlayScene {
         this.engine.start();
         this.applyInitialAuthoritativeBootstrap();
         this.inputManager.setDragThresholdScale(1);
-        localRenderObjects.forEach((obj) => {
-            obj.setVisible(true);
-        });
-        this.inputManager.isEnabled = true;
+        this.inputManager.isEnabled = false;
 
         this.relayoutOpponents();
         this.updateRanks();

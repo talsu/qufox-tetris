@@ -343,4 +343,65 @@ describe('NMultiPlayScene payload guards', () => {
         expect(scene.forceAuthoritativeResyncOnce).toBe(false);
         expect(scene.localMismatchStreak).toBe(0);
     });
+
+    test('keeps local render hidden until first nmulti_auth_snapshot then enables input', () => {
+        const handlers: Record<string, (data: unknown) => void> = {};
+        const scene = new NMultiPlayScene() as any;
+        const setVisibleA = jest.fn();
+        const setVisibleB = jest.fn();
+        const applyAuthoritativeSync = jest.fn();
+
+        scene.socket = {
+            on: jest.fn((event: string, cb: (data: unknown) => void) => {
+                handlers[event] = cb;
+            }),
+            emit: jest.fn(),
+        };
+        scene.playField = {
+            serializeEncoded: jest.fn(() => '9'.repeat(200)),
+            phase: EnginePhase.FALLING,
+        };
+        scene.engine = {
+            applyAuthoritativeSync,
+        };
+        scene.isGameRunning = true;
+        scene.isGameEnded = false;
+        scene.inGameMenu = { isMenuOpen: false };
+        scene.inputManager = { isEnabled: false };
+        scene.bootstrapRenderObjects = [
+            { setVisible: setVisibleA },
+            { setVisible: setVisibleB },
+        ];
+        scene.awaitingInitialAuthSnapshot = true;
+
+        scene.setupSocketEvents();
+
+        handlers.nmulti_auth_snapshot?.({
+            tick: 20,
+            serverAckInputSeq: 10,
+            self: {
+                board: '0'.repeat(200),
+                score: 15,
+                level: 2,
+                lines: 3,
+                isAlive: true,
+                sync: {
+                    boardCore: '0'.repeat(200),
+                    active: null,
+                    hold: null,
+                    canHold: true,
+                    queue: ['I', 'J', 'L', 'O', 'S'],
+                    bag: ['T', 'Z'],
+                    queueRngState: 1,
+                    gravityMsCounter: 0,
+                },
+            },
+        });
+
+        expect(applyAuthoritativeSync).toHaveBeenCalledTimes(1);
+        expect(setVisibleA).toHaveBeenCalledWith(true);
+        expect(setVisibleB).toHaveBeenCalledWith(true);
+        expect(scene.awaitingInitialAuthSnapshot).toBe(false);
+        expect(scene.inputManager.isEnabled).toBe(true);
+    });
 });

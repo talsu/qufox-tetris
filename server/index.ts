@@ -4,78 +4,89 @@ import { Server, Socket } from 'socket.io';
 import path = require('path');
 import nodeCrypto = require('crypto');
 import { RANDOM_NAMES } from './randomNames';
+import {
+    handleCreateWithPolicy,
+    handleRoomLifecycleByIdWithPolicy,
+    handleTokenLifecycleWithPolicy,
+    handleJoinByIdWithPolicy,
+    handleJoinOrCreateWithPolicy,
+    type RoomLifecyclePolicy,
+    type RoomModePolicy,
+    type TokenLifecyclePolicy,
+} from './roomModePolicy';
 import { AuthoritativeMatch } from '../src/shared/core/authoritativeMatch';
 import {
     extractRoomId,
+    isAuthInputPayload,
+    isAuthPresencePayload,
+    isNMultiAuthInputPayload,
     isNMultiRoomPayload,
     isNMultiSendGarbagePayload,
     isNMultiUpdateStatePayload,
-    isSendGarbagePayload,
-    isUpdateStatePayload,
-    isAuthInputPayload,
     isPlayerReadyPayload,
     isRequestRestartPayload,
     isResumeAuthPayload,
     normalizeRoomName,
-    type AuthRoundOverPayload,
 } from '../src/shared/types/socketPayloads';
 
 type Seat = 'p1' | 'p2';
+type PresenceState = 'active' | 'inactive';
+
+const AUTH_TICK_MS = 100;
+const N_MULTI_SIM_TICK_MS = 100;
+const N_MULTI_BROADCAST_MS = 150;
+const RESUME_GRACE_MS = 30000;
 
 interface AuthSeeds {
     p1: number;
     p2: number;
 }
 
-interface RoomState {
+interface OneVsOneSeatState {
+    socketId: string | null;
+    token: string;
+    ready: boolean;
+    presence: PresenceState;
+    disconnectedAt: number | null;
+}
+
+interface OneVsOneRoom {
     id: string;
     name: string;
-    p1: string | null;
-    p2: string | null;
     status: 'waiting' | 'playing';
-    p1Token: string;
-    p2Token: string | null;
-    p1Ready?: boolean;
-    p2Ready?: boolean;
-    authMatch: InstanceType<typeof AuthoritativeMatch> | null;
-    authInterval: NodeJS.Timeout | null;
+    seats: Record<Seat, OneVsOneSeatState>;
     authSeeds: AuthSeeds | null;
+    authMatch: AuthoritativeMatch | null;
+    authInterval: NodeJS.Timeout | null;
+    roundOver: boolean;
 }
 
 interface NMultiPlayer {
+    id: string;
     name: string;
+    socketId: string | null;
     score: number;
     level: number;
     lines: number;
     board: string | null;
     isAlive: boolean;
     v: number;
+    presence: PresenceState;
+    disconnectedAt: number | null;
+    lastUpdateAt: number;
+    authMatch: AuthoritativeMatch;
+    lastAckInputSeq: number;
 }
 
-interface NMultiRoomState {
+interface NMultiRoom {
     id: string;
     name: string;
-    playerCounter: number;
     players: Record<string, NMultiPlayer>;
-    lastBroadcasted: Record<string, number>;
+    bySocket: Record<string, string>;
     dirtyPlayers: Set<string>;
-    _broadcastInterval: NodeJS.Timeout;
-}
-
-function generateRandomName(room: NMultiRoomState): string {
-    const usedNames = new Set(Object.values(room.players).map((p) => p.name));
-    // Try random picks first (fast path)
-    for (let i = 0; i < 20; i++) {
-        const name = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
-        if (!usedNames.has(name)) return name;
-    }
-    // Fallback: filter available names
-    const available = RANDOM_NAMES.filter((n: string) => !usedNames.has(n));
-    if (available.length > 0) {
-        return available[Math.floor(Math.random() * available.length)];
-    }
-    // All 1000 names used: append number
-    return 'Player' + (Object.keys(room.players).length + 1);
+    lastBroadcasted: Record<string, number>;
+    broadcastInterval: NodeJS.Timeout;
+    simInterval: NodeJS.Timeout;
 }
 
 const app = express();
@@ -83,756 +94,957 @@ const server = http.createServer(app);
 const io = new Server(server, {
     path: '/server',
     cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+        origin: '*',
+        methods: ['GET', 'POST'],
+    },
+    pingInterval: 5000,
+    pingTimeout: 10000,
+    connectionStateRecovery: {
+        maxDisconnectionDuration: RESUME_GRACE_MS,
+        skipMiddlewares: true,
+    },
 });
 
 const buildDir = path.join(process.cwd(), 'build');
-
 app.use(express.static(buildDir));
-
 app.get('*path', (_req: express.Request, res: express.Response) => {
     res.sendFile(path.join(buildDir, 'index.html'));
 });
 
-// rooms = { roomId: { id, name, p1: socketId, p2: socketId, status: 'waiting'|'playing' } }
-let rooms: Record<string, RoomState> = {};
+const oneVsOneRooms: Record<string, OneVsOneRoom> = {};
+const nMultiRooms: Record<string, NMultiRoom> = {};
 
-// N-Multi rooms
-let nMultiRooms: Record<string, NMultiRoomState> = {};
-// nMultiRooms[roomId] = {
-//   id: string,
-//   name: string,
-//   playerCounter: number,
-//   players: { [socketId]: { name, score, level, lines, board, isAlive, v } },
-//   lastBroadcasted: { [socketId]: string },
-//   dirtyPlayers: Set<string>,
-//   _broadcastInterval: NodeJS.Timer
-// }
-
-function createNMultiRoom(roomId: string, roomName: string, hostSocketId: string, hostName: string): NMultiRoomState {
-    nMultiRooms[roomId] = {
-        id: roomId,
-        name: roomName,
-        playerCounter: 1,
-        players: {
-            [hostSocketId]: {
-                name: hostName,
-                score: 0,
-                level: 1,
-                lines: 0,
-                board: null,
-                isAlive: true,
-                v: 0
-            }
-        },
-        lastBroadcasted: {},
-        dirtyPlayers: new Set([hostSocketId]),
-        _broadcastInterval: setInterval(() => {
-            broadcastNMultiSnapshot(roomId);
-        }, 500)
-    };
-
-    return nMultiRooms[roomId];
-}
-
-function createResumeToken(): string {
+function createToken(): string {
     return nodeCrypto.randomUUID();
 }
 
-function findRoomByResumeToken(token: string): { roomId: string; room: RoomState; seat: Seat } | null {
-    for (const roomId in rooms) {
-        const room = rooms[roomId];
-        if (room.p1Token === token) return { roomId, room, seat: 'p1' };
-        if (room.p2Token === token) return { roomId, room, seat: 'p2' };
+function generateRandomName(room: NMultiRoom): string {
+    const usedNames = new Set(Object.values(room.players).map((p) => p.name));
+    for (let i = 0; i < 20; i += 1) {
+        const candidate = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
+        if (!usedNames.has(candidate)) {
+            return candidate;
+        }
     }
+    const fallback = RANDOM_NAMES.find((name) => !usedNames.has(name));
+    if (fallback) {
+        return fallback;
+    }
+    return `Player${Object.keys(room.players).length + 1}`;
+}
+
+function getSeatBySocket(room: OneVsOneRoom, socketId: string): Seat | null {
+    if (room.seats.p1.socketId === socketId) return 'p1';
+    if (room.seats.p2.socketId === socketId) return 'p2';
     return null;
 }
 
-function getPlayerSeat(room: RoomState | null, socketId: string): Seat | null {
-    if (!room) return null;
-    if (room.p1 === socketId) return 'p1';
-    if (room.p2 === socketId) return 'p2';
-    return null;
+function getOpponentSeat(seat: Seat): Seat {
+    return seat === 'p1' ? 'p2' : 'p1';
 }
 
-function stopRoomAuthLoop(room: RoomState | null): void {
-    if (!room || !room.authInterval) return;
-    clearInterval(room.authInterval);
-    room.authInterval = null;
+function emitRoomList(): void {
+    io.emit('room_list', getOneVsOneRoomList());
 }
 
-function buildAuthSnapshot(room: RoomState, seat: Seat): any {
-    return room.authMatch.getSnapshotFor(seat);
+function emitNMultiRoomList(): void {
+    io.emit('nmulti_room_list', getNMultiRoomList());
 }
 
-function broadcastRoomAuthSnapshot(room: RoomState, roomId: string): void {
-    if (!room || !room.authMatch) return;
-
-    if (room.p1) {
-        io.to(room.p1).emit('auth_snapshot', buildAuthSnapshot(room, 'p1'));
-    }
-    if (room.p2) {
-        io.to(room.p2).emit('auth_snapshot', buildAuthSnapshot(room, 'p2'));
-    }
-
-    const p1Alive = room.authMatch.players.p1.isAlive;
-    const p2Alive = room.authMatch.players.p2.isAlive;
-    if (!p1Alive || !p2Alive) {
-        const payload: AuthRoundOverPayload = { winner: p1Alive ? 'p1' : (p2Alive ? 'p2' : null) };
-        io.to(roomId).emit('auth_round_over', payload);
-    }
+function getOneVsOneRoomList(): Array<{ id: string; name: string; players: number; status: string }> {
+    return Object.values(oneVsOneRooms)
+        .map((room) => ({
+            id: room.id,
+            name: room.name,
+            players: (room.seats.p1.socketId ? 1 : 0) + (room.seats.p2.socketId ? 1 : 0),
+            status: room.status,
+        }))
+        .filter((room) => room.status === 'waiting');
 }
-
-function ensureRoomAuthLoop(room: RoomState, roomId: string): void {
-    if (!room || !room.authMatch || room.authInterval) return;
-    room.authInterval = setInterval(() => {
-        if (!rooms[roomId] || rooms[roomId] !== room) {
-            stopRoomAuthLoop(room);
-            return;
-        }
-        const stepResult = room.authMatch.step();
-        if (room.p1 && stepResult.toP1 > 0) {
-            io.to(room.p1).emit('auth_receive_garbage', { count: stepResult.toP1 });
-        }
-        if (room.p2 && stepResult.toP2 > 0) {
-            io.to(room.p2).emit('auth_receive_garbage', { count: stepResult.toP2 });
-        }
-        broadcastRoomAuthSnapshot(room, roomId);
-    }, 100);
-}
-
-function startAuthoritativeRoom(roomId: string): void {
-    const room = rooms[roomId];
-    if (!room || !room.p1 || !room.p2) return;
-    if (!room.authMatch) {
-        const seedP1 = nodeCrypto.randomInt(1, 0x7fffffff);
-        const seedP2 = nodeCrypto.randomInt(1, 0x7fffffff);
-        room.authSeeds = { p1: seedP1, p2: seedP2 };
-        room.authMatch = new AuthoritativeMatch('P1', 'P2', seedP1, seedP2);
-    }
-    ensureRoomAuthLoop(room, roomId);
-}
-
-function markNMultiPlayerDirty(room: NMultiRoomState, playerId: string): void {
-    if (!room || !playerId) return;
-    if (!room.dirtyPlayers) {
-        room.dirtyPlayers = new Set();
-    }
-    room.dirtyPlayers.add(playerId);
-}
-
-io.on('connection', (socket: Socket) => {
-    console.log('A user connected:', socket.id);
-
-    // Send initial room list
-    socket.on('get_rooms', () => {
-        socket.emit('room_list', getRoomList());
-    });
-
-    socket.on('create_room', (roomName: unknown) => {
-        const normalizedRoomName = normalizeRoomName(roomName, 'My Room');
-        const roomId = nodeCrypto.randomUUID();
-        const p1Token = createResumeToken();
-        rooms[roomId] = {
-            id: roomId,
-            name: normalizedRoomName,
-            p1: socket.id,
-            p2: null,
-            status: 'waiting',
-            p1Token,
-            p2Token: null,
-            authMatch: null,
-            authInterval: null,
-            authSeeds: null,
-        };
-        
-        socket.join(roomId);
-        socket.emit('room_joined', { roomId, isHost: true, roomName: normalizedRoomName, resumeToken: p1Token });
-        io.emit('room_list', getRoomList()); // Broadcast update
-        console.log(`Room created: ${normalizedRoomName} (${roomId})`);
-    });
-
-    socket.on('join_room', (roomId: unknown) => {
-        const extractedRoomId = extractRoomId(roomId);
-        if (!extractedRoomId) {
-            socket.emit('room_error', 'Room is full or does not exist.');
-            return;
-        }
-        const room = rooms[extractedRoomId];
-        if (room && room.status === 'waiting' && !room.p2) {
-            room.p2 = socket.id;
-            room.p2Token = createResumeToken();
-            room.status = 'playing';
-
-            socket.join(extractedRoomId);
-            socket.emit('room_joined', { roomId: extractedRoomId, isHost: false, roomName: room.name, resumeToken: room.p2Token });
-            
-            // Notify P1 (host)
-            io.to(room.p1).emit('opponent_joined', { opponentId: socket.id });
-             // Notify P2
-            socket.emit('opponent_joined', { opponentId: room.p1 });
-
-            io.emit('room_list', getRoomList()); // Update list (room full)
-        } else {
-            socket.emit('room_error', 'Room is full or does not exist.');
-        }
-    });
-
-    socket.on('player_ready', (data: unknown) => {
-        if (!isPlayerReadyPayload(data)) return;
-        const room = rooms[data.roomId];
-        if (room) {
-            if (socket.id === room.p1) room.p1Ready = true;
-            if (socket.id === room.p2) room.p2Ready = true;
-
-            if (room.p1Ready && room.p2Ready) {
-                 // Start Game
-                startAuthoritativeRoom(data.roomId);
-                if (room.p1) {
-                    io.to(room.p1).emit('game_start', {
-                        roomId: data.roomId,
-                        authSeed: room.authSeeds ? room.authSeeds.p1 : (room.authMatch && room.authMatch.seeds ? room.authMatch.seeds.p1 : null),
-                    });
-                }
-                if (room.p2) {
-                    io.to(room.p2).emit('game_start', {
-                        roomId: data.roomId,
-                        authSeed: room.authSeeds ? room.authSeeds.p2 : (room.authMatch && room.authMatch.seeds ? room.authMatch.seeds.p2 : null),
-                    });
-                }
-                console.log(`Game started in room ${data.roomId}`);
-            }
-        }
-    });
-
-    socket.on('auth_input', (data: unknown) => {
-        if (!isAuthInputPayload(data)) return;
-        const room = rooms[data.roomId];
-        if (!room || !room.authMatch) return;
-        const seat = getPlayerSeat(room, socket.id);
-        if (!seat) return;
-        room.authMatch.enqueue(seat, data.direction, data.state, data.seq);
-    });
-
-    socket.on('resume_auth', (data: unknown) => {
-        if (!isResumeAuthPayload(data)) return;
-        const found = findRoomByResumeToken(data.resumeToken);
-        if (!found) {
-            socket.emit('room_error', 'Resume token expired or invalid.');
-            return;
-        }
-        const { roomId, room, seat } = found;
-        if (!room) return;
-
-        if (seat === 'p1') room.p1 = socket.id;
-        if (seat === 'p2') room.p2 = socket.id;
-
-        socket.join(roomId);
-        socket.emit('room_resumed', {
-            roomId,
-            isHost: seat === 'p1',
-            roomName: room.name,
-            resumeToken: data.resumeToken,
-            authSeed: room.authSeeds ? room.authSeeds[seat] : (room.authMatch && room.authMatch.seeds ? room.authMatch.seeds[seat] : null),
-        });
-
-        if (room.authMatch) {
-            const snapshot = buildAuthSnapshot(room, seat);
-            socket.emit('auth_snapshot', snapshot);
-        }
-    });
-
-    socket.on('update_state', (data: unknown) => {
-        if (!isUpdateStatePayload(data)) return;
-        socket.to(data.roomId).emit('opponent_state_update', data);
-    });
-
-    socket.on('send_garbage', (data: unknown) => {
-        if (!isSendGarbagePayload(data)) return;
-        socket.to(data.roomId).emit('receive_garbage', data);
-    });
-
-    socket.on('game_over', (data: unknown) => {
-        const roomId = extractRoomId(data);
-        if (!roomId) return;
-        socket.to(roomId).emit('opponent_game_over');
-    });
-
-    socket.on('request_restart', (data: unknown) => {
-        if (!isRequestRestartPayload(data)) return;
-        const room = rooms[data.roomId];
-        if (room) {
-            // Reset ready states
-            room.p1Ready = false;
-            room.p2Ready = false;
-            room.authMatch = null;
-            room.authSeeds = null;
-            stopRoomAuthLoop(room);
-            // Notify both players to reset and get ready
-            io.to(data.roomId).emit('restart_signal');
-        }
-    });
-
-    socket.on('join_or_create', (data: unknown) => {
-        const roomName = normalizeRoomName(data, 'Room');
-
-        // Find existing room by name (check both waiting and playing)
-        let existingWaitingRoomId = null;
-        let existingPlayingRoomId = null;
-        for (const roomId in rooms) {
-            if (rooms[roomId].name === roomName) {
-                if (rooms[roomId].status === 'waiting') {
-                    existingWaitingRoomId = roomId;
-                    break;
-                } else if (rooms[roomId].status === 'playing') {
-                    existingPlayingRoomId = roomId;
-                }
-            }
-        }
-
-        if (existingWaitingRoomId) {
-            // Join existing room as p2
-            const room = rooms[existingWaitingRoomId];
-            room.p2 = socket.id;
-            room.p2Token = createResumeToken();
-            room.status = 'playing';
-
-            socket.join(existingWaitingRoomId);
-            socket.emit('room_joined', { roomId: existingWaitingRoomId, isHost: false, roomName: room.name, resumeToken: room.p2Token });
-
-            io.to(room.p1).emit('opponent_joined', { opponentId: socket.id });
-            socket.emit('opponent_joined', { opponentId: room.p1 });
-
-            io.emit('room_list', getRoomList());
-        } else if (existingPlayingRoomId) {
-            socket.emit('room_error', 'Game is already in progress in this room.');
-        } else {
-            // Create new room
-            const roomId = nodeCrypto.randomUUID();
-            const p1Token = createResumeToken();
-            rooms[roomId] = {
-                id: roomId,
-                name: roomName,
-                p1: socket.id,
-                p2: null,
-                status: 'waiting',
-                p1Token,
-                p2Token: null,
-                authMatch: null,
-                authInterval: null,
-                authSeeds: null,
-            };
-
-            socket.join(roomId);
-            socket.emit('room_joined', { roomId, isHost: true, roomName, resumeToken: p1Token });
-            io.emit('room_list', getRoomList());
-            console.log(`Room created via join_or_create: ${roomName} (${roomId})`);
-        }
-    });
-
-    // ===== N-Multi Events =====
-
-    socket.on('nmulti_get_rooms', () => {
-        socket.emit('nmulti_room_list', getNMultiRoomList());
-    });
-
-    socket.on('nmulti_create_room', (data: unknown) => {
-        const roomName = normalizeRoomName(data, 'Room');
-        const roomId = nodeCrypto.randomUUID();
-        const playerName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
-
-        const room = createNMultiRoom(roomId, roomName, socket.id, playerName);
-
-        socket.join(roomId);
-
-        socket.emit('nmulti_room_joined', {
-            roomId,
-            playerId: socket.id,
-            playerName,
-            roomName: room.name,
-            players: getPlayersMap(room, socket.id)
-        });
-
-        io.emit('nmulti_room_list', getNMultiRoomList());
-        console.log(`N-Multi room created: ${roomName} (${roomId})`);
-    });
-
-    socket.on('nmulti_join_room', (data: unknown) => {
-        const roomId = extractRoomId(data);
-        if (!roomId) {
-            socket.emit('nmulti_room_error', 'Room does not exist.');
-            return;
-        }
-        const room = nMultiRooms[roomId];
-        if (!room) {
-            socket.emit('nmulti_room_error', 'Room does not exist.');
-            return;
-        }
-        const playerCount = Object.keys(room.players).length;
-        if (playerCount >= 100) {
-            socket.emit('nmulti_room_error', 'Room is full (100 players max).');
-            return;
-        }
-        if (room.players[socket.id]) {
-            socket.emit('nmulti_room_error', 'Already in this room.');
-            return;
-        }
-
-        room.playerCounter++;
-        const playerName = generateRandomName(room);
-
-        room.players[socket.id] = {
-            name: playerName,
-            score: 0,
-            level: 1,
-            lines: 0,
-            board: null,
-            isAlive: true,
-            v: 0
-        };
-        markNMultiPlayerDirty(room, socket.id);
-
-        socket.join(roomId);
-
-        socket.emit('nmulti_room_joined', {
-            roomId,
-            playerId: socket.id,
-            playerName,
-            roomName: room.name,
-            players: getPlayersMap(room, socket.id)
-        });
-
-        // Notify others
-        socket.to(roomId).emit('nmulti_player_joined', {
-            playerId: socket.id,
-            playerName
-        });
-
-        io.emit('nmulti_room_list', getNMultiRoomList());
-    });
-
-    socket.on('nmulti_leave_room', (data: unknown) => {
-        const roomId = extractRoomId(data);
-        if (!roomId) return;
-        removeFromNMultiRoom(socket, roomId);
-    });
-
-    socket.on('nmulti_update_state', (data: unknown) => {
-        if (!isNMultiUpdateStatePayload(data)) return;
-        const room = nMultiRooms[data.roomId];
-        if (!room || !room.players[socket.id]) return;
-
-        const player = room.players[socket.id];
-        let changed = false;
-        if (data.score !== undefined && player.score !== data.score) { player.score = data.score; changed = true; }
-        if (data.level !== undefined && player.level !== data.level) { player.level = data.level; changed = true; }
-        if (data.lines !== undefined && player.lines !== data.lines) { player.lines = data.lines; changed = true; }
-        if (data.board !== undefined && player.board !== data.board) { player.board = data.board; changed = true; }
-        
-        if (changed) {
-            player.v++;
-            markNMultiPlayerDirty(room, socket.id);
-        }
-    });
-
-    socket.on('nmulti_send_garbage', (data: unknown) => {
-        if (!isNMultiSendGarbagePayload(data)) return;
-        const room = nMultiRooms[data.roomId];
-        if (!room || !room.players[socket.id]) return;
-        const sender = room.players[socket.id];
-        const target = room.players[data.targetId];
-        if (!target) return;
-        if (data.targetId === socket.id) return;
-        if (sender.isAlive === false || target.isAlive === false) return;
-        io.to(data.targetId).emit('nmulti_receive_garbage', {
-            count: data.count,
-            fromId: socket.id
-        });
-    });
-
-    socket.on('nmulti_game_over', (data: unknown) => {
-        if (!isNMultiRoomPayload(data)) return;
-        const room = nMultiRooms[data.roomId];
-        if (!room || !room.players[socket.id]) return;
-        room.players[socket.id].isAlive = false;
-        room.players[socket.id].v++;
-        markNMultiPlayerDirty(room, socket.id);
-    });
-
-    socket.on('nmulti_join_or_create', (data: unknown) => {
-        const roomName = normalizeRoomName(data, 'Room');
-
-        // Find existing room by name
-        let existingRoomId = null;
-        for (const roomId in nMultiRooms) {
-            if (nMultiRooms[roomId].name === roomName) {
-                existingRoomId = roomId;
-                break;
-            }
-        }
-
-        if (existingRoomId) {
-            // Join existing room
-            const room = nMultiRooms[existingRoomId];
-            const playerCount = Object.keys(room.players).length;
-            if (playerCount >= 100) {
-                socket.emit('nmulti_room_error', 'Room is full (100 players max).');
-                return;
-            }
-            if (room.players[socket.id]) {
-                socket.emit('nmulti_room_error', 'Already in this room.');
-                return;
-            }
-
-            room.playerCounter++;
-            const playerName = generateRandomName(room);
-
-            room.players[socket.id] = {
-                name: playerName,
-                score: 0,
-                level: 1,
-                lines: 0,
-                board: null,
-                isAlive: true,
-                v: 0
-            };
-            markNMultiPlayerDirty(room, socket.id);
-
-            socket.join(existingRoomId);
-
-            socket.emit('nmulti_room_joined', {
-                roomId: existingRoomId,
-                playerId: socket.id,
-                playerName,
-                roomName: room.name,
-                players: getPlayersMap(room, socket.id)
-            });
-
-            socket.to(existingRoomId).emit('nmulti_player_joined', {
-                playerId: socket.id,
-                playerName
-            });
-
-            io.emit('nmulti_room_list', getNMultiRoomList());
-        } else {
-            // Create new room
-            const roomId = nodeCrypto.randomUUID();
-            const playerName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
-
-            const room = createNMultiRoom(roomId, roomName, socket.id, playerName);
-
-            socket.join(roomId);
-
-            socket.emit('nmulti_room_joined', {
-                roomId,
-                playerId: socket.id,
-                playerName,
-                roomName,
-                players: getPlayersMap(room, socket.id)
-            });
-
-            io.emit('nmulti_room_list', getNMultiRoomList());
-            console.log(`N-Multi room created via join_or_create: ${roomName} (${roomId})`);
-        }
-    });
-
-    socket.on('nmulti_request_full_sync', (data: unknown) => {
-        if (!isNMultiRoomPayload(data)) return;
-        const room = nMultiRooms[data.roomId];
-        if (!room || !room.players[socket.id]) return;
-
-        socket.emit('nmulti_snapshot', {
-            players: getPlayersMap(room, socket.id),
-            isDelta: false
-        });
-    });
-
-    socket.on('nmulti_restart', (data: unknown) => {
-        if (!isNMultiRoomPayload(data)) return;
-        const room = nMultiRooms[data.roomId];
-        if (!room || !room.players[socket.id]) return;
-        const player = room.players[socket.id];
-        player.score = 0;
-        player.level = 1;
-        player.lines = 0;
-        player.board = null;
-        player.isAlive = true;
-        player.v++;
-        markNMultiPlayerDirty(room, socket.id);
-    });
-
-    // ===== Disconnect =====
-
-    socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
-        // Clean up 1v1 rooms
-        let roomChanged = false;
-        for (const roomId in rooms) {
-            const room = rooms[roomId];
-            if (room.p1 !== socket.id && room.p2 !== socket.id) {
-                continue;
-            }
-
-            if (room.status === 'playing' && room.authMatch) {
-                roomChanged = true;
-                if (room.p1 === socket.id) {
-                    room.p1 = null;
-                }
-                if (room.p2 === socket.id) {
-                    room.p2 = null;
-                }
-                continue;
-            }
-
-            roomChanged = true;
-
-            // Host left: promote guest to host and keep room waiting.
-            if (room.p1 === socket.id && room.p2) {
-                const remainingPlayer = room.p2;
-                room.p1 = remainingPlayer;
-                room.p2 = null;
-                room.status = 'waiting';
-                room.p1Ready = true;
-                room.p2Ready = false;
-                io.to(remainingPlayer).emit('opponent_disconnected', {
-                    message: 'Opponent left. Waiting for a new player...'
-                });
-                continue;
-            }
-
-            // Guest left: keep host in the room and return to waiting state.
-            if (room.p2 === socket.id) {
-                room.p2 = null;
-                room.status = 'waiting';
-                room.p1Ready = true;
-                room.p2Ready = false;
-                io.to(room.p1).emit('opponent_disconnected', {
-                    message: 'Opponent left. Waiting for a new player...'
-                });
-                continue;
-            }
-
-            // Host left while waiting: remove empty room.
-            if (room.p1 === socket.id) {
-                stopRoomAuthLoop(room);
-                delete rooms[roomId];
-            }
-        }
-        if (roomChanged) {
-            io.emit('room_list', getRoomList());
-        }
-
-        // Clean up N-Multi rooms
-        for (const roomId in nMultiRooms) {
-            const room = nMultiRooms[roomId];
-            if (room.players[socket.id]) {
-                removeFromNMultiRoom(socket, roomId);
-            }
-        }
-    });
-});
-
-// ===== N-Multi Helper Functions =====
 
 function getNMultiRoomList(): Array<{ id: string; name: string; playerCount: number }> {
-    return Object.values(nMultiRooms).map((r) => ({
-        id: r.id,
-        name: r.name,
-        playerCount: Object.keys(r.players).length
+    return Object.values(nMultiRooms).map((room) => ({
+        id: room.id,
+        name: room.name,
+        playerCount: Object.keys(room.players).length,
     }));
 }
 
-function getPlayersMap(room: NMultiRoomState, excludeId: string | null = null): Record<string, NMultiPlayer> {
-    const map: Record<string, NMultiPlayer> = {};
-    for (const [sid, player] of Object.entries(room.players)) {
-        if (excludeId && sid === excludeId) continue;
-        map[sid] = {
+function getNMultiPlayersPayload(room: NMultiRoom, excludePlayerId: string | null = null): Record<string, {
+    name: string;
+    score: number;
+    level: number;
+    lines: number;
+    board: string | null;
+    isAlive: boolean;
+    v: number;
+}> {
+    const payload: Record<string, {
+        name: string;
+        score: number;
+        level: number;
+        lines: number;
+        board: string | null;
+        isAlive: boolean;
+        v: number;
+    }> = {};
+    for (const [playerId, player] of Object.entries(room.players)) {
+        if (excludePlayerId && playerId === excludePlayerId) continue;
+        payload[playerId] = {
             name: player.name,
             score: player.score,
             level: player.level,
             lines: player.lines,
             board: player.board,
             isAlive: player.isAlive,
-            v: player.v
+            v: player.v,
         };
     }
-    return map;
+    return payload;
 }
 
-function broadcastNMultiSnapshot(roomId: string): void {
-    const room = nMultiRooms[roomId];
-    if (!room) return;
+function buildNMultiRoomJoinedPayload(room: NMultiRoom, player: NMultiPlayer): {
+    roomId: string;
+    playerId: string;
+    playerName: string;
+    roomName: string;
+    players: Record<string, {
+        name: string;
+        score: number;
+        level: number;
+        lines: number;
+        board: string | null;
+        isAlive: boolean;
+        v: number;
+    }>;
+    authSeed: number;
+    authSnapshot: {
+        tick: number;
+        self: ReturnType<AuthoritativeMatch['getSnapshotFor']>['self'];
+        serverAckInputSeq: number;
+    };
+} {
+    const authSnapshot = player.authMatch.getSnapshotFor('p1');
+    return {
+        roomId: room.id,
+        playerId: player.id,
+        playerName: player.name,
+        roomName: room.name,
+        players: getNMultiPlayersPayload(room, player.id),
+        authSeed: player.authMatch.seeds.p1,
+        authSnapshot: {
+            tick: authSnapshot.tick,
+            self: authSnapshot.self,
+            serverAckInputSeq: player.lastAckInputSeq,
+        },
+    };
+}
 
-    const dirtyPlayers = room.dirtyPlayers ? Array.from(room.dirtyPlayers) : [];
-    if (dirtyPlayers.length === 0) return;
+function buildOneVsOneAuthSnapshot(match: AuthoritativeMatch, seat: Seat): {
+    tick: number;
+    self: ReturnType<AuthoritativeMatch['getSnapshotFor']>['self'];
+    opponent: ReturnType<AuthoritativeMatch['getSnapshotFor']>['opponent'];
+    serverAckInputSeq: number;
+} {
+    const snapshot = match.getSnapshotFor(seat);
+    return {
+        ...snapshot,
+        serverAckInputSeq: match.players[seat].lastSeq,
+    };
+}
 
-    const deltaSnapshot: Record<string, NMultiPlayer> = {};
+function buildNMultiAuthSnapshot(player: NMultiPlayer): {
+    tick: number;
+    self: ReturnType<AuthoritativeMatch['getSnapshotFor']>['self'];
+    serverAckInputSeq: number;
+} {
+    const snapshot = player.authMatch.getSnapshotFor('p1');
+    return {
+        tick: snapshot.tick,
+        self: snapshot.self,
+        serverAckInputSeq: player.lastAckInputSeq,
+    };
+}
 
-    for (const sid of dirtyPlayers as string[]) {
-        const p = room.players[sid];
-        if (!p) continue;
-        
-        if (room.lastBroadcasted[sid] !== p.v) {
-            deltaSnapshot[sid] = {
-                name: p.name,
-                score: p.score,
-                level: p.level,
-                lines: p.lines,
-                board: p.board,
-                isAlive: p.isAlive,
-                v: p.v
-            };
-            room.lastBroadcasted[sid] = p.v;
-        }
+function markNMultiPlayerActive(player: NMultiPlayer): void {
+    player.lastUpdateAt = Date.now();
+    player.presence = 'active';
+    player.disconnectedAt = null;
+}
+
+function getNMultiPlayerBySocket(room: NMultiRoom, socketId: string): { playerId: string; player: NMultiPlayer } | null {
+    const playerId = room.bySocket[socketId];
+    if (!playerId) return null;
+    const player = room.players[playerId];
+    if (!player) return null;
+    return { playerId, player };
+}
+
+function resetNMultiPlayerMatch(player: NMultiPlayer): void {
+    player.authMatch = createNMultiAuthoritativeMatch(player.name);
+    const selfSnapshot = player.authMatch.getSnapshotFor('p1').self;
+    player.score = selfSnapshot.score;
+    player.level = selfSnapshot.level;
+    player.lines = selfSnapshot.lines;
+    player.board = selfSnapshot.board;
+    player.isAlive = selfSnapshot.isAlive;
+    markNMultiPlayerActive(player);
+    player.lastAckInputSeq = 0;
+    player.v += 1;
+}
+
+function createNMultiAuthoritativeMatch(playerName: string): AuthoritativeMatch {
+    const seed = nodeCrypto.randomInt(1, 0x7fffffff);
+    const match = new AuthoritativeMatch(playerName, 'VOID', seed, 1);
+    match.players.p2.isAlive = false;
+    return match;
+}
+
+function createNMultiPlayer(room: NMultiRoom | null, socketId: string, name?: string): NMultiPlayer {
+    const now = Date.now();
+    const playerName = name || (room ? generateRandomName(room) : RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)]);
+    const authMatch = createNMultiAuthoritativeMatch(playerName);
+    const initialSelf = authMatch.getSnapshotFor('p1').self;
+
+    return {
+        id: nodeCrypto.randomUUID(),
+        name: playerName,
+        socketId,
+        score: initialSelf.score,
+        level: initialSelf.level,
+        lines: initialSelf.lines,
+        board: initialSelf.board,
+        isAlive: initialSelf.isAlive,
+        v: 1,
+        presence: 'active',
+        disconnectedAt: null,
+        lastUpdateAt: now,
+        authMatch,
+        lastAckInputSeq: 0,
+    };
+}
+
+function createOneVsOneRoom(roomName: string, hostSocketId: string): OneVsOneRoom {
+    const roomId = nodeCrypto.randomUUID();
+    const room: OneVsOneRoom = {
+        id: roomId,
+        name: roomName,
+        status: 'waiting',
+        seats: {
+            p1: {
+                socketId: hostSocketId,
+                token: createToken(),
+                ready: false,
+                presence: 'active',
+                disconnectedAt: null,
+            },
+            p2: {
+                socketId: null,
+                token: createToken(),
+                ready: false,
+                presence: 'inactive',
+                disconnectedAt: null,
+            },
+        },
+        authSeeds: null,
+        authMatch: null,
+        authInterval: null,
+        roundOver: false,
+    };
+    oneVsOneRooms[roomId] = room;
+    return room;
+}
+
+function joinSocketToRoom(socket: Socket, roomId: string): void {
+    socket.join(roomId);
+}
+
+function emitOneVsOneRoomJoined(socket: Socket, room: OneVsOneRoom, seat: Seat): void {
+    socket.emit('room_joined', {
+        roomId: room.id,
+        isHost: seat === 'p1',
+        roomName: room.name,
+        resumeToken: room.seats[seat].token,
+    });
+}
+
+function createAndJoinOneVsOneRoom(socket: Socket, roomName: string): OneVsOneRoom {
+    const room = createOneVsOneRoom(roomName, socket.id);
+    joinSocketToRoom(socket, room.id);
+    emitOneVsOneRoomJoined(socket, room, 'p1');
+    emitRoomList();
+    return room;
+}
+
+function joinOneVsOneRoom(socket: Socket, room: OneVsOneRoom): boolean {
+    if (room.status !== 'waiting') {
+        return false;
     }
 
-    room.dirtyPlayers.clear();
+    let joinSeat: Seat | null = null;
+    if (!room.seats.p1.socketId) {
+        joinSeat = 'p1';
+    } else if (!room.seats.p2.socketId) {
+        joinSeat = 'p2';
+    }
+    if (!joinSeat) {
+        return false;
+    }
 
-    if (Object.keys(deltaSnapshot).length > 0) {
-        // Broadcast single packet to all
-        io.to(roomId).emit('nmulti_snapshot', { 
-            players: deltaSnapshot,
-            isDelta: true 
+    room.seats[joinSeat].socketId = socket.id;
+    room.seats[joinSeat].presence = 'active';
+    room.seats[joinSeat].disconnectedAt = null;
+    room.status = 'playing';
+
+    joinSocketToRoom(socket, room.id);
+    emitOneVsOneRoomJoined(socket, room, joinSeat);
+
+    const opponentSeat = getOpponentSeat(joinSeat);
+    const opponentSocketId = room.seats[opponentSeat].socketId;
+    if (opponentSocketId) {
+        io.to(opponentSocketId).emit('opponent_joined', { opponentId: socket.id });
+        socket.emit('opponent_joined', { opponentId: opponentSocketId });
+    }
+
+    emitRoomList();
+    return true;
+}
+
+function createNMultiRoom(roomName: string, hostSocketId: string): NMultiRoom {
+    const roomId = nodeCrypto.randomUUID();
+    const host = createNMultiPlayer(null, hostSocketId);
+    const room: NMultiRoom = {
+        id: roomId,
+        name: roomName,
+        players: {
+            [host.id]: host,
+        },
+        bySocket: {
+            [hostSocketId]: host.id,
+        },
+        dirtyPlayers: new Set([host.id]),
+        lastBroadcasted: {},
+        broadcastInterval: setInterval(() => broadcastNMultiDelta(roomId), N_MULTI_BROADCAST_MS),
+        simInterval: setInterval(() => tickNMultiRoom(roomId), N_MULTI_SIM_TICK_MS),
+    };
+    nMultiRooms[roomId] = room;
+    return room;
+}
+
+function addNMultiPlayerToRoom(room: NMultiRoom, socket: Socket): NMultiPlayer {
+    const player = createNMultiPlayer(room, socket.id);
+    room.players[player.id] = player;
+    room.bySocket[socket.id] = player.id;
+    markNMultiPlayerDirty(room, player.id);
+    return player;
+}
+
+function emitNMultiRoomJoined(socket: Socket, room: NMultiRoom, player: NMultiPlayer): void {
+    joinSocketToRoom(socket, room.id);
+    socket.emit('nmulti_room_joined', buildNMultiRoomJoinedPayload(room, player));
+}
+
+function createAndJoinNMultiRoom(socket: Socket, roomName: string): NMultiRoom {
+    const room = createNMultiRoom(roomName, socket.id);
+    const host = Object.values(room.players)[0];
+    emitNMultiRoomJoined(socket, room, host);
+    emitNMultiRoomList();
+    return room;
+}
+
+function joinExistingNMultiRoom(socket: Socket, room: NMultiRoom): void {
+    const player = addNMultiPlayerToRoom(room, socket);
+    emitNMultiRoomJoined(socket, room, player);
+    socket.to(room.id).emit('nmulti_player_joined', {
+        playerId: player.id,
+        playerName: player.name,
+    });
+    emitNMultiRoomList();
+}
+
+function isNMultiRoomFull(room: NMultiRoom): boolean {
+    return Object.keys(room.players).length >= 100;
+}
+
+const oneVsOneModePolicy: RoomModePolicy<OneVsOneRoom> = {
+    normalizeName: normalizeRoomName,
+    findRoomById: (roomId) => oneVsOneRooms[roomId] || null,
+    findJoinableRoomByName: (roomName) => Object.values(oneVsOneRooms)
+        .find((room) => room.name === roomName && room.status === 'waiting') || null,
+    createAndJoinRoom: (socket, roomName) => {
+        createAndJoinOneVsOneRoom(socket, roomName);
+    },
+    tryJoinRoom: (socket, room) => (joinOneVsOneRoom(socket, room) ? 'joined' : 'join_failed'),
+    emitJoinError: (socket) => {
+        socket.emit('room_error', {
+            code: 'ROOM_NOT_FOUND_OR_FULL',
+            message: 'Room is full or does not exist.',
+        });
+    },
+};
+
+const nMultiModePolicy: RoomModePolicy<NMultiRoom> = {
+    normalizeName: normalizeRoomName,
+    findRoomById: (roomId) => nMultiRooms[roomId] || null,
+    findJoinableRoomByName: (roomName) => Object.values(nMultiRooms)
+        .find((room) => room.name === roomName) || null,
+    createAndJoinRoom: (socket, roomName) => {
+        createAndJoinNMultiRoom(socket, roomName);
+    },
+    tryJoinRoom: (socket, room) => {
+        if (isNMultiRoomFull(room)) {
+            return 'full';
+        }
+        joinExistingNMultiRoom(socket, room);
+        return 'joined';
+    },
+    emitJoinError: (socket, reason) => {
+        if (reason === 'full') {
+            socket.emit('nmulti_room_error', {
+                code: 'ROOM_FULL',
+                message: 'Room is full (100 players max).',
+            });
+            return;
+        }
+        socket.emit('nmulti_room_error', {
+            code: 'ROOM_NOT_FOUND',
+            message: 'Room does not exist.',
+        });
+    },
+};
+
+const oneVsOneResumePolicy: TokenLifecyclePolicy<{ room: OneVsOneRoom; seat: Seat }> = {
+    findByToken: findOneVsOneByToken,
+    execute: (socket, found) => {
+        const { room, seat } = found;
+        room.seats[seat].socketId = socket.id;
+        room.seats[seat].presence = 'active';
+        room.seats[seat].disconnectedAt = null;
+        joinSocketToRoom(socket, room.id);
+
+        const opponentSeat = getOpponentSeat(seat);
+        const resumedPayload = {
+            roomId: room.id,
+            isHost: seat === 'p1',
+            roomName: room.name,
+            resumeToken: room.seats[seat].token,
+            authSeed: room.authSeeds ? room.authSeeds[seat] : null,
+            shadowSelf: room.authMatch ? room.authMatch.getSnapshotFor(seat).self : undefined,
+            shadowOpponent: room.authMatch ? room.authMatch.getSnapshotFor(seat).opponent : undefined,
+            pendingGarbage: [],
+            serverSeqBase: room.authMatch ? room.authMatch.tick : 0,
+        };
+        socket.emit('room_resumed', resumedPayload);
+
+        if (room.authMatch) {
+            socket.emit('auth_snapshot', buildOneVsOneAuthSnapshot(room.authMatch, seat));
+        }
+
+        const opponentSocketId = room.seats[opponentSeat].socketId;
+        if (opponentSocketId) {
+            io.to(opponentSocketId).emit('opponent_joined', { opponentId: socket.id });
+        }
+    },
+    onMissing: (socket) => {
+        socket.emit('room_error', {
+            code: 'RESUME_TOKEN_INVALID',
+            message: 'Resume token expired or invalid.',
+        });
+    },
+};
+
+const oneVsOneRestartPolicy: RoomLifecyclePolicy<OneVsOneRoom> = {
+    findRoomById: (roomId) => oneVsOneRooms[roomId] || null,
+    execute: (_socket, room) => {
+        room.seats.p1.ready = false;
+        room.seats.p2.ready = false;
+        room.authMatch = null;
+        room.authSeeds = null;
+        room.roundOver = false;
+        stopOneVsOneLoop(room);
+        io.to(room.id).emit('restart_signal');
+    },
+};
+
+const nMultiRestartPolicy: RoomLifecyclePolicy<NMultiRoom> = {
+    findRoomById: (roomId) => nMultiRooms[roomId] || null,
+    execute: (socket, room) => {
+        const playerEntry = getNMultiPlayerBySocket(room, socket.id);
+        if (!playerEntry) return;
+
+        const { playerId, player } = playerEntry;
+        resetNMultiPlayerMatch(player);
+        markNMultiPlayerDirty(room, playerId);
+
+        socket.emit('nmulti_restarted', {
+            roomId: room.id,
+            authSeed: player.authMatch.seeds.p1,
+            authSnapshot: buildNMultiAuthSnapshot(player),
+        });
+    },
+};
+
+function stopOneVsOneLoop(room: OneVsOneRoom): void {
+    if (!room.authInterval) return;
+    clearInterval(room.authInterval);
+    room.authInterval = null;
+}
+
+function startOneVsOneRound(room: OneVsOneRoom): void {
+    room.roundOver = false;
+    const seedP1 = nodeCrypto.randomInt(1, 0x7fffffff);
+    const seedP2 = nodeCrypto.randomInt(1, 0x7fffffff);
+    room.authSeeds = { p1: seedP1, p2: seedP2 };
+    room.authMatch = new AuthoritativeMatch('P1', 'P2', seedP1, seedP2);
+
+    stopOneVsOneLoop(room);
+    room.authInterval = setInterval(() => tickOneVsOneRoom(room.id), AUTH_TICK_MS);
+
+    if (room.seats.p1.socketId) {
+        io.to(room.seats.p1.socketId).emit('game_start', {
+            roomId: room.id,
+            authSeed: seedP1,
+            authSnapshot: buildOneVsOneAuthSnapshot(room.authMatch, 'p1'),
+        });
+    }
+    if (room.seats.p2.socketId) {
+        io.to(room.seats.p2.socketId).emit('game_start', {
+            roomId: room.id,
+            authSeed: seedP2,
+            authSnapshot: buildOneVsOneAuthSnapshot(room.authMatch, 'p2'),
         });
     }
 }
 
-function removeFromNMultiRoom(socket: Socket, roomId: string): void {
-    const room = nMultiRooms[roomId];
-    if (!room || !room.players[socket.id]) return;
+function maybeFinishOneVsOneRound(room: OneVsOneRoom): void {
+    if (!room.authMatch || room.roundOver) return;
+    const p1Alive = room.authMatch.players.p1.isAlive;
+    const p2Alive = room.authMatch.players.p2.isAlive;
+    if (p1Alive && p2Alive) return;
+    room.roundOver = true;
+    room.seats.p1.ready = false;
+    room.seats.p2.ready = false;
+    io.to(room.id).emit('auth_round_over', {
+        winner: p1Alive ? 'p1' : (p2Alive ? 'p2' : null),
+    });
+}
 
-    delete room.players[socket.id];
-    if (room.lastBroadcasted) delete room.lastBroadcasted[socket.id];
-    if (room.dirtyPlayers) room.dirtyPlayers.delete(socket.id);
-    socket.leave(roomId);
-
-    const remaining = Object.keys(room.players).length;
-    if (remaining === 0) {
-        // Room empty, clean up
-        if (room._broadcastInterval) {
-            clearInterval(room._broadcastInterval);
-        }
-        delete nMultiRooms[roomId];
-    } else {
-        // Notify remaining players
-        socket.to(roomId).emit('nmulti_player_left', { playerId: socket.id });
+function tickOneVsOneRoom(roomId: string): void {
+    const room = oneVsOneRooms[roomId];
+    if (!room || !room.authMatch) {
+        if (room) stopOneVsOneLoop(room);
+        return;
     }
 
-    io.emit('nmulti_room_list', getNMultiRoomList());
+    const step = room.authMatch.step();
+
+    if (step.toP1 > 0 && room.seats.p1.socketId) {
+        io.to(room.seats.p1.socketId).emit('auth_receive_garbage', { count: step.toP1 });
+    }
+    if (step.toP2 > 0 && room.seats.p2.socketId) {
+        io.to(room.seats.p2.socketId).emit('auth_receive_garbage', { count: step.toP2 });
+    }
+
+    if (room.seats.p1.socketId) {
+        io.to(room.seats.p1.socketId).emit('auth_snapshot', buildOneVsOneAuthSnapshot(room.authMatch, 'p1'));
+    }
+    if (room.seats.p2.socketId) {
+        io.to(room.seats.p2.socketId).emit('auth_snapshot', buildOneVsOneAuthSnapshot(room.authMatch, 'p2'));
+    }
+
+    maybeFinishOneVsOneRound(room);
 }
 
-// ===== 1v1 Helper Functions =====
-
-function getRoomList(): Array<{ id: string; name: string; players: number; status: string }> {
-    return Object.values(rooms).map((r) => ({
-        id: r.id,
-        name: r.name,
-        players: (r.p1 ? 1 : 0) + (r.p2 ? 1 : 0),
-        status: r.status
-    })).filter(r => r.status === 'waiting'); // Only show waiting rooms? Or all? Let's show waiting for now.
+function findOneVsOneByToken(token: string): { room: OneVsOneRoom; seat: Seat } | null {
+    for (const room of Object.values(oneVsOneRooms)) {
+        if (room.seats.p1.token === token) return { room, seat: 'p1' };
+        if (room.seats.p2.token === token) return { room, seat: 'p2' };
+    }
+    return null;
 }
+
+function handleOneVsOneDisconnect(socketId: string): void {
+    for (const room of Object.values(oneVsOneRooms)) {
+        const seat = getSeatBySocket(room, socketId);
+        if (!seat) continue;
+
+        const seatState = room.seats[seat];
+        seatState.socketId = null;
+        seatState.presence = 'inactive';
+        seatState.disconnectedAt = null;
+        seatState.ready = false;
+        seatState.token = createToken();
+
+        const opponentSeat = getOpponentSeat(seat);
+        room.seats[opponentSeat].ready = false;
+        room.status = 'waiting';
+        room.authMatch = null;
+        room.authSeeds = null;
+        room.roundOver = false;
+        stopOneVsOneLoop(room);
+
+        const opponentSocketId = room.seats[opponentSeat].socketId;
+        if (opponentSocketId) {
+            io.to(opponentSocketId).emit('opponent_disconnected', {
+                message: 'Opponent left the room. Waiting for a new player.',
+            });
+        }
+
+        if (!room.seats.p1.socketId && !room.seats.p2.socketId) {
+            delete oneVsOneRooms[room.id];
+        }
+    }
+
+    emitRoomList();
+}
+
+function markNMultiPlayerDirty(room: NMultiRoom, playerId: string): void {
+    room.dirtyPlayers.add(playerId);
+}
+
+function applyNMultiInactiveKnockout(room: NMultiRoom): void {
+    void room;
+}
+
+function chooseNMultiAttackTarget(room: NMultiRoom, senderId: string): NMultiPlayer | null {
+    const aliveTargets = Object.values(room.players).filter((player) => player.id !== senderId && player.isAlive);
+    if (aliveTargets.length === 0) return null;
+    const idx = Math.floor(Math.random() * aliveTargets.length);
+    return aliveTargets[idx] || null;
+}
+
+function tickNMultiRoom(roomId: string): void {
+    const room = nMultiRooms[roomId];
+    if (!room) return;
+
+    applyNMultiInactiveKnockout(room);
+
+    for (const player of Object.values(room.players)) {
+        const match = player.authMatch;
+        const wasAlive = player.isAlive;
+
+        if (player.isAlive) {
+            const step = match.step();
+            if (step.toP2 > 0) {
+                const target = chooseNMultiAttackTarget(room, player.id);
+                if (target) {
+                    target.authMatch.applyGarbageTo('p1', step.toP2);
+                    if (target.socketId) {
+                        io.to(target.socketId).emit('nmulti_receive_garbage', {
+                            count: step.toP2,
+                            fromId: player.id,
+                        });
+                    }
+                }
+            }
+        }
+
+        const snapshot = match.getSnapshotFor('p1');
+        const self = snapshot.self;
+        const nextAck = Number.isFinite(match.players.p1.lastSeq) ? match.players.p1.lastSeq : player.lastAckInputSeq;
+        const changed = player.board !== self.board
+            || player.score !== self.score
+            || player.level !== self.level
+            || player.lines !== self.lines
+            || player.isAlive !== self.isAlive
+            || player.lastAckInputSeq !== nextAck;
+
+        player.board = self.board;
+        player.score = self.score;
+        player.level = self.level;
+        player.lines = self.lines;
+        player.isAlive = self.isAlive;
+        player.lastAckInputSeq = nextAck;
+
+        if (player.socketId) {
+            io.to(player.socketId).emit('nmulti_auth_snapshot', buildNMultiAuthSnapshot(player));
+        }
+
+        if (changed || (wasAlive && !player.isAlive)) {
+            player.v += 1;
+            markNMultiPlayerDirty(room, player.id);
+        }
+    }
+}
+
+function broadcastNMultiDelta(roomId: string): void {
+    const room = nMultiRooms[roomId];
+    if (!room) return;
+
+    applyNMultiInactiveKnockout(room);
+
+    const dirty = Array.from(room.dirtyPlayers);
+    if (dirty.length === 0) return;
+
+    const delta: Record<string, {
+        name: string;
+        score: number;
+        level: number;
+        lines: number;
+        board: string | null;
+        isAlive: boolean;
+        v: number;
+    }> = {};
+
+    for (const playerId of dirty) {
+        const player = room.players[playerId];
+        if (!player) continue;
+        const previous = room.lastBroadcasted[playerId] || 0;
+        if (player.v <= previous) continue;
+        delta[playerId] = {
+            name: player.name,
+            score: player.score,
+            level: player.level,
+            lines: player.lines,
+            board: player.board,
+            isAlive: player.isAlive,
+            v: player.v,
+        };
+        room.lastBroadcasted[playerId] = player.v;
+    }
+
+    room.dirtyPlayers.clear();
+
+    if (Object.keys(delta).length > 0) {
+        io.to(roomId).emit('nmulti_snapshot', {
+            players: delta,
+            isDelta: true,
+        });
+    }
+}
+
+function permanentlyRemovePlayerFromNMultiRoom(room: NMultiRoom, playerId: string): void {
+    const player = room.players[playerId];
+    if (!player) return;
+
+    if (player.socketId) {
+        const socket = io.sockets.sockets.get(player.socketId);
+        if (socket) {
+            socket.leave(room.id);
+        }
+        delete room.bySocket[player.socketId];
+    }
+
+    delete room.players[playerId];
+    delete room.lastBroadcasted[playerId];
+    room.dirtyPlayers.delete(playerId);
+
+    io.to(room.id).emit('nmulti_player_left', { playerId });
+
+    if (Object.keys(room.players).length === 0) {
+        clearInterval(room.broadcastInterval);
+        clearInterval(room.simInterval);
+        delete nMultiRooms[room.id];
+    }
+
+    emitNMultiRoomList();
+}
+
+function handleNMultiDisconnect(socket: Socket): void {
+    for (const room of Object.values(nMultiRooms)) {
+        const playerId = room.bySocket[socket.id];
+        if (!playerId) continue;
+        permanentlyRemovePlayerFromNMultiRoom(room, playerId);
+    }
+}
+
+io.on('connection', (socket: Socket) => {
+    socket.on('get_rooms', () => {
+        socket.emit('room_list', getOneVsOneRoomList());
+    });
+
+    socket.on('create_room', (roomName: unknown) => {
+        handleCreateWithPolicy(socket, roomName, 'My Room', oneVsOneModePolicy);
+    });
+
+    socket.on('join_room', (roomIdCandidate: unknown) => {
+        handleJoinByIdWithPolicy(socket, extractRoomId(roomIdCandidate), oneVsOneModePolicy);
+    });
+
+    socket.on('join_or_create', (roomNameCandidate: unknown) => {
+        handleJoinOrCreateWithPolicy(socket, roomNameCandidate, 'Room', oneVsOneModePolicy);
+    });
+
+    socket.on('player_ready', (payload: unknown) => {
+        if (!isPlayerReadyPayload(payload)) return;
+        const room = oneVsOneRooms[payload.roomId];
+        if (!room) return;
+        const seat = getSeatBySocket(room, socket.id);
+        if (!seat) return;
+        room.seats[seat].ready = true;
+        if (!room.seats.p1.ready || !room.seats.p2.ready) return;
+        startOneVsOneRound(room);
+    });
+
+    socket.on('auth_input', (payload: unknown) => {
+        if (!isAuthInputPayload(payload)) return;
+        const room = oneVsOneRooms[payload.roomId];
+        if (!room || !room.authMatch) return;
+        const seat = getSeatBySocket(room, socket.id);
+        if (!seat) return;
+        room.authMatch.enqueue(seat, payload.direction, payload.state, payload.seq);
+    });
+
+    socket.on('auth_presence', (payload: unknown) => {
+        if (!isAuthPresencePayload(payload)) return;
+        const room = oneVsOneRooms[payload.roomId];
+        if (!room) return;
+        const seat = getSeatBySocket(room, socket.id);
+        if (!seat) return;
+        room.seats[seat].presence = payload.state;
+    });
+
+    socket.on('auth_snapshot', () => {
+        // The redesigned server is fully authoritative.
+        // Client shadow snapshots are ignored for fairness.
+    });
+
+    socket.on('auth_send_garbage', () => {
+        // The redesigned server computes attacks from authoritative state.
+        // Client-side attack claims are ignored.
+    });
+
+    socket.on('resume_auth', (payload: unknown) => {
+        if (!isResumeAuthPayload(payload)) return;
+        handleTokenLifecycleWithPolicy(socket, payload.resumeToken, oneVsOneResumePolicy);
+    });
+
+    socket.on('game_over', (payload: unknown) => {
+        const roomId = extractRoomId(payload);
+        if (!roomId) return;
+        const room = oneVsOneRooms[roomId];
+        if (!room || !room.authMatch) return;
+        const seat = getSeatBySocket(room, socket.id);
+        if (!seat) return;
+        room.authMatch.players[seat].isAlive = false;
+        maybeFinishOneVsOneRound(room);
+    });
+
+    socket.on('request_restart', (payload: unknown) => {
+        if (!isRequestRestartPayload(payload)) return;
+        handleRoomLifecycleByIdWithPolicy(socket, payload.roomId, oneVsOneRestartPolicy);
+    });
+
+    socket.on('update_state', (payload: unknown) => {
+        const roomId = extractRoomId(payload);
+        if (!roomId) return;
+        socket.to(roomId).emit('opponent_state_update', payload);
+    });
+
+    socket.on('send_garbage', (payload: unknown) => {
+        const roomId = extractRoomId(payload);
+        if (!roomId) return;
+        socket.to(roomId).emit('receive_garbage', payload);
+    });
+
+    socket.on('nmulti_get_rooms', () => {
+        socket.emit('nmulti_room_list', getNMultiRoomList());
+    });
+
+    socket.on('nmulti_create_room', (roomNameCandidate: unknown) => {
+        handleCreateWithPolicy(socket, roomNameCandidate, 'Room', nMultiModePolicy);
+    });
+
+    socket.on('nmulti_join_room', (payload: unknown) => {
+        handleJoinByIdWithPolicy(socket, extractRoomId(payload), nMultiModePolicy);
+    });
+
+    socket.on('nmulti_join_or_create', (roomNameCandidate: unknown) => {
+        handleJoinOrCreateWithPolicy(socket, roomNameCandidate, 'Room', nMultiModePolicy);
+    });
+
+    socket.on('nmulti_leave_room', (payload: unknown) => {
+        const roomId = extractRoomId(payload);
+        if (!roomId) return;
+        const room = nMultiRooms[roomId];
+        if (!room) return;
+        const playerId = room.bySocket[socket.id];
+        if (!playerId) return;
+        permanentlyRemovePlayerFromNMultiRoom(room, playerId);
+    });
+
+    socket.on('nmulti_update_state', (payload: unknown) => {
+        if (!isNMultiUpdateStatePayload(payload)) return;
+        const room = nMultiRooms[payload.roomId];
+        if (!room) return;
+        const playerEntry = getNMultiPlayerBySocket(room, socket.id);
+        if (!playerEntry) return;
+
+        const { player } = playerEntry;
+        // Authoritative mode: gameplay state is owned by server simulation.
+        // Keep this event as heartbeat/backward compatibility only.
+        markNMultiPlayerActive(player);
+    });
+
+    socket.on('nmulti_auth_input', (payload: unknown) => {
+        if (!isNMultiAuthInputPayload(payload)) return;
+        const room = nMultiRooms[payload.roomId];
+        if (!room) return;
+        const playerEntry = getNMultiPlayerBySocket(room, socket.id);
+        if (!playerEntry) return;
+
+        const { player } = playerEntry;
+        if (!player.isAlive) return;
+
+        player.authMatch.enqueue('p1', payload.direction, payload.state, payload.seq);
+        markNMultiPlayerActive(player);
+    });
+
+    socket.on('nmulti_presence', (payload: unknown) => {
+        if (!payload || typeof payload !== 'object') return;
+        const record = payload as Record<string, unknown>;
+        if (typeof record.roomId !== 'string') return;
+        if (record.state !== 'active' && record.state !== 'inactive') return;
+
+        const room = nMultiRooms[record.roomId];
+        if (!room) return;
+        const playerEntry = getNMultiPlayerBySocket(room, socket.id);
+        if (!playerEntry) return;
+
+        const { player } = playerEntry;
+        player.presence = record.state;
+        if (record.state === 'active') {
+            markNMultiPlayerActive(player);
+        }
+    });
+
+    socket.on('nmulti_send_garbage', (payload: unknown) => {
+        if (!isNMultiSendGarbagePayload(payload)) return;
+        // Authoritative mode: client-side garbage claims are ignored.
+    });
+
+    socket.on('nmulti_game_over', (payload: unknown) => {
+        if (!isNMultiRoomPayload(payload)) return;
+        // Authoritative mode: server owns alive/dead transitions.
+    });
+
+    socket.on('nmulti_request_full_sync', (payload: unknown) => {
+        if (!isNMultiRoomPayload(payload)) return;
+        const room = nMultiRooms[payload.roomId];
+        if (!room) return;
+        const playerEntry = getNMultiPlayerBySocket(room, socket.id);
+        if (!playerEntry) return;
+
+        const { playerId, player: self } = playerEntry;
+
+        socket.emit('nmulti_snapshot', {
+            players: getNMultiPlayersPayload(room, playerId),
+            isDelta: false,
+        });
+
+        socket.emit('nmulti_auth_snapshot', buildNMultiAuthSnapshot(self));
+    });
+
+    socket.on('nmulti_restart', (payload: unknown) => {
+        if (!isNMultiRoomPayload(payload)) return;
+        handleRoomLifecycleByIdWithPolicy(socket, payload.roomId, nMultiRestartPolicy);
+    });
+
+    socket.on('disconnect', () => {
+        handleOneVsOneDisconnect(socket.id);
+        handleNMultiDisconnect(socket);
+    });
+});
 
 const PORT = process.env.PORT || 3031;
 server.listen(PORT, () => {

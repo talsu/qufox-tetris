@@ -40,12 +40,17 @@ describe('1v1 Multi Server Logic', () => {
 
     function joinRoom(socketId: string, roomId: string): { success: boolean, response?: any, error?: string } {
         const room = rooms[roomId];
-        if (room && room.status === 'waiting' && !room.p2) {
-            room.p2 = socketId;
+        if (room && room.status === 'waiting' && (!room.p1 || !room.p2)) {
+            const joinedAsHost = !room.p1;
+            if (joinedAsHost) {
+                room.p1 = socketId;
+            } else {
+                room.p2 = socketId;
+            }
             room.status = 'playing';
             return {
                 success: true,
-                response: { roomId, isHost: false, roomName: room.name }
+                response: { roomId, isHost: joinedAsHost, roomName: room.name }
             };
         }
         return { success: false, error: 'Room is full or does not exist.' };
@@ -168,6 +173,21 @@ describe('1v1 Multi Server Logic', () => {
             expect(result.success).toBe(true);
             expect(result.response!.isHost).toBe(false);
             expect(result.response!.roomName).toBe('My Room');
+            expect(rooms[roomId].p2).toBe('socket2');
+            expect(rooms[roomId].status).toBe('playing');
+        });
+
+        test('joins waiting room as p1 when only p2 remains', () => {
+            const { roomId } = createRoom('socket1', 'My Room');
+            joinRoom('socket2', roomId);
+
+            rooms[roomId].p1 = null;
+            rooms[roomId].status = 'waiting';
+
+            const result = joinRoom('socket3', roomId);
+            expect(result.success).toBe(true);
+            expect(result.response!.isHost).toBe(true);
+            expect(rooms[roomId].p1).toBe('socket3');
             expect(rooms[roomId].p2).toBe('socket2');
             expect(rooms[roomId].status).toBe('playing');
         });

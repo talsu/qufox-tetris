@@ -1,15 +1,21 @@
 import {
+    extractSocketErrorMessage,
     extractRoomId,
     isAuthInputPayload,
     isAuthRoundOverPayload,
     isAuthSnapshotPayload,
+    isNMultiAuthSnapshotPayload,
+    isNMultiRoomErrorPayload,
     isNMultiPlayerJoinedPayload,
     isNMultiPlayerLeftPayload,
     isNMultiReceiveGarbagePayload,
+    isNMultiRoomJoinedPayload,
     isNMultiRoomPayload,
     isNMultiSendGarbagePayload,
     isNMultiSnapshotPayload,
     isNMultiUpdateStatePayload,
+    isOneVsOneRoomErrorPayload,
+    isOneVsOneRoomJoinedPayload,
     isPlayerReadyPayload,
     isRequestRestartPayload,
     isResumeAuthPayload,
@@ -79,8 +85,10 @@ describe('socket payload guards', () => {
                 },
             },
             opponent: { board: '0'.repeat(200), score: 2, level: 1, lines: 0, isAlive: false },
+            serverAckInputSeq: 7,
         };
         expect(isAuthSnapshotPayload(payload)).toBe(true);
+        expect(isAuthSnapshotPayload({ ...payload, serverAckInputSeq: 'bad' })).toBe(false);
         expect(isAuthSnapshotPayload({ ...payload, self: { ...payload.self, score: 'bad' } })).toBe(false);
         expect(isAuthSnapshotPayload({
             ...payload,
@@ -127,5 +135,77 @@ describe('socket payload guards', () => {
 
         expect(isNMultiReceiveGarbagePayload({ count: 3, fromId: 'x' })).toBe(true);
         expect(isNMultiReceiveGarbagePayload({ count: 0 })).toBe(false);
+    });
+
+    test('validates room joined payload guards for lobby/url flows', () => {
+        const oneVsOnePayload = {
+            roomId: 'room-1',
+            isHost: true,
+            roomName: 'My Room',
+            resumeToken: 'resume-123',
+        };
+        expect(isOneVsOneRoomJoinedPayload(oneVsOnePayload)).toBe(true);
+        expect(isOneVsOneRoomJoinedPayload({ ...oneVsOnePayload, resumeToken: '' })).toBe(false);
+
+        const nMultiAuthSnapshot = {
+            tick: 10,
+            serverAckInputSeq: 4,
+            self: {
+                board: '0'.repeat(200),
+                score: 20,
+                level: 1,
+                lines: 2,
+                isAlive: true,
+            },
+        };
+        expect(isNMultiAuthSnapshotPayload(nMultiAuthSnapshot)).toBe(true);
+
+        const nMultiRoomJoined = {
+            roomId: 'room-n-1',
+            playerId: 'player-1',
+            playerName: 'Alpha',
+            roomName: 'Battle',
+            authSeed: 123,
+            authSnapshot: nMultiAuthSnapshot,
+            players: {
+                'player-2': {
+                    name: 'Beta',
+                    score: 10,
+                    level: 1,
+                    lines: 0,
+                    board: '0'.repeat(200),
+                    isAlive: true,
+                    v: 1,
+                },
+            },
+        };
+        expect(isNMultiRoomJoinedPayload(nMultiRoomJoined)).toBe(true);
+        expect(isNMultiRoomJoinedPayload({ ...nMultiRoomJoined, authSeed: 'bad' })).toBe(false);
+        expect(isNMultiRoomJoinedPayload({ ...nMultiRoomJoined, players: { p: { score: 1 } } })).toBe(false);
+    });
+
+    test('validates typed room error payloads and message extraction', () => {
+        const oneVsOneError = {
+            code: 'ROOM_NOT_FOUND_OR_FULL',
+            message: 'Room is full or does not exist.',
+        } as const;
+        expect(isOneVsOneRoomErrorPayload(oneVsOneError)).toBe(true);
+
+        const resumeError = {
+            code: 'RESUME_TOKEN_INVALID',
+            message: 'Resume token expired or invalid.',
+        } as const;
+        expect(isOneVsOneRoomErrorPayload(resumeError)).toBe(true);
+
+        const nMultiError = {
+            code: 'ROOM_FULL',
+            message: 'Room is full (100 players max).',
+        } as const;
+        expect(isNMultiRoomErrorPayload(nMultiError)).toBe(true);
+
+        expect(extractSocketErrorMessage(oneVsOneError, 'fallback')).toBe(oneVsOneError.message);
+        expect(extractSocketErrorMessage(nMultiError, 'fallback')).toBe(nMultiError.message);
+        expect(extractSocketErrorMessage('legacy string', 'fallback')).toBe('legacy string');
+        expect(extractSocketErrorMessage({ nope: true }, 'fallback')).toBe('fallback');
     });
 });

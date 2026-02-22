@@ -382,7 +382,7 @@ export class MenuScene extends BaseScene {
         const socket: Socket = io(getSocketUrl(), { path: SOCKET_PATH });
 
         socket.on('connect', () => {
-            socket.emit('nmulti_join_or_create', { roomName });
+            socket.emit('nmulti_join_or_create', { roomName, botLevel });
         });
 
         socket.on('nmulti_room_joined', (data: unknown) => {
@@ -438,7 +438,7 @@ export class MenuScene extends BaseScene {
         const socket: Socket = io(getSocketUrl(), { path: SOCKET_PATH });
 
         socket.on('connect', () => {
-            socket.emit('join_or_create', { roomName });
+            socket.emit('join_or_create', { roomName, botLevel });
         });
 
         socket.on('room_joined', (data: unknown) => {

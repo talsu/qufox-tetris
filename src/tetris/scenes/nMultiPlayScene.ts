@@ -1,6 +1,5 @@
 import { CONST, InputState } from "../const/const";
 import { MiniPlayField } from "../objects/miniPlayField";
-import { BotManager } from "../logic/botManager";
 import { BasePlayScene } from "./basePlayScene";
 import { SnapshotManager } from "../net/snapshotManager";
 import {
@@ -466,11 +465,6 @@ export class NMultiPlayScene extends BasePlayScene {
             obj.setVisible(true);
         });
         this.inputManager.isEnabled = true;
-
-        if (this.botLevel > 0) {
-            this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
-            this.botManager.start();
-        }
 
         this.relayoutOpponents();
         this.updateRanks();

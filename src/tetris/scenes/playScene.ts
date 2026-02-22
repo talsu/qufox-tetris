@@ -663,7 +663,7 @@ export class PlayScene extends BasePlayScene {
         this.inputManager.setDragThresholdScale(isPortrait ? 1 : currentMainScale);
         this.inputManager.isEnabled = true;
 
-        if (this.botLevel > 0 && this.engine) {
+        if (this.mode === 'single' && this.botLevel > 0 && this.engine) {
             this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
             this.botManager.start();
         }

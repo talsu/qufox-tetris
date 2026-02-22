@@ -66,9 +66,10 @@ export class InGameMenu {
         this.scoreText = this.scene.add.text(0, 0, '', {
             fontFamily: GAME_FONT_FAMILY,
             fontSize: '34px',
-            color: '#1e376a',
+            color: '#ffffff',
             fontStyle: 'bold',
         }).setOrigin(0.5, 0.5);
+        this.scoreText.setStroke('#000000', 6);
         this.scoreText.setVisible(false);
 
         this.root.add([
@@ -277,8 +278,14 @@ export class InGameMenu {
         const labelYOffset = button.state === 'pressed' ? Math.max(1, Math.round(height * 0.04)) : 0;
         button.label.setPosition(x + width / 2, y + height / 2 + labelYOffset);
         button.label.setFontSize(Math.round(Math.max(20 * worldPerPixel, height * 0.45)));
-        button.label.setColor(button.kind === 'green' ? '#0f3c2f' : '#ffffff');
-        button.label.setStroke(button.kind === 'green' ? '#f8ffe8' : '#163670', 4);
+        const useEndGameContrastLabel = this.menuMode === 'endgame' && (button.key === 'restart' || button.key === 'exit');
+        if (useEndGameContrastLabel) {
+            button.label.setColor('#ffffff');
+            button.label.setStroke('#000000', 4);
+        } else {
+            button.label.setColor(button.kind === 'green' ? '#0f3c2f' : '#ffffff');
+            button.label.setStroke(button.kind === 'green' ? '#f8ffe8' : '#163670', 4);
+        }
 
         button.background.setTexture(this.resolveButtonTexture(button.kind, button.state));
     }

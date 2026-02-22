@@ -187,10 +187,11 @@ class BaseLobbyScene extends BaseScene {
         this.emptyText = this.add.text(0, 0, 'Loading rooms...', {
             fontFamily: GAME_FONT_FAMILY,
             fontSize: '26px',
-            color: '#4b68a8',
+            color: '#ffffff',
             fontStyle: 'bold',
             align: 'center',
         }).setOrigin(0.5);
+        this.emptyText.setStroke('#000000', 4);
 
         const mask = this.listMaskShape.createGeometryMask();
         this.listContainer.setMask(mask);
@@ -349,7 +350,7 @@ class BaseLobbyScene extends BaseScene {
         this.listContainer.removeAll(false);
 
         if (this.roomList.length === 0) {
-            this.emptyText.setText('No rooms found. Create one!');
+            this.emptyText.setText('No rooms found. Create One!');
             this.emptyText.setVisible(true);
             this.listContentHeight = 0;
             this.applyScroll(0);
@@ -369,14 +370,16 @@ class BaseLobbyScene extends BaseScene {
                 fontFamily: GAME_FONT_FAMILY,
                 fontSize: '28px',
                 fontStyle: 'bold',
-                color: '#1e3a74',
+                color: '#ffffff',
             }).setOrigin(0, 0.5);
             const players = this.add.text(0, 0, `${playerCount}/${maxPlayers}`, {
                 fontFamily: GAME_FONT_FAMILY,
                 fontSize: '20px',
                 fontStyle: 'bold',
-                color: '#4064a7',
+                color: '#ff9f1a',
             }).setOrigin(1, 0.5);
+            name.setStroke('#000000', 4);
+            players.setStroke('#000000', 4);
             const joinBtn = this.createButton('JOIN', 'blue', () => {
                 if (!this.socket) return;
                 const payload = this.lobbyConfig.maxPlayers > 2 ? { roomId: room.id } : room.id;

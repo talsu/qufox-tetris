@@ -46,6 +46,7 @@ export class PlayField extends ObjectBase {
     private pendingClearedRows: number[] | null = null;
     private inactiveBlocksCache: ColRow[] | null = null;
     private currentPhase: EnginePhase = EnginePhase.COMPLETION;
+    private isStopped: boolean = false;
 
     public get activeTetrominoInstance(): Tetromino {
         return this.activeTetromino;
@@ -137,6 +138,7 @@ export class PlayField extends ObjectBase {
         this.inactiveTetrominos = [];
         this.inactiveBlocksCache = [];
         this.setPhase(EnginePhase.COMPLETION);
+        this.isStopped = false;
     }
 
     private invalidateInactiveBlocksCache() {
@@ -148,6 +150,7 @@ export class PlayField extends ObjectBase {
      * @param {TetrominoType} type - Tetromino type.
      */
     spawnTetromino(type?: TetrominoType): void {
+        if (this.isStopped) return;
         this.setPhase(EnginePhase.GENERATION);
         // Get tetrominoType from param or generate random type from queue.
         let tetrominoType = type;
@@ -620,6 +623,7 @@ export class PlayField extends ObjectBase {
      * Stop all timers.
      */
     stop() {
+        this.isStopped = true;
         this.stopLockTimer();
         this.stopAutoDropTimer();
     }

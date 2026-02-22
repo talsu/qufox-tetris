@@ -22,9 +22,10 @@ describe('N-Multi Server Logic', () => {
         }));
     }
 
-    function getPlayersMap(room: any) {
+    function getPlayersMap(room: any, excludeId: string | null = null) {
         const map: Record<string, any> = {};
         for (const [sid, p] of Object.entries(room.players) as [string, any][]) {
+            if (excludeId && sid === excludeId) continue;
             map[sid] = {
                 name: p.name,
                 score: p.score,
@@ -35,6 +36,16 @@ describe('N-Multi Server Logic', () => {
             };
         }
         return map;
+    }
+
+    function canSendGarbage(room: any, senderId: string, targetId: string, count: number) {
+        if (!room || !senderId || !targetId || !count) return false;
+        const sender = room.players[senderId];
+        const target = room.players[targetId];
+        if (!sender || !target) return false;
+        if (senderId === targetId) return false;
+        if (sender.isAlive === false || target.isAlive === false) return false;
+        return true;
     }
 
     function buildSnapshot(room: any, excludeId: string) {
@@ -448,6 +459,38 @@ describe('N-Multi Server Logic', () => {
             const noCount = { roomId, targetId: 'target', count: 0 };
             expect(!noCount.count).toBe(true); // Server checks !data.count
         });
+
+        test('rejects sending garbage to self', () => {
+            const room = {
+                players: {
+                    sender: { isAlive: true }
+                }
+            };
+
+            expect(canSendGarbage(room, 'sender', 'sender', 2)).toBe(false);
+        });
+
+        test('rejects sending garbage to dead target', () => {
+            const room = {
+                players: {
+                    sender: { isAlive: true },
+                    target: { isAlive: false }
+                }
+            };
+
+            expect(canSendGarbage(room, 'sender', 'target', 2)).toBe(false);
+        });
+
+        test('rejects dead sender from sending garbage', () => {
+            const room = {
+                players: {
+                    sender: { isAlive: false },
+                    target: { isAlive: true }
+                }
+            };
+
+            expect(canSendGarbage(room, 'sender', 'target', 2)).toBe(false);
+        });
     });
 
     describe('Join or Create Logic', () => {
@@ -540,7 +583,7 @@ describe('N-Multi Server Logic', () => {
                 playerId: socketId,
                 playerName,
                 roomName: room.name,
-                players: getPlayersMap(room)
+                players: getPlayersMap(room, socketId)
             };
         }
 
@@ -560,6 +603,7 @@ describe('N-Multi Server Logic', () => {
             expect(response.roomName).toBe('Created Room');
             expect(response.roomId).toBe(roomId);
             expect(response.playerId).toBe(socketId);
+            expect(Object.keys(response.players)).toHaveLength(0);
         });
 
         test('nmulti_join_room response includes roomName', () => {
@@ -576,6 +620,9 @@ describe('N-Multi Server Logic', () => {
 
             const response = buildRoomJoinedResponse(nMultiRooms[roomId], 'socket2', 'Player2');
             expect(response.roomName).toBe('Existing Room');
+            expect(Object.keys(response.players)).toHaveLength(1);
+            expect(response.players['socket1']).toBeDefined();
+            expect(response.players['socket2']).toBeUndefined();
         });
 
         test('nmulti_join_or_create response includes roomName on create', () => {
@@ -595,6 +642,7 @@ describe('N-Multi Server Logic', () => {
 
             const response = buildRoomJoinedResponse(nMultiRooms[roomId], socketId, 'Player1');
             expect(response.roomName).toBe(roomName);
+            expect(Object.keys(response.players)).toHaveLength(0);
         });
 
         test('nmulti_join_or_create response includes roomName on join', () => {
@@ -616,7 +664,9 @@ describe('N-Multi Server Logic', () => {
             const response = buildRoomJoinedResponse(room, 'socket2', 'Player2');
             expect(response.roomName).toBe('Popular Room');
             expect(response.players).toBeDefined();
-            expect(Object.keys(response.players)).toHaveLength(2);
+            expect(Object.keys(response.players)).toHaveLength(1);
+            expect(response.players['socket1']).toBeDefined();
+            expect(response.players['socket2']).toBeUndefined();
         });
 
         test('roomName with special characters is preserved', () => {

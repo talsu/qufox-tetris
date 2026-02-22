@@ -1,6 +1,19 @@
 import { GameRules } from "./gameRules";
 import { TetrominoType, RotateType } from "../const/const";
 
+export interface GameStats {
+    score: number;
+    level: number;
+    lines: number;
+    time: string;
+    goal: number;
+    tetrises: number;
+    tspins: number;
+    combos: number;
+    tpm: number;
+    lpm: number;
+}
+
 export interface LockResult {
     scoreAdded: number;
     actionName: string | null;
@@ -70,6 +83,27 @@ export class ScoreSystem {
 
     getCombo() {
         return this.comboCount;
+    }
+
+    setAuthoritativeState(score: number, level: number, lines: number) {
+        const normalizedScore = Number.isFinite(score) ? Math.max(0, Math.floor(score)) : 0;
+        const normalizedLevel = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
+        const normalizedLines = Number.isFinite(lines) ? Math.max(0, Math.floor(lines)) : 0;
+
+        this.score = normalizedScore;
+        this.level = normalizedLevel;
+        this.clearedLines = normalizedLines;
+        this.totalLinesCleared = normalizedLines;
+
+        let nextRequired = 5;
+        for (let lv = 2; lv <= this.level; lv += 1) {
+            nextRequired += lv * 5;
+        }
+        this.nextLevelRequireClearedLines = nextRequired;
+
+        this.comboCount = -1;
+        this.isBackToBackChain = false;
+        this.maxCombo = Math.max(0, this.maxCombo);
     }
 
     /**
@@ -207,7 +241,7 @@ export class ScoreSystem {
         return Math.pow((0.8 - ((this.level - 1) * 0.007)), (this.level - 1)) * 1000;
     }
 
-    getStats(gameTime: number) {
+    getStats(gameTime: number): GameStats {
         // Format Time: MM:SS.ms
         const minutes = Math.floor(gameTime / 60000);
         const seconds = Math.floor((gameTime % 60000) / 1000);

@@ -3,7 +3,8 @@ import {TetrominoBox} from "./objects/tetrominoBox";
 import {TetrominoBoxQueue} from "./objects/tetrominoBoxQueue";
 import {LevelIndicator} from "./objects/levelIndicator";
 import {InputState, TetrominoType, RotateType} from "./const/const";
-import {ScoreSystem} from "./logic/scoreSystem";
+import {ScoreSystem, GameStats} from "./logic/scoreSystem";
+import { AuthSnapshotSide, AuthSyncState } from '../shared/types/socketPayloads';
 
 /**
  * Tetris game engine.
@@ -147,10 +148,7 @@ export class Engine {
         // Update indicator.
         this.levelIndicator.setAction(result.actionName);
         this.levelIndicator.setCombo(result.combo);
-        // this.levelIndicator.setLevel(result.level);
-        // this.levelIndicator.setLine(this.scoreSystem.getClearedLines(), this.scoreSystem.getNextLevelRequireClearedLines());
-        // this.levelIndicator.setScore(this.scoreSystem.getScore());
-        
+
         // Immediate update stats
         const stats = this.scoreSystem.getStats(this.gameTime);
         this.levelIndicator.updateStats(stats);
@@ -182,14 +180,71 @@ export class Engine {
     /**
      * Get current game stats (score, level, lines, etc.)
      */
-    public getStats(): any {
+    public getStats(): GameStats {
         return this.scoreSystem.getStats(this.gameTime);
+    }
+
+    public setRank(rank: number | null) {
+        this.levelIndicator.setRank(rank);
+    }
+
+    public setPlayerName(name: string | null) {
+        this.levelIndicator.setPlayerName(name);
+    }
+
+    public applyAuthoritativeSync(sync: AuthSyncState, stats: { score: number; level: number; lines: number }): void {
+        const isPlayableType = (value: string): value is Exclude<TetrominoType, TetrominoType.GARBAGE> => {
+            return value === TetrominoType.I
+                || value === TetrominoType.J
+                || value === TetrominoType.L
+                || value === TetrominoType.O
+                || value === TetrominoType.S
+                || value === TetrominoType.T
+                || value === TetrominoType.Z;
+        };
+
+        const queue = sync.queue.filter(isPlayableType);
+        const bag = sync.bag.filter(isPlayableType);
+        this.queue.setAuthoritativeState(queue, bag, sync.queueRngState);
+
+        this.holdBox.clear();
+        if (sync.hold && isPlayableType(sync.hold)) {
+            this.holdBox.hold(sync.hold);
+        }
+
+        this.playField.applyAuthoritativeState(sync.boardCore, sync.active, sync.canHold);
+
+        this.scoreSystem.setAuthoritativeState(stats.score, stats.level, stats.lines);
+        this.playField.autoDropDelay = this.scoreSystem.getAutoDropDelay();
+        this.levelIndicator.updateStats(this.scoreSystem.getStats(this.gameTime));
+    }
+
+    public getShadowSnapshotSide(): AuthSnapshotSide {
+        const queueState = this.queue.getAuthoritativeState();
+        const stats = this.getStats();
+        return {
+            board: this.playField.serializeEncoded(),
+            score: stats.score,
+            level: stats.level,
+            lines: stats.lines,
+            isAlive: true,
+            sync: {
+                boardCore: this.playField.serializeEncoded(),
+                active: null,
+                hold: this.holdBox.type,
+                canHold: this.playField.canHoldFlag,
+                queue: queueState.queue,
+                bag: queueState.bag,
+                queueRngState: queueState.queueRngState,
+                gravityMsCounter: 0,
+            },
+        };
     }
 
     /**
      * Game over. emit from play field, when can not create tetromino anymore.
      */
-    gameOver(gameOverType) {
+    gameOver(gameOverType: string) {
         if (this.isDebugLogging) {
             console.log(`Game Over - ${gameOverType}`);
         }

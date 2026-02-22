@@ -30,6 +30,14 @@ export enum EnginePhase {
     ELIMINATE = 'Eliminate',
     COMPLETION = 'Completion',
 }
+
+type AuthoritativeActiveState = {
+    type: string;
+    rotate: string;
+    col: number;
+    row: number;
+} | null;
+
 /**
  * Play field
  */
@@ -40,12 +48,14 @@ export class PlayField extends ObjectBase {
     public container: Phaser.GameObjects.Container;
     private maskGraphics: Phaser.GameObjects.Graphics;
     private autoDropTimer: Phaser.Time.TimerEvent;
+    private areSpawnTimer: Phaser.Time.TimerEvent | null = null;
     private droppedRotateType: RotateType;
     public autoDropDelay: number = 1000;
     private effects: PlayFieldEffects;
     private pendingClearedRows: number[] | null = null;
     private inactiveBlocksCache: ColRow[] | null = null;
     private currentPhase: EnginePhase = EnginePhase.COMPLETION;
+    private isStopped: boolean = false;
 
     public get activeTetrominoInstance(): Tetromino {
         return this.activeTetromino;
@@ -120,6 +130,7 @@ export class PlayField extends ObjectBase {
      * Clear all tetromino
      */
     clear() {
+        this.clearSpawnTimer();
         // Destroy active tetromino.
         if (this.activeTetromino) {
             this.container.remove(this.activeTetromino.container);
@@ -137,6 +148,7 @@ export class PlayField extends ObjectBase {
         this.inactiveTetrominos = [];
         this.inactiveBlocksCache = [];
         this.setPhase(EnginePhase.COMPLETION);
+        this.isStopped = false;
     }
 
     private invalidateInactiveBlocksCache() {
@@ -148,6 +160,9 @@ export class PlayField extends ObjectBase {
      * @param {TetrominoType} type - Tetromino type.
      */
     spawnTetromino(type?: TetrominoType): void {
+        if (this.isStopped) return;
+        if (this.activeTetromino) return;
+        this.clearSpawnTimer();
         this.setPhase(EnginePhase.GENERATION);
         // Get tetrominoType from param or generate random type from queue.
         let tetrominoType = type;
@@ -310,7 +325,7 @@ export class PlayField extends ObjectBase {
      * @param {number[]} rows - Rows to animate.
      * @param {Function} onComplete - Callback when animation finishes.
      */
-    playClearAnimation(rows: number[], onComplete: Function) {
+    playClearAnimation(rows: number[], onComplete: () => void) {
         this.effects.playClearAnimation(this.inactiveTetrominos, rows, onComplete);
     }
 
@@ -344,13 +359,7 @@ export class PlayField extends ObjectBase {
 
         // Move all blocks up.
         this.inactiveTetrominos.forEach(tetromino => {
-            // Check if forceMoveUp exists (it should now)
-            if (tetromino['forceMoveUp']) {
-                tetromino.forceMoveUp(count);
-            } else {
-                 // Fallback or error
-                 tetromino.moveUp(); // Incorrect but fallback
-            }
+            tetromino.forceMoveUp(count);
         });
 
         // Update pending cleared rows indices
@@ -491,9 +500,56 @@ export class PlayField extends ObjectBase {
         this.deserialize(BoardCodec.decode(encodedBoard || ''));
     }
 
-    /**
-     * Lock tetromino.
-     */
+    applyAuthoritativeState(encodedBoardCore: string, activeState: AuthoritativeActiveState, canHold: boolean): void {
+        this.clearSpawnTimer();
+        this.stopLockTimer();
+        this.stopAutoDropTimer();
+        this.deserializeEncoded(encodedBoardCore || '');
+
+        this.activeTetromino = null;
+        const isValidActive = Boolean(
+            activeState
+            && typeof activeState.type === 'string'
+            && typeof activeState.rotate === 'string'
+            && Number.isFinite(activeState.col)
+            && Number.isFinite(activeState.row)
+            && activeState.type !== TetrominoType.GARBAGE
+            && Object.values(TetrominoType).includes(activeState.type as TetrominoType)
+            && Object.values(RotateType).includes(activeState.rotate as RotateType)
+        );
+
+        if (isValidActive && activeState) {
+            const activeTetromino = new Tetromino(
+                this.scene,
+                activeState.type as TetrominoType,
+                this.getInactiveBlocks(),
+                activeState.col,
+                activeState.row
+            );
+
+            activeTetromino.rotateType = activeState.rotate as RotateType;
+            activeTetromino.col = activeState.col;
+            activeTetromino.row = activeState.row;
+            activeTetromino.container.x = activeState.col * BLOCK_SIZE;
+            activeTetromino.container.y = activeState.row * BLOCK_SIZE;
+            activeTetromino.moveBlockImages();
+            activeTetromino.drawGhostBlocks();
+
+            this.activeTetromino = activeTetromino;
+            this.container.add(activeTetromino.container);
+            this.setPhase(EnginePhase.FALLING);
+            this.restartAutoDropTimer();
+            if (this.activeTetromino.isLockable()) {
+                this.startLockTimer();
+            }
+        } else {
+            this.setPhase(EnginePhase.COMPLETION);
+        }
+
+        this.canHold = canHold;
+        this.isStopped = false;
+        this.invalidateInactiveBlocksCache();
+    }
 
     /**
      * Lock tetromino.
@@ -544,7 +600,11 @@ export class PlayField extends ObjectBase {
             );
 
             // ARE
-            this.scene.time.delayedCall(CONST.PLAY_FIELD.ARE_MS, () => this.spawnTetromino(), [], this);
+            this.clearSpawnTimer();
+            this.areSpawnTimer = this.scene.time.delayedCall(CONST.PLAY_FIELD.ARE_MS, () => {
+                this.areSpawnTimer = null;
+                this.spawnTetromino();
+            }, [], this);
         };
 
         if (clearedLineCount > 0) {
@@ -630,8 +690,16 @@ export class PlayField extends ObjectBase {
      * Stop all timers.
      */
     stop() {
+        this.isStopped = true;
+        this.clearSpawnTimer();
         this.stopLockTimer();
         this.stopAutoDropTimer();
+    }
+
+    private clearSpawnTimer() {
+        if (!this.areSpawnTimer) return;
+        this.areSpawnTimer.destroy();
+        this.areSpawnTimer = null;
     }
 
     /**

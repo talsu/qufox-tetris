@@ -17,29 +17,29 @@ describe('gameLayout metrics', () => {
     const fieldRight = fieldPos.x + block * CONST.PLAY_FIELD.COL_COUNT;
 
     expect(hud.holdX).toBe(fieldPos.x);
-    expect(hud.holdY).toBeCloseTo(94.4, 5);
+    expect(hud.holdY).toBeCloseTo(110.4, 5);
     expect(hud.holdX + hud.holdWidth).toBeLessThanOrEqual(fieldRight);
 
-    expect(hud.queueY).toBeCloseTo(70.4, 5);
+    expect(hud.queueY).toBeCloseTo(86.4, 5);
     expect(hud.queueX + hud.queueWidth).toBeCloseTo(fieldRight, 5);
   });
 
   test('keeps scene dimension outputs unchanged', () => {
-    expect(calcPlaySceneDimensions('mobile-portrait', 'single')).toEqual({ width: 384, height: 896 });
-    expect(calcPlaySceneDimensions('mobile-portrait', 'multi')).toEqual({ width: 384, height: 1152 });
+    expect(calcPlaySceneDimensions('mobile-portrait', 'single')).toEqual({ width: 384, height: 880 });
+    expect(calcPlaySceneDimensions('mobile-portrait', 'multi')).toEqual({ width: 384, height: 1136 });
     expect(calcPlaySceneDimensions('desktop', 'single')).toEqual({ width: 704, height: 752 });
     expect(calcPlaySceneDimensions('desktop', 'multi')).toEqual({ width: 1088, height: 752 });
 
-    expect(calcNMultiSceneDimensions('mobile-portrait')).toEqual({ width: 384, height: 1152 });
+    expect(calcNMultiSceneDimensions('mobile-portrait')).toEqual({ width: 384, height: 1136 });
     expect(calcNMultiSceneDimensions('desktop')).toEqual({ width: 1152, height: 752 });
   });
 
   test('keeps n-multi opponent area bounds unchanged', () => {
-    expect(calcNMultiOpponentArea('mobile-portrait', 384, 1152)).toEqual({
+    expect(calcNMultiOpponentArea('mobile-portrait', 384, 1136)).toEqual({
       x: 16,
-      y: 944,
+      y: 864,
       width: 352,
-      height: 192,
+      height: 256,
     });
 
     expect(calcNMultiOpponentArea('desktop', 1152, 752)).toEqual({

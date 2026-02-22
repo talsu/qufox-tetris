@@ -1,5 +1,6 @@
 import { ObjectBase } from "./objectBase";
 import { getBlockSize } from "../const/const";
+import { GameStats } from "../logic/scoreSystem";
 import {
     TextStyles,
     drawPanelBackground,
@@ -21,15 +22,22 @@ const TEMP_TEXT_DURATION = 3000;
 
 // Compact horizontal mode constants
 const COMPACT_WIDTH = BLOCK_SIZE * 10;
-const COMPACT_HEIGHT = BLOCK_SIZE * 3;
 
 export interface LevelIndicatorOptions {
     compact?: boolean;
+    compactShowRank?: boolean;
 }
 
 export class LevelIndicator extends ObjectBase {
     public container: Phaser.GameObjects.Container;
     private compact: boolean;
+    private compactShowRank: boolean;
+    private compactLevel: number = 1;
+    private compactRank: number | null = null;
+    private compactPlayerName: string = '';
+    private compactRankText: Phaser.GameObjects.Text;
+    private compactLevelText: Phaser.GameObjects.Text;
+    private compactNameText: Phaser.GameObjects.Text;
 
     // Large value displays
     private scoreValueText: Phaser.GameObjects.Text;
@@ -54,6 +62,7 @@ export class LevelIndicator extends ObjectBase {
     constructor(scene: Phaser.Scene, x: number, y: number, options?: LevelIndicatorOptions) {
         super(scene);
         this.compact = options?.compact ?? false;
+        this.compactShowRank = options?.compactShowRank ?? false;
         this.container = scene.add.container(x, y);
         if (this.compact) {
             this.createCompactUI();
@@ -63,41 +72,63 @@ export class LevelIndicator extends ObjectBase {
     }
 
     private createCompactUI() {
-        const bg = this.scene.add.graphics();
-        drawPanelBackground(bg, COMPACT_WIDTH, COMPACT_HEIGHT);
-        this.container.add(bg);
+        const pad = 0;
+        const centerY = BLOCK_SIZE * 0.45;
 
-        const pad = BLOCK_SIZE * 0.4;
-        const midY = BLOCK_SIZE * 0.3;
-        const bottomY = BLOCK_SIZE * 1.6;
-        const halfW = COMPACT_WIDTH / 2;
+        this.compactRankText = createStyledText(
+            this.scene,
+            this.container,
+            pad,
+            centerY,
+            '',
+            { ...TextStyles.header, fontSize: `${BLOCK_SIZE * 0.5}px`, color: '#ffbe0b' },
+            2,
+        ).setOrigin(0, 0.5);
 
-        // Row 1: SCORE (large, left-aligned) + TIME (right-aligned)
-        createStyledText(this.scene, this.container, pad, midY, 'SCORE', TextStyles.label, 3);
+        this.compactLevelText = createStyledText(
+            this.scene,
+            this.container,
+            pad,
+            centerY,
+            'LV 1',
+            { ...TextStyles.label, fontSize: `${BLOCK_SIZE * 0.52}px`, color: '#22c55e' },
+            2,
+        ).setOrigin(0, 0.5);
+
+        this.compactNameText = createStyledText(
+            this.scene,
+            this.container,
+            pad,
+            centerY,
+            '',
+            { ...TextStyles.label, fontSize: `${BLOCK_SIZE * 0.52}px` },
+            2,
+        ).setOrigin(0, 0.5);
+
         this.scoreValueText = createStyledText(
-            this.scene, this.container, pad + BLOCK_SIZE * 2.2, midY, '0',
-            { ...TextStyles.valueLarge, fontSize: `${BLOCK_SIZE * 0.7}px` }, 3
+            this.scene,
+            this.container,
+            COMPACT_WIDTH - pad,
+            centerY,
+            '0',
+            { ...TextStyles.valueLarge, fontSize: `${BLOCK_SIZE * 0.65}px` },
+            2,
         );
+        this.scoreValueText.setOrigin(1, 0.5);
+
         this.timeValueText = createStyledText(
-            this.scene, this.container, COMPACT_WIDTH - pad, midY, '00:00',
-            { ...TextStyles.valueSmall, fontSize: `${BLOCK_SIZE * 0.55}px` }, 3
+            this.scene,
+            this.container,
+            -9999,
+            -9999,
+            '00:00',
+            { ...TextStyles.valueSmall, fontSize: '1px' },
+            1,
         );
-        this.timeValueText.setOrigin(1, 0);
 
-        // Row 2: LV:x   LN:x
-        const colW = (COMPACT_WIDTH - pad * 2) / 3;
-        const makeCompactStat = (label: string, colIdx: number) => {
-            const lx = pad + colW * colIdx;
-            createStyledText(this.scene, this.container, lx, bottomY, label,
-                { ...TextStyles.label, fontSize: `${BLOCK_SIZE * 0.4}px` }, 2);
-            const vt = createStyledText(this.scene, this.container, lx + BLOCK_SIZE * 1.2, bottomY, '0',
-                { ...TextStyles.valueSmall, fontSize: `${BLOCK_SIZE * 0.5}px` }, 2);
-            return vt;
-        };
-
-        this.levelValueText = makeCompactStat('LV', 0);
-        this.linesValueText = makeCompactStat('LN', 1);
-        this.goalValueText = makeCompactStat('GL', 2);
+        this.levelValueText = this.scene.add.text(-9999, -9999, '1', { ...TextStyles.valueSmall, fontSize: '1px' });
+        this.linesValueText = this.scene.add.text(-9999, -9999, '0', { ...TextStyles.valueSmall, fontSize: '1px' });
+        this.goalValueText = this.scene.add.text(-9999, -9999, '0', { ...TextStyles.valueSmall, fontSize: '1px' });
 
         // Hidden stats (tracked internally but not shown)
         const hiddenStyle = { ...TextStyles.valueSmall, fontSize: '1px' };
@@ -107,18 +138,17 @@ export class LevelIndicator extends ObjectBase {
         this.tpmValueText = this.scene.add.text(-9999, -9999, '0', hiddenStyle);
         this.lpmValueText = this.scene.add.text(-9999, -9999, '0', hiddenStyle);
 
-        // Action/Combo text - overlaid centered above this container
         this.actionText = createStyledText(
             this.scene, this.container,
-            halfW, -BLOCK_SIZE * 1.2, '', TextStyles.action,
+            -9999, -9999, '', { ...TextStyles.action, fontSize: '1px' },
         );
-        this.actionText.setOrigin(0.5, 0);
 
         this.comboText = createStyledText(
             this.scene, this.container,
-            halfW, -BLOCK_SIZE * 0.5, '', TextStyles.combo,
+            -9999, -9999, '', { ...TextStyles.combo, fontSize: '1px' },
         );
-        this.comboText.setOrigin(0.5, 0);
+
+        this.refreshCompactInfoText();
     }
 
     private createUI() {
@@ -195,7 +225,7 @@ export class LevelIndicator extends ObjectBase {
         return y;
     }
 
-    updateStats(stats: any) {
+    updateStats(stats: GameStats) {
         if (!stats) return;
         this.scoreValueText.setText(stats.score.toString());
         this.timeValueText.setText(stats.time);
@@ -207,11 +237,25 @@ export class LevelIndicator extends ObjectBase {
         this.combosValueText.setText(stats.combos.toString());
         this.tpmValueText.setText(stats.tpm.toString());
         this.lpmValueText.setText(stats.lpm.toString());
+        if (this.compact) {
+            this.compactLevel = stats.level;
+            this.refreshCompactInfoText();
+        }
     }
 
-    setLevel(level: number) { }
-    setLine(cleared, nextGoal) { }
-    setScore(score: number) { }
+    setRank(rank: number | null) {
+        this.compactRank = rank;
+        if (this.compact) {
+            this.refreshCompactInfoText();
+        }
+    }
+
+    setPlayerName(name: string | null) {
+        this.compactPlayerName = (name || '').trim();
+        if (this.compact) {
+            this.refreshCompactInfoText();
+        }
+    }
 
     setAction(action?: string | null) {
         this.actionTextShowEvent?.destroy();
@@ -244,6 +288,7 @@ export class LevelIndicator extends ObjectBase {
     }
 
     clear() {
+        this.compactRank = null;
         this.updateStats({
             score: 0,
             time: '00:00.00',
@@ -256,5 +301,65 @@ export class LevelIndicator extends ObjectBase {
             tpm: 0,
             lpm: 0,
         });
+    }
+
+    private refreshCompactInfoText() {
+        if (!this.compact || !this.compactLevelText || !this.scoreValueText) {
+            return;
+        }
+
+        const pad = 0;
+        const gap = BLOCK_SIZE * 0.2;
+        const leftStartX = pad;
+
+        this.compactRankText.setText(this.compactShowRank && this.compactRank !== null ? `#${this.compactRank}` : '');
+        this.compactRankText.setPosition(leftStartX, this.compactRankText.y);
+
+        const levelPrefix = this.compactRankText.text.length > 0 ? ' LV ' : 'LV ';
+        this.compactLevelText.setText(`${levelPrefix}${this.compactLevel}`);
+        this.compactLevelText.setPosition(leftStartX + this.compactRankText.width, this.compactLevelText.y);
+
+        const scoreLeftEdge = this.scoreValueText.x - this.scoreValueText.width;
+        const nameStartX = leftStartX + this.compactRankText.width + this.compactLevelText.width;
+        const nameMaxWidth = Math.max(0, scoreLeftEdge - gap - nameStartX);
+        const compactName = this.truncateNameToWidth(this.compactPlayerName, 10, nameMaxWidth);
+        this.compactNameText.setText(compactName ? ` ${compactName}` : '');
+        this.compactNameText.setPosition(nameStartX, this.compactNameText.y);
+    }
+
+    private truncateNameToWidth(name: string, maxChars: number, maxWidth: number): string {
+        if (!name || maxWidth <= 0) {
+            return '';
+        }
+
+        const maxLenName = name.length > maxChars ? `${name.slice(0, maxChars)}…` : name;
+        const ctx = this.compactNameText.canvas.getContext('2d');
+        if (!ctx) {
+            return maxLenName;
+        }
+
+        const style = this.compactNameText.style;
+        ctx.font = `${style.fontStyle || ''} ${style.fontSize} ${style.fontFamily}`.trim();
+
+        if (ctx.measureText(maxLenName).width <= maxWidth) {
+            return maxLenName;
+        }
+
+        let lo = 0;
+        let hi = Math.min(maxChars, name.length);
+        while (lo < hi) {
+            const mid = Math.ceil((lo + hi) / 2);
+            const trial = `${name.slice(0, mid)}…`;
+            if (ctx.measureText(trial).width <= maxWidth) {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        }
+
+        if (lo <= 0) {
+            return '';
+        }
+        return lo < name.length ? `${name.slice(0, lo)}…` : name.slice(0, lo);
     }
 }

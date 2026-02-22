@@ -5,7 +5,7 @@ qufox-tetris is a web-based Tetris game built with the Phaser 3 framework. It is
 Unlike many Tetris clones that fork existing repositories or follow common tutorials, the core engine of **qufox-tetris** was built independently from the ground up. By strictly interpreting the official Tetris Guideline 2009 documentation, all mechanics—including piece movement, the Super Rotation System (SRS), and the scoring engine—are original implementations designed to ensure a clean, unique, and idiomatic codebase.
 
 ## Play Online
-Live service available at: [https://talsu.github.io/qufox-tetris/](https://talsu.github.io/qufox-tetris/)
+Live service available at: [https://tetris.qufox.com/](https://tetris.qufox.com/)
 
 ## Features
 - **Responsive Design:** Automatically adjusts layout and block sizes to fit various screen resolutions and aspect ratios.
@@ -45,6 +45,30 @@ To generate a production-ready bundle:
 ```bash
 npm run build
 ```
+
+## Deployment File Permissions (Nginx)
+If newly deployed image/sound assets return `403` or `permission denied` under Nginx, apply the same server-side fix that worked in production:
+
+```bash
+chmod -R 755 ./assets/
+```
+
+You can run the repository helper for the same behavior:
+
+```bash
+# From repository root on the deployment server
+bash scripts/fix-static-permissions.sh /var/www/qufox-tetris
+```
+
+Recommended deploy defaults:
+- Keep `/assets` recursively at `755` after each deployment.
+- If needed, set ownership to the Nginx worker account with env vars:
+
+```bash
+WEB_USER=www-data WEB_GROUP=www-data bash scripts/fix-static-permissions.sh /var/www/qufox-tetris
+```
+
+Avoid `chmod -R 777`; it is unnecessary and unsafe for static assets.
 
 ## Running Tests
 To execute the unit tests:

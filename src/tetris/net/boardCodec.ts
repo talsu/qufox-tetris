@@ -1,3 +1,9 @@
+export interface BoardBlock {
+    col: number;
+    row: number;
+    type: string;
+}
+
 export class BoardCodec {
     private static typeToChar: Record<string, string> = {
         'I': 'I', 'J': 'J', 'L': 'L', 'O': 'O',
@@ -9,7 +15,7 @@ export class BoardCodec {
         'S': 'S', 'T': 'T', 'Z': 'Z', 'G': 'GARBAGE'
     };
 
-    static encode(blocks: { col: number, row: number, type: string }[]): string {
+    static encode(blocks: BoardBlock[]): string {
         const grid = new Array(200).fill('0');
         for (const b of blocks) {
             if (b.row >= 0 && b.row < 20 && b.col >= 0 && b.col < 10) {
@@ -19,8 +25,8 @@ export class BoardCodec {
         return grid.join('');
     }
 
-    static decode(data: string): { col: number, row: number, type: string }[] {
-        const blocks: { col: number, row: number, type: string }[] = [];
+    static decode(data: string): BoardBlock[] {
+        const blocks: BoardBlock[] = [];
         if (!data || data.length !== 200) return blocks;
         for (let i = 0; i < 200; i++) {
             const ch = data[i];

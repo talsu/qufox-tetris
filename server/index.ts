@@ -15,6 +15,7 @@ import {
     type TokenLifecyclePolicy,
 } from './roomModePolicy';
 import { AuthoritativeMatch } from '../src/shared/core/authoritativeMatch';
+import { BoardCodec } from '../src/tetris/net/boardCodec';
 import {
     extractRoomId,
     isAuthInputPayload,
@@ -27,6 +28,7 @@ import {
     isRequestRestartPayload,
     isResumeAuthPayload,
     normalizeRoomName,
+    type AuthSyncState,
 } from '../src/shared/types/socketPayloads';
 import {
     createBotController,
@@ -38,9 +40,9 @@ import {
 type Seat = 'p1' | 'p2';
 type PresenceState = 'active' | 'inactive';
 
-const AUTH_TICK_MS = 100;
-const N_MULTI_SIM_TICK_MS = 100;
-const N_MULTI_BROADCAST_MS = 150;
+const AUTH_TICK_MS = 50;
+const N_MULTI_SIM_TICK_MS = 50;
+const N_MULTI_BROADCAST_MS = 100;
 const RESUME_GRACE_MS = 30000;
 
 interface AuthSeeds {
@@ -75,7 +77,7 @@ interface NMultiPlayer {
     score: number;
     level: number;
     lines: number;
-    board: string | null;
+    board: string | Uint8Array | null;
     isAlive: boolean;
     v: number;
     presence: PresenceState;
@@ -224,7 +226,7 @@ function getNMultiPlayersPayload(room: NMultiRoom, excludePlayerId: string | nul
     score: number;
     level: number;
     lines: number;
-    board: string | null;
+    board: string | Uint8Array | null;
     isAlive: boolean;
     v: number;
 }> {
@@ -233,7 +235,7 @@ function getNMultiPlayersPayload(room: NMultiRoom, excludePlayerId: string | nul
         score: number;
         level: number;
         lines: number;
-        board: string | null;
+        board: string | Uint8Array | null;
         isAlive: boolean;
         v: number;
     }> = {};
@@ -262,7 +264,7 @@ function buildNMultiRoomJoinedPayload(room: NMultiRoom, player: NMultiPlayer): {
         score: number;
         level: number;
         lines: number;
-        board: string | null;
+        board: string | Uint8Array | null;
         isAlive: boolean;
         v: number;
     }>;
@@ -274,7 +276,7 @@ function buildNMultiRoomJoinedPayload(room: NMultiRoom, player: NMultiPlayer): {
         serverAckInputSeq: number;
     };
 } {
-    const authSnapshot = player.authMatch.getSnapshotFor('p1');
+    const authSnapshot = buildNMultiAuthSnapshot(player);
     return {
         roomId: room.id,
         playerId: player.id,
@@ -291,6 +293,18 @@ function buildNMultiRoomJoinedPayload(room: NMultiRoom, player: NMultiPlayer): {
     };
 }
 
+function buildBinarySnapshotSide(side: ReturnType<AuthoritativeMatch['getSnapshotFor']>['self']): ReturnType<AuthoritativeMatch['getSnapshotFor']>['self'] {
+    if (side.board && typeof side.board === 'string') {
+        side.board = BoardCodec.encodeBinary(BoardCodec.decode(side.board));
+    }
+    if (side.sync) {
+        if (side.sync.boardCore && typeof side.sync.boardCore === 'string') {
+            side.sync.boardCore = BoardCodec.encodeBinary(BoardCodec.decode(side.sync.boardCore));
+        }
+    }
+    return side;
+}
+
 function buildOneVsOneAuthSnapshot(match: AuthoritativeMatch, seat: Seat): {
     tick: number;
     self: ReturnType<AuthoritativeMatch['getSnapshotFor']>['self'];
@@ -298,6 +312,8 @@ function buildOneVsOneAuthSnapshot(match: AuthoritativeMatch, seat: Seat): {
     serverAckInputSeq: number;
 } {
     const snapshot = match.getSnapshotFor(seat);
+    snapshot.self = buildBinarySnapshotSide(snapshot.self);
+    snapshot.opponent = buildBinarySnapshotSide(snapshot.opponent);
     return {
         ...snapshot,
         serverAckInputSeq: match.players[seat].lastSeq,
@@ -310,6 +326,7 @@ function buildNMultiAuthSnapshot(player: NMultiPlayer): {
     serverAckInputSeq: number;
 } {
     const snapshot = player.authMatch.getSnapshotFor('p1');
+    snapshot.self = buildBinarySnapshotSide(snapshot.self);
     return {
         tick: snapshot.tick,
         self: snapshot.self,
@@ -337,7 +354,7 @@ function resetNMultiPlayerMatch(player: NMultiPlayer): void {
     player.score = selfSnapshot.score;
     player.level = selfSnapshot.level;
     player.lines = selfSnapshot.lines;
-    player.board = selfSnapshot.board;
+    player.board = selfSnapshot.board ? BoardCodec.encodeBinary(BoardCodec.decode(selfSnapshot.board)) : null;
     player.isAlive = selfSnapshot.isAlive;
     markNMultiPlayerActive(player);
     player.lastAckInputSeq = 0;
@@ -369,7 +386,7 @@ function createNMultiPlayer(room: NMultiRoom | null, socketId: string, name?: st
         score: initialSelf.score,
         level: initialSelf.level,
         lines: initialSelf.lines,
-        board: initialSelf.board,
+        board: initialSelf.board ? BoardCodec.encodeBinary(BoardCodec.decode(initialSelf.board)) : null,
         isAlive: initialSelf.isAlive,
         v: 1,
         presence: 'active',
@@ -590,8 +607,8 @@ const oneVsOneResumePolicy: TokenLifecyclePolicy<{ room: OneVsOneRoom; seat: Sea
             roomName: room.name,
             resumeToken: room.seats[seat].token,
             authSeed: room.authSeeds ? room.authSeeds[seat] : null,
-            shadowSelf: room.authMatch ? room.authMatch.getSnapshotFor(seat).self : undefined,
-            shadowOpponent: room.authMatch ? room.authMatch.getSnapshotFor(seat).opponent : undefined,
+            shadowSelf: room.authMatch ? buildBinarySnapshotSide(room.authMatch.getSnapshotFor(seat).self) : undefined,
+            shadowOpponent: room.authMatch ? buildBinarySnapshotSide(room.authMatch.getSnapshotFor(seat).opponent) : undefined,
             pendingGarbage: [],
             serverSeqBase: room.authMatch ? room.authMatch.tick : 0,
         };
@@ -814,14 +831,15 @@ function tickNMultiRoom(roomId: string): void {
         const snapshot = match.getSnapshotFor('p1');
         const self = snapshot.self;
         const nextAck = Number.isFinite(match.players.p1.lastSeq) ? match.players.p1.lastSeq : player.lastAckInputSeq;
-        const changed = player.board !== self.board
+        const compressedBoard = self.board ? BoardCodec.encodeBinary(BoardCodec.decode(self.board)) : null;
+        const changed = player.board !== compressedBoard
             || player.score !== self.score
             || player.level !== self.level
             || player.lines !== self.lines
             || player.isAlive !== self.isAlive
             || player.lastAckInputSeq !== nextAck;
 
-        player.board = self.board;
+        player.board = compressedBoard;
         player.score = self.score;
         player.level = self.level;
         player.lines = self.lines;
@@ -853,7 +871,7 @@ function broadcastNMultiDelta(roomId: string): void {
         score: number;
         level: number;
         lines: number;
-        board: string | null;
+        board: string | Uint8Array | null;
         isAlive: boolean;
         v: number;
     }> = {};

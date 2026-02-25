@@ -5,7 +5,7 @@ import { ScoreSystem } from '../../tetris/logic/scoreSystem';
 
 const BOARD_ROWS = 20;
 const BOARD_COLS = 10;
-const AUTH_TICK_MS = 100;
+const AUTH_TICK_MS = 50;
 const PREVIEW_QUEUE_SIZE = 6;
 
 const ROTATIONS = CONST.TETROMINO.ROTATE_SEQ as Rotation[];
@@ -542,7 +542,7 @@ export class AuthoritativeMatch {
 
             if (!player.isAlive) continue;
 
-            player.gravityMsCounter += 100;
+            player.gravityMsCounter += AUTH_TICK_MS;
             const dropDelay = getAutoDropDelay(player.level);
             while (player.isAlive && player.active && player.gravityMsCounter >= dropDelay) {
                 player.gravityMsCounter -= dropDelay;

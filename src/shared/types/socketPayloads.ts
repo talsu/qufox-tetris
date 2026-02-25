@@ -35,7 +35,7 @@ export interface AuthPresencePayload extends RoomScopedPayload {
 }
 
 export interface AuthSnapshotSide {
-    board: string;
+    board: string | Uint8Array;
     score: number;
     level: number;
     lines: number;
@@ -51,7 +51,7 @@ export interface AuthActiveState {
 }
 
 export interface AuthSyncState {
-    boardCore: string;
+    boardCore: string | Uint8Array;
     active: AuthActiveState | null;
     hold: string | null;
     canHold: boolean;
@@ -131,7 +131,7 @@ export interface NMultiPlayerPayload {
     score: number;
     level: number;
     lines: number;
-    board: string | null;
+    board: string | Uint8Array | null;
     isAlive: boolean;
     v: number;
 }
@@ -265,7 +265,8 @@ function isFiniteOrUndefined(value: unknown): boolean {
 
 function isAuthSnapshotSide(value: unknown): value is AuthSnapshotSide {
     if (!isRecord(value)) return false;
-    const basic = typeof value.board === 'string'
+    const boardOk = typeof value.board === 'string' || value.board instanceof Uint8Array || (isRecord(value.board) && value.board.constructor && value.board.constructor.name === 'Uint8Array');
+    const basic = boardOk
         && Number.isFinite(value.score)
         && Number.isFinite(value.level)
         && Number.isFinite(value.lines)
@@ -289,11 +290,12 @@ function isStringArray(value: unknown): value is string[] {
 
 function isNMultiPlayerPayload(value: unknown): value is NMultiPlayerPayload {
     if (!isRecord(value)) return false;
+    const boardOk = value.board === null || typeof value.board === 'string' || value.board instanceof Uint8Array || (isRecord(value.board) && value.board.constructor && value.board.constructor.name === 'Uint8Array');
     return typeof value.name === 'string'
         && Number.isFinite(value.score)
         && Number.isFinite(value.level)
         && Number.isFinite(value.lines)
-        && (value.board === null || typeof value.board === 'string')
+        && boardOk
         && typeof value.isAlive === 'boolean'
         && Number.isFinite(value.v);
 }
@@ -305,9 +307,10 @@ function isNMultiPlayersMap(value: unknown): value is Record<string, NMultiPlaye
 
 function isAuthSyncState(value: unknown): value is AuthSyncState {
     if (!isRecord(value)) return false;
+    const boardCoreOk = typeof value.boardCore === 'string' || value.boardCore instanceof Uint8Array || (isRecord(value.boardCore) && value.boardCore.constructor && value.boardCore.constructor.name === 'Uint8Array');
     const activeOk = value.active === null || isAuthActiveState(value.active);
     const holdOk = value.hold === null || typeof value.hold === 'string';
-    return typeof value.boardCore === 'string'
+    return boardCoreOk
         && activeOk
         && holdOk
         && typeof value.canHold === 'boolean'
@@ -362,7 +365,7 @@ export function toFiniteNumberOrNull(value: unknown): number | null {
 
 export function isUpdateStatePayload(value: unknown): value is UpdateStatePayload {
     if (!hasRoomId(value) || !isRecord(value)) return false;
-    return value.board === undefined || typeof value.board === 'string';
+    return value.board === undefined || typeof value.board === 'string' || value.board instanceof Uint8Array || (isRecord(value.board) && value.board.constructor && value.board.constructor.name === 'Uint8Array');
 }
 
 export function isSendGarbagePayload(value: unknown): value is SendGarbagePayload {
@@ -376,7 +379,7 @@ export function isNMultiRoomPayload(value: unknown): value is NMultiRoomScopedPa
 
 export function isNMultiUpdateStatePayload(value: unknown): value is NMultiUpdateStatePayload {
     if (!hasRoomId(value) || !isRecord(value)) return false;
-    const boardOk = value.board === undefined || typeof value.board === 'string';
+    const boardOk = value.board === undefined || typeof value.board === 'string' || value.board instanceof Uint8Array || (isRecord(value.board) && value.board.constructor && value.board.constructor.name === 'Uint8Array');
     return boardOk
         && isFiniteOrUndefined(value.score)
         && isFiniteOrUndefined(value.level)

@@ -129,7 +129,7 @@ export class PlayScene extends BasePlayScene {
             tick: data.tick,
             mismatchStreak: this.localMismatchStreak,
             needsAuthoritativeResync: this.needsAuthoritativeResync,
-            mismatchThreshold: 3,
+            mismatchThreshold: 6,
         });
         this.localMismatchStreak = mismatch.mismatchStreak;
         this.needsAuthoritativeResync = mismatch.needsAuthoritativeResync;

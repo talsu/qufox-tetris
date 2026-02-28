@@ -1,11 +1,13 @@
 import { EnginePhase } from '../objects/playField';
-import type { AuthSyncState } from '../../shared/types/socketPayloads';
+import type { AuthLockFeedback, AuthSnapshotStats, AuthSyncState } from '../../shared/types/socketPayloads';
 import { BoardCodec } from '../net/boardCodec';
 
 interface BootstrapSelfSnapshot {
     score: number;
     level: number;
     lines: number;
+    stats?: AuthSnapshotStats;
+    lockFeedback?: AuthLockFeedback;
     sync?: AuthSyncState;
 }
 
@@ -17,7 +19,10 @@ interface BootstrapSnapshot<TOpponent = unknown> {
 export function applyAuthoritativeBootstrapSnapshot<TOpponent>(
     snapshot: BootstrapSnapshot<TOpponent> | null,
     handlers: {
-        applySelfSync: (sync: AuthSyncState, stats: { score: number; level: number; lines: number }) => void;
+        applySelfSync: (
+            sync: AuthSyncState,
+            stats: { score: number; level: number; lines: number; stats?: AuthSnapshotStats; lockFeedback?: AuthLockFeedback }
+        ) => void;
         applyOpponent?: (opponent: TOpponent) => void;
     },
 ): boolean {
@@ -30,6 +35,8 @@ export function applyAuthoritativeBootstrapSnapshot<TOpponent>(
             score: snapshot.self.score,
             level: snapshot.self.level,
             lines: snapshot.self.lines,
+            stats: snapshot.self.stats,
+            lockFeedback: snapshot.self.lockFeedback,
         });
     }
     if (handlers.applyOpponent && snapshot.opponent !== undefined) {

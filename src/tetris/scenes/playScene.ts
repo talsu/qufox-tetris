@@ -149,6 +149,10 @@ export class PlayScene extends BasePlayScene {
                 score: data.self.score,
                 level: data.self.level,
                 lines: data.self.lines,
+                stats: data.self.stats,
+                lockFeedback: data.self.lockFeedback,
+            }, {
+                showLockFeedback: false,
             });
             this.localMismatchStreak = 0;
             this.needsAuthoritativeResync = false;
@@ -209,7 +213,9 @@ export class PlayScene extends BasePlayScene {
         const snapshot = this.initialAuthSnapshot;
         applyAuthoritativeBootstrapSnapshot(snapshot, {
             applySelfSync: (sync, stats) => {
-                this.engine.applyAuthoritativeSync(sync, stats);
+                this.engine.applyAuthoritativeSync(sync, stats, {
+                    showLockFeedback: false,
+                });
             },
             applyOpponent: (opponent) => {
                 if (opponent.board && this.opponentPlayField) {
@@ -249,6 +255,10 @@ export class PlayScene extends BasePlayScene {
                 score: data.self.score,
                 level: data.self.level,
                 lines: data.self.lines,
+                stats: data.self.stats,
+                lockFeedback: data.self.lockFeedback,
+            }, {
+                showLockFeedback: false,
             });
         }
 
@@ -335,6 +345,10 @@ export class PlayScene extends BasePlayScene {
                     score: Number(data.shadowSelf.score || 0),
                     level: Number(data.shadowSelf.level || 1),
                     lines: Number(data.shadowSelf.lines || 0),
+                    stats: data.shadowSelf.stats,
+                    lockFeedback: data.shadowSelf.lockFeedback,
+                }, {
+                    showLockFeedback: false,
                 });
                 this.needsAuthoritativeResync = false;
                 this.localMismatchStreak = 0;
@@ -414,6 +428,25 @@ export class PlayScene extends BasePlayScene {
             if (!isAuthSnapshotPayload(data)) return;
 
             this.applyInitialAuthoritativeSnapshotFromLiveTick(data);
+
+            const maybeApplyAuthoritativeHud = (this.engine as unknown as { applyAuthoritativeHud?: (payload: {
+                score: number;
+                level: number;
+                lines: number;
+                stats?: unknown;
+                lockFeedback?: unknown;
+            }, options?: { showLockFeedback?: boolean }) => void })?.applyAuthoritativeHud;
+            if (maybeApplyAuthoritativeHud) {
+                maybeApplyAuthoritativeHud.call(this.engine, {
+                    score: data.self.score,
+                    level: data.self.level,
+                    lines: data.self.lines,
+                    stats: data.self.stats,
+                    lockFeedback: data.self.lockFeedback,
+                }, {
+                    showLockFeedback: !data.shadowRelay,
+                });
+            }
 
             if (!data.shadowRelay) {
                 this.maybeResyncLocalStateFromSnapshot(data);
@@ -668,6 +701,12 @@ export class PlayScene extends BasePlayScene {
         }
 
         if (this.engine) {
+            const maybeSetAuthoritativeHudMode = (this.engine as unknown as {
+                setAuthoritativeHudMode?: (enabled: boolean) => void;
+            })?.setAuthoritativeHudMode;
+            if (maybeSetAuthoritativeHudMode) {
+                maybeSetAuthoritativeHudMode.call(this.engine, this.mode === 'multi' && this.useAuthoritativeServer);
+            }
             if (this.mode === 'multi' && this.useAuthoritativeServer && this.authQueueSeed !== null) {
                 this.engine.queueInstance.setSeed(this.authQueueSeed);
             }

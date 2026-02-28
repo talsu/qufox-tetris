@@ -34,12 +34,26 @@ export interface AuthPresencePayload extends RoomScopedPayload {
     lastInputSeq?: number;
 }
 
+export interface AuthSnapshotStats {
+    tetrises: number;
+    tspins: number;
+    combos: number;
+}
+
+export interface AuthLockFeedback {
+    id: number;
+    actionName: string | null;
+    combo: number;
+}
+
 export interface AuthSnapshotSide {
     board: string | Uint8Array | ArrayBuffer;
     score: number;
     level: number;
     lines: number;
     isAlive: boolean;
+    stats?: AuthSnapshotStats;
+    lockFeedback?: AuthLockFeedback;
     sync?: AuthSyncState;
 }
 
@@ -272,14 +286,32 @@ function isFiniteOrUndefined(value: unknown): boolean {
     return value === undefined || Number.isFinite(value);
 }
 
+function isAuthSnapshotStats(value: unknown): value is AuthSnapshotStats {
+    return isRecord(value)
+        && Number.isFinite(value.tetrises)
+        && Number.isFinite(value.tspins)
+        && Number.isFinite(value.combos);
+}
+
+function isAuthLockFeedback(value: unknown): value is AuthLockFeedback {
+    return isRecord(value)
+        && Number.isFinite(value.id)
+        && (value.actionName === null || typeof value.actionName === 'string')
+        && Number.isFinite(value.combo);
+}
+
 function isAuthSnapshotSide(value: unknown): value is AuthSnapshotSide {
     if (!isRecord(value)) return false;
     const boardOk = typeof value.board === 'string' || isBinaryLike(value.board);
+    const statsOk = value.stats === undefined || isAuthSnapshotStats(value.stats);
+    const lockFeedbackOk = value.lockFeedback === undefined || isAuthLockFeedback(value.lockFeedback);
     const basic = boardOk
         && Number.isFinite(value.score)
         && Number.isFinite(value.level)
         && Number.isFinite(value.lines)
-        && typeof value.isAlive === 'boolean';
+        && typeof value.isAlive === 'boolean'
+        && statsOk
+        && lockFeedbackOk;
     if (!basic) return false;
     if (value.sync === undefined) return true;
     return isAuthSyncState(value.sync);

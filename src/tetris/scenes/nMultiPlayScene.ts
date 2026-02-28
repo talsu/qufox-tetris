@@ -83,7 +83,9 @@ export class NMultiPlayScene extends BasePlayScene {
 
         applyAuthoritativeBootstrapSnapshot(this.initialAuthSnapshot, {
             applySelfSync: (sync, stats) => {
-                this.engine.applyAuthoritativeSync(sync, stats);
+                this.engine.applyAuthoritativeSync(sync, stats, {
+                    showLockFeedback: false,
+                });
             },
         });
 
@@ -118,6 +120,10 @@ export class NMultiPlayScene extends BasePlayScene {
                 score: data.self.score,
                 level: data.self.level,
                 lines: data.self.lines,
+                stats: data.self.stats,
+                lockFeedback: data.self.lockFeedback,
+            }, {
+                showLockFeedback: false,
             });
         }
 
@@ -188,6 +194,22 @@ export class NMultiPlayScene extends BasePlayScene {
         this.socket.on('nmulti_auth_snapshot', (data: unknown) => {
             if (!isNMultiAuthSnapshotPayload(data)) return;
             this.applyInitialAuthoritativeSnapshotFromLiveTick(data);
+            const maybeApplyAuthoritativeHud = (this.engine as unknown as { applyAuthoritativeHud?: (payload: {
+                score: number;
+                level: number;
+                lines: number;
+                stats?: unknown;
+                lockFeedback?: unknown;
+            }) => void })?.applyAuthoritativeHud;
+            if (maybeApplyAuthoritativeHud) {
+                maybeApplyAuthoritativeHud.call(this.engine, {
+                    score: data.self.score,
+                    level: data.self.level,
+                    lines: data.self.lines,
+                    stats: data.self.stats,
+                    lockFeedback: data.self.lockFeedback,
+                });
+            }
             this.maybeResyncLocalStateFromSnapshot(data);
 
             if (this.isGameRunning && data.self.isAlive === false && !this.isGameEnded) {
@@ -290,6 +312,10 @@ export class NMultiPlayScene extends BasePlayScene {
             score: data.self.score,
             level: data.self.level,
             lines: data.self.lines,
+            stats: data.self.stats,
+            lockFeedback: data.self.lockFeedback,
+        }, {
+            showLockFeedback: false,
         });
         this.localMismatchStreak = 0;
         this.needsAuthoritativeResync = false;
@@ -471,6 +497,12 @@ export class NMultiPlayScene extends BasePlayScene {
         this.playField = layout.playField;
         this.engine = layout.engine;
         this.bindKenneyImpactEvents();
+        const maybeSetAuthoritativeHudMode = (this.engine as unknown as {
+            setAuthoritativeHudMode?: (enabled: boolean) => void;
+        })?.setAuthoritativeHudMode;
+        if (maybeSetAuthoritativeHudMode) {
+            maybeSetAuthoritativeHudMode.call(this.engine, true);
+        }
         this.engine.setPlayerName(this.playerName);
 
         const localRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> = [

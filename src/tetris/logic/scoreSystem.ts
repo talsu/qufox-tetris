@@ -85,7 +85,12 @@ export class ScoreSystem {
         return this.comboCount;
     }
 
-    setAuthoritativeState(score: number, level: number, lines: number) {
+    setAuthoritativeState(
+        score: number,
+        level: number,
+        lines: number,
+        extras?: { tetrises?: number; tspins?: number; combos?: number }
+    ) {
         const normalizedScore = Number.isFinite(score) ? Math.max(0, Math.floor(score)) : 0;
         const normalizedLevel = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
         const normalizedLines = Number.isFinite(lines) ? Math.max(0, Math.floor(lines)) : 0;
@@ -103,7 +108,20 @@ export class ScoreSystem {
 
         this.comboCount = -1;
         this.isBackToBackChain = false;
-        this.maxCombo = Math.max(0, this.maxCombo);
+
+        if (extras) {
+            if (Number.isFinite(extras.tetrises)) {
+                this.tetrisCount = Math.max(0, Math.floor(extras.tetrises as number));
+            }
+            if (Number.isFinite(extras.tspins)) {
+                this.tSpinCount = Math.max(0, Math.floor(extras.tspins as number));
+            }
+            if (Number.isFinite(extras.combos)) {
+                this.maxCombo = Math.max(0, Math.floor(extras.combos as number));
+            }
+        } else {
+            this.maxCombo = Math.max(0, this.maxCombo);
+        }
     }
 
     /**

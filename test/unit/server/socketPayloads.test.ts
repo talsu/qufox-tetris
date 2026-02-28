@@ -73,6 +73,16 @@ describe('socket payload guards', () => {
                 level: 1,
                 lines: 0,
                 isAlive: true,
+                stats: {
+                    tetrises: 0,
+                    tspins: 1,
+                    combos: 2,
+                },
+                lockFeedback: {
+                    id: 3,
+                    actionName: 'T-Spin Single',
+                    combo: 1,
+                },
                 sync: {
                     boardCore: '0'.repeat(200),
                     active: { type: 'T', rotate: '0', col: 3, row: 0 },
@@ -97,6 +107,26 @@ describe('socket payload guards', () => {
                 sync: {
                     ...payload.self.sync,
                     queueRngState: 'bad',
+                },
+            },
+        })).toBe(false);
+        expect(isAuthSnapshotPayload({
+            ...payload,
+            self: {
+                ...payload.self,
+                stats: {
+                    ...payload.self.stats,
+                    tspins: 'bad',
+                },
+            },
+        })).toBe(false);
+        expect(isAuthSnapshotPayload({
+            ...payload,
+            self: {
+                ...payload.self,
+                lockFeedback: {
+                    ...payload.self.lockFeedback,
+                    actionName: 123,
                 },
             },
         })).toBe(false);

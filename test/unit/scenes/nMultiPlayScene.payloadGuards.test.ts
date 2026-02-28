@@ -289,11 +289,15 @@ describe('NMultiPlayScene payload guards', () => {
 
         scene.applyInitialAuthoritativeBootstrap();
 
-        expect(applyAuthoritativeSync).toHaveBeenCalledWith(expectedSync, {
-            score: 120,
-            level: 2,
-            lines: 4,
-        });
+        expect(applyAuthoritativeSync).toHaveBeenCalledWith(
+            expectedSync,
+            expect.objectContaining({
+                score: 120,
+                level: 2,
+                lines: 4,
+            }),
+            { showLockFeedback: false },
+        );
         expect(scene.needsAuthoritativeResync).toBe(false);
         expect(scene.localMismatchStreak).toBe(0);
         expect(scene.initialAuthSnapshot).toBeNull();

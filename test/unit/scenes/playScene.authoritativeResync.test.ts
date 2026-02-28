@@ -89,11 +89,15 @@ describe('PlayScene authoritative resync', () => {
         handlers.auth_snapshot(snapshot);
 
         expect(applyAuthoritativeSync).toHaveBeenCalledTimes(1);
-        expect(applyAuthoritativeSync).toHaveBeenCalledWith(snapshot.self.sync, {
-            score: snapshot.self.score,
-            level: snapshot.self.level,
-            lines: snapshot.self.lines,
-        });
+        expect(applyAuthoritativeSync).toHaveBeenCalledWith(
+            snapshot.self.sync,
+            expect.objectContaining({
+                score: snapshot.self.score,
+                level: snapshot.self.level,
+                lines: snapshot.self.lines,
+            }),
+            { showLockFeedback: false },
+        );
     });
 
     test('does not trigger resync while local field is in line-clear transition phase', () => {
@@ -427,11 +431,15 @@ describe('PlayScene authoritative resync', () => {
         const snapshot = buildSyncSnapshot('0'.repeat(200), 0);
         handlers.auth_snapshot(snapshot);
 
-        expect(applyAuthoritativeSync).toHaveBeenCalledWith(snapshot.self.sync, {
-            score: snapshot.self.score,
-            level: snapshot.self.level,
-            lines: snapshot.self.lines,
-        });
+        expect(applyAuthoritativeSync).toHaveBeenCalledWith(
+            snapshot.self.sync,
+            expect.objectContaining({
+                score: snapshot.self.score,
+                level: snapshot.self.level,
+                lines: snapshot.self.lines,
+            }),
+            { showLockFeedback: false },
+        );
         expect(setVisibleA).toHaveBeenCalledWith(true);
         expect(setVisibleB).toHaveBeenCalledWith(true);
         expect(Reflect.get(scene, 'awaitingInitialAuthSnapshot')).toBe(false);

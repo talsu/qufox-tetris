@@ -4,7 +4,7 @@ import {TetrominoBoxQueue} from "./objects/tetrominoBoxQueue";
 import {LevelIndicator} from "./objects/levelIndicator";
 import {InputState, TetrominoType, RotateType} from "./const/const";
 import {ScoreSystem, GameStats} from "./logic/scoreSystem";
-import { AuthSnapshotSide, AuthSyncState } from '../shared/types/socketPayloads';
+import { AuthLockFeedback, AuthSnapshotSide, AuthSnapshotStats, AuthSyncState } from '../shared/types/socketPayloads';
 
 /**
  * Tetris game engine.
@@ -17,6 +17,8 @@ export class Engine {
     private scoreSystem: ScoreSystem;
     private gameTime: number = 0;
     private readonly isDebugLogging: boolean = typeof process !== 'undefined' ? process.env.NODE_ENV !== 'production' : true;
+    private useAuthoritativeHud: boolean = false;
+    private lastAuthoritativeLockFeedbackId: number = 0;
 
     private onAttack: (count: number) => void;
 
@@ -52,6 +54,7 @@ export class Engine {
      */
     clear() {
         this.scoreSystem.clear();
+        this.lastAuthoritativeLockFeedbackId = 0;
     }
 
     /**
@@ -145,12 +148,14 @@ export class Engine {
              console.log(`Combo ${result.combo}`);
         }
 
-        // Show action/combo popup at the center of the play field.
-        this.playField.showPopup(result.actionName, result.combo);
+        if (!this.useAuthoritativeHud) {
+            // Show action/combo popup at the center of the play field.
+            this.playField.showPopup(result.actionName, result.combo);
 
-        // Update indicator (sidebar stats only – action/combo moved to field popup).
-        this.levelIndicator.setAction(result.actionName);
-        this.levelIndicator.setCombo(result.combo);
+            // Update indicator (sidebar stats only – action/combo moved to field popup).
+            this.levelIndicator.setAction(result.actionName);
+            this.levelIndicator.setCombo(result.combo);
+        }
 
         // Immediate update stats
         const stats = this.scoreSystem.getStats(this.gameTime);
@@ -195,7 +200,61 @@ export class Engine {
         this.levelIndicator.setPlayerName(name);
     }
 
-    public applyAuthoritativeSync(sync: AuthSyncState, stats: { score: number; level: number; lines: number }): void {
+    public setAuthoritativeHudMode(enabled: boolean): void {
+        this.useAuthoritativeHud = enabled;
+        if (!enabled) {
+            this.lastAuthoritativeLockFeedbackId = 0;
+        }
+    }
+
+    private applyAuthoritativeLockFeedback(
+        feedback: AuthLockFeedback | undefined,
+        showFeedback: boolean = true
+    ): void {
+        if (!feedback || !Number.isFinite(feedback.id)) {
+            return;
+        }
+        const feedbackId = Math.floor(feedback.id);
+        if (feedbackId <= this.lastAuthoritativeLockFeedbackId) {
+            return;
+        }
+        this.lastAuthoritativeLockFeedbackId = feedbackId;
+
+        if (!showFeedback) {
+            return;
+        }
+
+        const combo = Number.isFinite(feedback.combo) ? Math.floor(feedback.combo) : -1;
+        const actionName = feedback.actionName ?? null;
+        this.playField.showPopup(actionName, combo);
+        this.levelIndicator.setAction(actionName);
+        this.levelIndicator.setCombo(combo);
+    }
+
+    public applyAuthoritativeHud(
+        stats: { score: number; level: number; lines: number; stats?: AuthSnapshotStats; lockFeedback?: AuthLockFeedback },
+        options?: { showLockFeedback?: boolean }
+    ): void {
+        this.scoreSystem.setAuthoritativeState(
+            stats.score,
+            stats.level,
+            stats.lines,
+            {
+                tetrises: stats.stats?.tetrises,
+                tspins: stats.stats?.tspins,
+                combos: stats.stats?.combos,
+            }
+        );
+        this.playField.autoDropDelay = this.scoreSystem.getAutoDropDelay();
+        this.levelIndicator.updateStats(this.scoreSystem.getStats(this.gameTime));
+        this.applyAuthoritativeLockFeedback(stats.lockFeedback, options?.showLockFeedback !== false);
+    }
+
+    public applyAuthoritativeSync(
+        sync: AuthSyncState,
+        stats: { score: number; level: number; lines: number; stats?: AuthSnapshotStats; lockFeedback?: AuthLockFeedback },
+        options?: { showLockFeedback?: boolean }
+    ): void {
         const isPlayableType = (value: string): value is Exclude<TetrominoType, TetrominoType.GARBAGE> => {
             return value === TetrominoType.I
                 || value === TetrominoType.J
@@ -217,9 +276,7 @@ export class Engine {
 
         this.playField.applyAuthoritativeState(sync.boardCore, sync.active, sync.canHold);
 
-        this.scoreSystem.setAuthoritativeState(stats.score, stats.level, stats.lines);
-        this.playField.autoDropDelay = this.scoreSystem.getAutoDropDelay();
-        this.levelIndicator.updateStats(this.scoreSystem.getStats(this.gameTime));
+        this.applyAuthoritativeHud(stats, options);
     }
 
     public getShadowSnapshotSide(): AuthSnapshotSide {

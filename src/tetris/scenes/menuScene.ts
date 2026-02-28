@@ -25,6 +25,12 @@ interface MenuButton {
 }
 
 export class MenuScene extends BaseScene {
+    private static readonly TETROMINO_THEMES = [
+        '/assets/image/tetromino-theme/tetris-mino-gem.png',
+        '/assets/image/tetromino-theme/tetris-mino-oriental.png',
+        '/assets/image/tetromino-theme/tetris-mino-puyo.png',
+    ];
+
     private root: Phaser.GameObjects.Container | null = null;
     private logo: Phaser.GameObjects.Image | null = null;
     private logoCaption: Phaser.GameObjects.Text | null = null;
@@ -52,7 +58,14 @@ export class MenuScene extends BaseScene {
     }
 
     preload(): void {
-        this.load.spritesheet('blockSheet', '/assets/image/PPTdefaultMinoOnly.png', {
+        const themes = MenuScene.TETROMINO_THEMES;
+        const themePath = themes[Math.floor(Math.random() * themes.length)];
+
+        if (this.textures.exists('blockSheet')) {
+            this.textures.remove('blockSheet');
+        }
+
+        this.load.spritesheet('blockSheet', themePath, {
             frameHeight: CONST.SCREEN.BLOCK_IMAGE_SIZE,
             frameWidth: CONST.SCREEN.BLOCK_IMAGE_SIZE,
             margin: 4,

@@ -135,12 +135,18 @@ describe('server/index integration', () => {
     }
 
     beforeAll(async () => {
-        const build = spawnSync('npx', ['tsc', '-p', 'tsconfig.server.json'], {
+        const tscEntry = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
+        const build = spawnSync(process.execPath, [tscEntry, '-p', 'tsconfig.server.json'], {
             cwd: repoRoot,
             encoding: 'utf8',
         });
         if (build.status !== 0) {
-            throw new Error(`server build failed\n${build.stdout}\n${build.stderr}`);
+            const buildError = build.error ? `${build.error.name}: ${build.error.message}` : 'none';
+            throw new Error(
+                `server build failed (status=${String(build.status)}, signal=${String(build.signal)})\n` +
+                    `spawnError=${buildError}\n` +
+                    `${build.stdout ?? ''}\n${build.stderr ?? ''}`,
+            );
         }
 
         port = await findFreePort();

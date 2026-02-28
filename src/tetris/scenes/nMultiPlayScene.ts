@@ -271,7 +271,7 @@ export class NMultiPlayScene extends BasePlayScene {
             tick: data.tick,
             mismatchStreak: this.localMismatchStreak,
             needsAuthoritativeResync: this.needsAuthoritativeResync,
-            mismatchThreshold: 2,
+            mismatchThreshold: 4,
         });
         this.localMismatchStreak = mismatch.mismatchStreak;
         this.needsAuthoritativeResync = mismatch.needsAuthoritativeResync;

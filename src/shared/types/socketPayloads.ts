@@ -35,7 +35,7 @@ export interface AuthPresencePayload extends RoomScopedPayload {
 }
 
 export interface AuthSnapshotSide {
-    board: string;
+    board: string | Uint8Array | ArrayBuffer;
     score: number;
     level: number;
     lines: number;
@@ -51,7 +51,7 @@ export interface AuthActiveState {
 }
 
 export interface AuthSyncState {
-    boardCore: string;
+    boardCore: string | Uint8Array | ArrayBuffer;
     active: AuthActiveState | null;
     hold: string | null;
     canHold: boolean;
@@ -85,7 +85,7 @@ export interface JoinOrCreatePayload {
 }
 
 export interface UpdateStatePayload extends RoomScopedPayload {
-    board?: string;
+    board?: string | Uint8Array | ArrayBuffer;
 }
 
 export interface SendGarbagePayload extends RoomScopedPayload {
@@ -106,7 +106,7 @@ export interface NMultiUpdateStatePayload extends RoomScopedPayload {
     score?: number;
     level?: number;
     lines?: number;
-    board?: string;
+    board?: string | Uint8Array | ArrayBuffer;
 }
 
 export interface NMultiAuthInputPayload extends RoomScopedPayload {
@@ -131,7 +131,7 @@ export interface NMultiPlayerPayload {
     score: number;
     level: number;
     lines: number;
-    board: string | null;
+    board: string | Uint8Array | ArrayBuffer | null;
     isAlive: boolean;
     v: number;
 }
@@ -210,6 +210,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
 }
 
+function isBinaryLike(value: unknown): value is Uint8Array | ArrayBuffer {
+    return value instanceof Uint8Array
+        || value instanceof ArrayBuffer
+        || (isRecord(value) && value.constructor != null && (
+            (value.constructor as { name?: string }).name === 'Uint8Array'
+            || (value.constructor as { name?: string }).name === 'ArrayBuffer'
+        ));
+}
+
 function hasRoomId(value: unknown): value is RoomScopedPayload {
     return isRecord(value) && typeof value.roomId === 'string' && value.roomId.length > 0;
 }
@@ -265,7 +274,8 @@ function isFiniteOrUndefined(value: unknown): boolean {
 
 function isAuthSnapshotSide(value: unknown): value is AuthSnapshotSide {
     if (!isRecord(value)) return false;
-    const basic = typeof value.board === 'string'
+    const boardOk = typeof value.board === 'string' || isBinaryLike(value.board);
+    const basic = boardOk
         && Number.isFinite(value.score)
         && Number.isFinite(value.level)
         && Number.isFinite(value.lines)
@@ -289,11 +299,12 @@ function isStringArray(value: unknown): value is string[] {
 
 function isNMultiPlayerPayload(value: unknown): value is NMultiPlayerPayload {
     if (!isRecord(value)) return false;
+    const boardOk = value.board === null || typeof value.board === 'string' || isBinaryLike(value.board);
     return typeof value.name === 'string'
         && Number.isFinite(value.score)
         && Number.isFinite(value.level)
         && Number.isFinite(value.lines)
-        && (value.board === null || typeof value.board === 'string')
+        && boardOk
         && typeof value.isAlive === 'boolean'
         && Number.isFinite(value.v);
 }
@@ -305,9 +316,10 @@ function isNMultiPlayersMap(value: unknown): value is Record<string, NMultiPlaye
 
 function isAuthSyncState(value: unknown): value is AuthSyncState {
     if (!isRecord(value)) return false;
+    const boardCoreOk = typeof value.boardCore === 'string' || isBinaryLike(value.boardCore);
     const activeOk = value.active === null || isAuthActiveState(value.active);
     const holdOk = value.hold === null || typeof value.hold === 'string';
-    return typeof value.boardCore === 'string'
+    return boardCoreOk
         && activeOk
         && holdOk
         && typeof value.canHold === 'boolean'
@@ -362,7 +374,7 @@ export function toFiniteNumberOrNull(value: unknown): number | null {
 
 export function isUpdateStatePayload(value: unknown): value is UpdateStatePayload {
     if (!hasRoomId(value) || !isRecord(value)) return false;
-    return value.board === undefined || typeof value.board === 'string';
+    return value.board === undefined || typeof value.board === 'string' || isBinaryLike(value.board);
 }
 
 export function isSendGarbagePayload(value: unknown): value is SendGarbagePayload {
@@ -376,7 +388,7 @@ export function isNMultiRoomPayload(value: unknown): value is NMultiRoomScopedPa
 
 export function isNMultiUpdateStatePayload(value: unknown): value is NMultiUpdateStatePayload {
     if (!hasRoomId(value) || !isRecord(value)) return false;
-    const boardOk = value.board === undefined || typeof value.board === 'string';
+    const boardOk = value.board === undefined || typeof value.board === 'string' || isBinaryLike(value.board);
     return boardOk
         && isFiniteOrUndefined(value.score)
         && isFiniteOrUndefined(value.level)

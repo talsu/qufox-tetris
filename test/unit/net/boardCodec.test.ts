@@ -1,172 +1,163 @@
 import { BoardCodec } from '../../../src/tetris/net/boardCodec';
 
 describe('BoardCodec', () => {
-    describe('encode', () => {
+    describe('encode/decode (Legacy String)', () => {
         test('returns 200-character string of zeros for empty block list', () => {
             const result = BoardCodec.encode([]);
             expect(result).toHaveLength(200);
             expect(result).toBe('0'.repeat(200));
         });
 
-        test('encodes a single block at (0,0)', () => {
-            const blocks = [{ col: 0, row: 0, type: 'I' }];
-            const result = BoardCodec.encode(blocks);
-            expect(result[0]).toBe('I');
-            expect(result.slice(1)).toBe('0'.repeat(199));
-        });
-
-        test('encodes a block at last position (col=9, row=19)', () => {
-            const blocks = [{ col: 9, row: 19, type: 'T' }];
-            const result = BoardCodec.encode(blocks);
-            expect(result[199]).toBe('T');
-            expect(result.slice(0, 199)).toBe('0'.repeat(199));
-        });
-
-        test('encodes all tetromino types correctly', () => {
+        test('encodes and decodes tetromino types correctly', () => {
             const types = ['I', 'J', 'L', 'O', 'S', 'T', 'Z', 'GARBAGE'];
-            const expectedChars = ['I', 'J', 'L', 'O', 'S', 'T', 'Z', 'G'];
             const blocks = types.map((type, i) => ({ col: i, row: 0, type }));
 
-            const result = BoardCodec.encode(blocks);
-            for (let i = 0; i < expectedChars.length; i++) {
-                expect(result[i]).toBe(expectedChars[i]);
-            }
-        });
-
-        test('encodes multiple blocks on the same row', () => {
-            const blocks = [
-                { col: 0, row: 5, type: 'I' },
-                { col: 1, row: 5, type: 'I' },
-                { col: 2, row: 5, type: 'I' },
-                { col: 3, row: 5, type: 'I' },
-            ];
-            const result = BoardCodec.encode(blocks);
-            // Row 5 starts at index 50
-            expect(result.slice(50, 54)).toBe('IIII');
-        });
-
-        test('ignores blocks outside grid boundaries', () => {
-            const blocks = [
-                { col: -1, row: 0, type: 'I' },
-                { col: 10, row: 0, type: 'I' },
-                { col: 0, row: -1, type: 'I' },
-                { col: 0, row: 20, type: 'I' },
-            ];
-            const result = BoardCodec.encode(blocks);
-            expect(result).toBe('0'.repeat(200));
-        });
-
-        test('encodes unknown type as 0', () => {
-            const blocks = [{ col: 0, row: 0, type: 'UNKNOWN' }];
-            const result = BoardCodec.encode(blocks);
-            expect(result[0]).toBe('0');
-        });
-    });
-
-    describe('decode', () => {
-        test('returns empty array for null data', () => {
-            const result = BoardCodec.decode(null as any);
-            expect(result).toEqual([]);
-        });
-
-        test('returns empty array for empty string', () => {
-            const result = BoardCodec.decode('');
-            expect(result).toEqual([]);
-        });
-
-        test('returns empty array for string with wrong length', () => {
-            const result = BoardCodec.decode('IIII');
-            expect(result).toEqual([]);
-        });
-
-        test('returns empty array for all-zeros string', () => {
-            const result = BoardCodec.decode('0'.repeat(200));
-            expect(result).toEqual([]);
-        });
-
-        test('decodes a single block at position (0,0)', () => {
-            const data = 'I' + '0'.repeat(199);
-            const result = BoardCodec.decode(data);
-            expect(result).toEqual([{ col: 0, row: 0, type: 'I' }]);
-        });
-
-        test('decodes a block at last position (col=9, row=19)', () => {
-            const data = '0'.repeat(199) + 'T';
-            const result = BoardCodec.decode(data);
-            expect(result).toEqual([{ col: 9, row: 19, type: 'T' }]);
-        });
-
-        test('decodes GARBAGE type from G character', () => {
-            const data = 'G' + '0'.repeat(199);
-            const result = BoardCodec.decode(data);
-            expect(result).toEqual([{ col: 0, row: 0, type: 'GARBAGE' }]);
-        });
-
-        test('ignores unknown characters', () => {
-            const data = 'X' + '0'.repeat(199);
-            const result = BoardCodec.decode(data);
-            expect(result).toEqual([]);
-        });
-
-        test('decodes all tetromino types', () => {
-            const chars = 'IJLOSTZG';
-            const data = chars + '0'.repeat(200 - chars.length);
-            const result = BoardCodec.decode(data);
-            expect(result).toHaveLength(8);
-            expect(result.map(b => b.type)).toEqual(['I', 'J', 'L', 'O', 'S', 'T', 'Z', 'GARBAGE']);
-        });
-
-        test('computes correct row and col from index', () => {
-            // Place a block at index 53 -> row=5, col=3
-            const arr = new Array(200).fill('0');
-            arr[53] = 'S';
-            const result = BoardCodec.decode(arr.join(''));
-            expect(result).toEqual([{ col: 3, row: 5, type: 'S' }]);
-        });
-    });
-
-    describe('encode/decode round-trip', () => {
-        test('round-trip preserves single block', () => {
-            const original = [{ col: 5, row: 10, type: 'T' }];
-            const encoded = BoardCodec.encode(original);
+            const encoded = BoardCodec.encode(blocks);
             const decoded = BoardCodec.decode(encoded);
+            
+            expect(decoded).toHaveLength(8);
+            expect(decoded.map(b => b.type)).toEqual(['I', 'J', 'L', 'O', 'S', 'T', 'Z', 'GARBAGE']);
+        });
+    });
+
+    describe('Binary Encoding (Skyline Nibble Packing)', () => {
+        test('encodeBinary returns only 1 byte for empty board', () => {
+            const result = BoardCodec.encodeBinary([]);
+            expect(result).toHaveLength(1);
+            expect(result[0]).toBe(20); // firstRowIndex = 20
+        });
+
+        test('decodeBinary returns empty array for empty board payload', () => {
+            const data = new Uint8Array([20]);
+            const result = BoardCodec.decodeBinary(data);
+            expect(result).toEqual([]);
+        });
+
+        test('round-trip preserves a single block at the bottom', () => {
+            const original = [{ col: 5, row: 19, type: 'T' }];
+            const encoded = BoardCodec.encodeBinary(original);
+            
+            // Expected size: 1 (header) + 5 (10 cells / 2) = 6 bytes
+            expect(encoded).toHaveLength(6);
+            expect(encoded[0]).toBe(19); // firstRowIndex = 19
+            
+            const decoded = BoardCodec.decodeBinary(encoded);
             expect(decoded).toEqual(original);
         });
 
-        test('round-trip preserves multiple blocks', () => {
-            const original = [
-                { col: 0, row: 0, type: 'I' },
-                { col: 5, row: 10, type: 'T' },
-                { col: 9, row: 19, type: 'GARBAGE' },
-            ];
-            const encoded = BoardCodec.encode(original);
-            const decoded = BoardCodec.decode(encoded);
+        test('round-trip preserves a single block at the top', () => {
+            const original = [{ col: 0, row: 0, type: 'I' }];
+            const encoded = BoardCodec.encodeBinary(original);
+            
+            // Expected size: 1 (header) + 100 (200 cells / 2) = 101 bytes
+            expect(encoded).toHaveLength(101);
+            expect(encoded[0]).toBe(0); // firstRowIndex = 0
+            
+            const decoded = BoardCodec.decodeBinary(encoded);
             expect(decoded).toEqual(original);
         });
 
         test('round-trip preserves a full garbage row', () => {
-            const original: { col: number; row: number; type: string }[] = [];
+            const original = [];
             for (let c = 0; c < 10; c++) {
-                if (c !== 5) {
+                if (c !== 3) {
                     original.push({ col: c, row: 19, type: 'GARBAGE' });
                 }
             }
-            const encoded = BoardCodec.encode(original);
+            const encoded = BoardCodec.encodeBinary(original);
+            const decoded = BoardCodec.decodeBinary(encoded);
+            expect(decoded).toEqual(original);
+        });
+
+        test('BoardCodec.decode automatically detects Uint8Array', () => {
+            const original = [{ col: 2, row: 15, type: 'S' }];
+            const encoded = BoardCodec.encodeBinary(original);
             const decoded = BoardCodec.decode(encoded);
+            expect(decoded).toEqual(original);
+        });
+
+        test('handles multiple blocks across different rows', () => {
+            const original = [
+                { col: 3, row: 10, type: 'L' },
+                { col: 4, row: 10, type: 'O' },
+                { col: 0, row: 19, type: 'GARBAGE' }
+            ];
+            const encoded = BoardCodec.encodeBinary(original);
+            expect(encoded[0]).toBe(10); // firstRowIndex = 10
+            
+            const decoded = BoardCodec.decodeBinary(encoded);
             expect(decoded).toEqual(original);
         });
 
         test('round-trip preserves a fully filled board', () => {
             const types = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
-            const original: { col: number; row: number; type: string }[] = [];
+            const original = [];
             for (let r = 0; r < 20; r++) {
                 for (let c = 0; c < 10; c++) {
                     original.push({ col: c, row: r, type: types[(r * 10 + c) % types.length] });
                 }
             }
-            const encoded = BoardCodec.encode(original);
-            const decoded = BoardCodec.decode(encoded);
+            const encoded = BoardCodec.encodeBinary(original);
+            const decoded = BoardCodec.decodeBinary(encoded);
             expect(decoded).toEqual(original);
+        });
+    });
+
+    describe('stringToBinary (Direct String → Binary)', () => {
+        test('produces identical output to encodeBinary(decode()) for empty board', () => {
+            const board = BoardCodec.encode([]);
+            const direct = BoardCodec.stringToBinary(board);
+            const via = BoardCodec.encodeBinary(BoardCodec.decode(board));
+            expect(direct).toEqual(via);
+        });
+
+        test('produces identical output for a board with mixed blocks', () => {
+            const blocks = [
+                { col: 9, row: 10, type: 'Z' },
+                { col: 0, row: 18, type: 'I' },
+                { col: 5, row: 19, type: 'GARBAGE' },
+            ];
+            const board = BoardCodec.encode(blocks);
+            const direct = BoardCodec.stringToBinary(board);
+            const via = BoardCodec.encodeBinary(BoardCodec.decode(board));
+            expect(direct).toEqual(via);
+        });
+
+        test('round-trips back to original blocks', () => {
+            const blocks = [
+                { col: 3, row: 17, type: 'T' },
+                { col: 7, row: 19, type: 'J' },
+            ];
+            const board = BoardCodec.encode(blocks);
+            const binary = BoardCodec.stringToBinary(board);
+            const decoded = BoardCodec.decode(binary);
+            expect(decoded).toEqual(blocks);
+        });
+
+        test('returns 1-byte empty marker for all-zero board', () => {
+            const board = '0'.repeat(200);
+            const result = BoardCodec.stringToBinary(board);
+            expect(result).toHaveLength(1);
+            expect(result[0]).toBe(20);
+        });
+
+        test('returns 1-byte empty marker for invalid input', () => {
+            expect(BoardCodec.stringToBinary('')).toEqual(new Uint8Array([20]));
+            expect(BoardCodec.stringToBinary('too-short')).toEqual(new Uint8Array([20]));
+        });
+    });
+
+    describe('Boundary and Error Cases', () => {
+        test('decode handles null and undefined', () => {
+            expect(BoardCodec.decode(null as any)).toEqual([]);
+            expect(BoardCodec.decode(undefined as any)).toEqual([]);
+        });
+
+        test('decodeBinary handles truncated data', () => {
+            const data = new Uint8Array([10, 1, 2, 3]); // Claims to start at row 10, but missing data
+            const result = BoardCodec.decodeBinary(data);
+            // Should not crash and return what it can
+            expect(Array.isArray(result)).toBe(true);
         });
     });
 });

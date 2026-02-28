@@ -224,9 +224,9 @@ describe('AuthoritativeMatch', () => {
         match.step();
 
         expect(match.players.p1.active).toBeTruthy();
-        expect(match.players.p1.active.lockDelayMsCounter).toBe(100);
+        expect(match.players.p1.active.lockDelayMsCounter).toBe(50);
 
-        for (let i = 0; i < 4; i += 1) {
+        for (let i = 0; i < 9; i += 1) {
             match.step();
         }
 

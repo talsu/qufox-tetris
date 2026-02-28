@@ -5,7 +5,7 @@ import { ScoreSystem } from '../../tetris/logic/scoreSystem';
 
 const BOARD_ROWS = 20;
 const BOARD_COLS = 10;
-const AUTH_TICK_MS = 100;
+const AUTH_TICK_MS = 50;
 const PREVIEW_QUEUE_SIZE = 6;
 
 const ROTATIONS = CONST.TETROMINO.ROTATE_SEQ as Rotation[];
@@ -51,8 +51,8 @@ type PlayerState = {
     lastSeq: number;
 };
 
-type SyncState = {
-    boardCore: string;
+export type SyncState = {
+    boardCore: string | Uint8Array | ArrayBuffer;
     active: {
         type: PieceType;
         rotate: Rotation;
@@ -478,7 +478,7 @@ function syncSnapshot(player: PlayerState): SyncState {
     };
 }
 
-function snapshot(player: PlayerState): { board: string; score: number; level: number; lines: number; isAlive: boolean } {
+function snapshot(player: PlayerState): { board: string | Uint8Array; score: number; level: number; lines: number; isAlive: boolean } {
     return {
         board: boardString(player),
         score: player.score,
@@ -542,7 +542,7 @@ export class AuthoritativeMatch {
 
             if (!player.isAlive) continue;
 
-            player.gravityMsCounter += 100;
+            player.gravityMsCounter += AUTH_TICK_MS;
             const dropDelay = getAutoDropDelay(player.level);
             while (player.isAlive && player.active && player.gravityMsCounter >= dropDelay) {
                 player.gravityMsCounter -= dropDelay;
@@ -578,8 +578,8 @@ export class AuthoritativeMatch {
 
     getSnapshotFor(playerKey: PlayerKey): {
         tick: number;
-        self: { board: string; score: number; level: number; lines: number; isAlive: boolean; sync: SyncState };
-        opponent: { board: string; score: number; level: number; lines: number; isAlive: boolean };
+        self: { board: string | Uint8Array; score: number; level: number; lines: number; isAlive: boolean; sync: SyncState };
+        opponent: { board: string | Uint8Array; score: number; level: number; lines: number; isAlive: boolean };
     } {
         const self = this.players[playerKey];
         const opponent = playerKey === 'p1' ? this.players.p2 : this.players.p1;

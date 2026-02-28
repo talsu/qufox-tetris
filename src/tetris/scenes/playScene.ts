@@ -1,4 +1,5 @@
 import { PlayField } from '../objects/playField';
+import { BoardCodec } from '../net/boardCodec';
 import { CONST, getBlockSize } from "../const/const";
 import { BasePlayScene } from "./basePlayScene";
 import { BotManager } from "../logic/botManager";
@@ -48,7 +49,7 @@ export class PlayScene extends BasePlayScene {
     private needsAuthoritativeResync: boolean = false;
     private localMismatchStreak: number = 0;
     private forceAuthoritativeResyncOnce: boolean = false;
-    private lastOpponentBoardSnapshot: string | null = null;
+    private lastOpponentBoardSnapshot: string | Uint8Array | ArrayBuffer | null = null;
     private visibilityHandler: (() => void) | null = null;
     private bootstrapRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> | null = null;
     private awaitingInitialAuthSnapshot: boolean = false;
@@ -129,7 +130,7 @@ export class PlayScene extends BasePlayScene {
             tick: data.tick,
             mismatchStreak: this.localMismatchStreak,
             needsAuthoritativeResync: this.needsAuthoritativeResync,
-            mismatchThreshold: 3,
+            mismatchThreshold: 6,
         });
         this.localMismatchStreak = mismatch.mismatchStreak;
         this.needsAuthoritativeResync = mismatch.needsAuthoritativeResync;
@@ -155,9 +156,9 @@ export class PlayScene extends BasePlayScene {
         }
     }
 
-    private applyOpponentBoardSnapshot(encodedBoard: string): void {
+    private applyOpponentBoardSnapshot(encodedBoard: string | Uint8Array | ArrayBuffer): void {
         if (!this.opponentPlayField) return;
-        if (encodedBoard === this.lastOpponentBoardSnapshot) return;
+        if (BoardCodec.areUint8ArraysEqual(encodedBoard, this.lastOpponentBoardSnapshot)) return;
         this.opponentPlayField.deserializeEncoded(encodedBoard);
         this.lastOpponentBoardSnapshot = encodedBoard;
     }

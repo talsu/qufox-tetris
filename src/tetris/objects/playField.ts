@@ -496,15 +496,15 @@ export class PlayField extends ObjectBase {
     /**
      * Deserialize encoded board state (for opponent view).
      */
-    deserializeEncoded(encodedBoard: string | null) {
+    deserializeEncoded(encodedBoard: string | Uint8Array | ArrayBuffer | null) {
         this.deserialize(BoardCodec.decode(encodedBoard || ''));
     }
 
-    applyAuthoritativeState(encodedBoardCore: string, activeState: AuthoritativeActiveState, canHold: boolean): void {
+    applyAuthoritativeState(encodedBoardCore: string | Uint8Array | ArrayBuffer, activeState: AuthoritativeActiveState, canHold: boolean): void {
         this.clearSpawnTimer();
         this.stopLockTimer();
         this.stopAutoDropTimer();
-        this.deserializeEncoded(encodedBoardCore || '');
+        this.deserializeEncoded(encodedBoardCore);
 
         this.activeTetromino = null;
         const isValidActive = Boolean(

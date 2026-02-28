@@ -1,11 +1,12 @@
 import { CONST, RotateType, TetrominoType } from '../src/tetris/const/const';
+import { BoardCodec } from '../src/tetris/net/boardCodec';
 
 type PieceType = Exclude<TetrominoType, TetrominoType.GARBAGE>;
 
 export type BotDirection = 'left' | 'right' | 'clockwise' | 'anticlockwise' | 'hardDrop';
 
 export interface BotSyncState {
-    boardCore: string;
+    boardCore: string | Uint8Array | ArrayBuffer;
     active: {
         type: string;
         rotate: string;
@@ -38,16 +39,12 @@ function isRotation(value: string): value is RotateType {
     return ROTATIONS.includes(value as RotateType);
 }
 
-function boardFromCore(boardCore: string): boolean[][] {
+function boardFromCore(boardCore: string | Uint8Array | ArrayBuffer): boolean[][] {
     const grid = Array.from({ length: ROWS }, () => new Array<boolean>(COLS).fill(false));
-    if (typeof boardCore !== 'string' || boardCore.length < ROWS * COLS) {
-        return grid;
-    }
-    let index = 0;
-    for (let row = 0; row < ROWS; row += 1) {
-        for (let col = 0; col < COLS; col += 1) {
-            grid[row][col] = boardCore[index] !== '0';
-            index += 1;
+    const blocks = BoardCodec.decode(boardCore);
+    for (const b of blocks) {
+        if (b.row >= 0 && b.row < ROWS && b.col >= 0 && b.col < COLS) {
+            grid[b.row][b.col] = true;
         }
     }
     return grid;

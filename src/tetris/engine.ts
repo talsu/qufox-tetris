@@ -145,7 +145,10 @@ export class Engine {
              console.log(`Combo ${result.combo}`);
         }
 
-        // Update indicator.
+        // Show action/combo popup at the center of the play field.
+        this.playField.showPopup(result.actionName, result.combo);
+
+        // Update indicator (sidebar stats only – action/combo moved to field popup).
         this.levelIndicator.setAction(result.actionName);
         this.levelIndicator.setCombo(result.combo);
 

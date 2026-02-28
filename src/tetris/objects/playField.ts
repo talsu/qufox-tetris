@@ -2,6 +2,7 @@ import {CONST, TetrominoType, ColRow, InputState, RotateType, getBlockSize} from
 import {ObjectBase} from './objectBase';
 import {Tetromino} from "./tetromino";
 import {PlayFieldEffects} from "../view/playFieldEffects";
+import {PlayFieldPopup} from "../view/playFieldPopup";
 import {GarbageGenerator} from "../logic/garbageGenerator";
 import { BoardCodec } from "../net/boardCodec";
 
@@ -52,6 +53,8 @@ export class PlayField extends ObjectBase {
     private droppedRotateType: RotateType;
     public autoDropDelay: number = 1000;
     private effects: PlayFieldEffects;
+    private popupLayer: Phaser.GameObjects.Container;
+    private popup: PlayFieldPopup;
     private pendingClearedRows: number[] | null = null;
     private inactiveBlocksCache: ColRow[] | null = null;
     private currentPhase: EnginePhase = EnginePhase.COMPLETION;
@@ -108,7 +111,12 @@ export class PlayField extends ObjectBase {
             this.container.add(backgroundBlock);
         }
 
-        this.effects = new PlayFieldEffects(scene, this.container);
+        // Popup overlay layer — added last so it renders above everything in the field
+        this.popupLayer = scene.add.container(0, 0);
+        this.container.add(this.popupLayer);
+
+        this.effects = new PlayFieldEffects(scene, this.container, this.popupLayer);
+        this.popup = new PlayFieldPopup(scene, this.popupLayer);
 
         this.maskGraphics = this.scene.make.graphics({x: x, y: y});
 
@@ -174,8 +182,9 @@ export class PlayField extends ObjectBase {
             // Set active tetromino with new tetromino.
             this.activeTetromino = tetromino;
             this.setPhase(EnginePhase.FALLING);
-            // Add tetromino ui to play field container.
+            // Add tetromino ui to play field container (popup layer stays on top).
             this.container.add(this.activeTetromino.container);
+            this.container.bringToTop(this.popupLayer);
             // Check is lockable
             if (this.activeTetromino.isLockable()) {
                 // If created is lockable (may be spawned top of play field.)
@@ -405,6 +414,7 @@ export class PlayField extends ObjectBase {
             this.inactiveTetrominos.push(garbageTetromino);
             this.container.add(garbageTetromino.container);
         });
+        this.container.bringToTop(this.popupLayer);
         this.invalidateInactiveBlocksCache();
 
         // Update active tetromino's blocked positions map and ghost block
@@ -490,6 +500,7 @@ export class PlayField extends ObjectBase {
         dummy.setInactiveBlocks(blocks);
         this.inactiveTetrominos.push(dummy);
         this.container.add(dummy.container);
+        this.container.bringToTop(this.popupLayer);
         this.invalidateInactiveBlocksCache();
     }
 
@@ -537,6 +548,7 @@ export class PlayField extends ObjectBase {
 
             this.activeTetromino = activeTetromino;
             this.container.add(activeTetromino.container);
+            this.container.bringToTop(this.popupLayer);
             this.setPhase(EnginePhase.FALLING);
             this.restartAutoDropTimer();
             if (this.activeTetromino.isLockable()) {
@@ -734,5 +746,14 @@ export class PlayField extends ObjectBase {
      */
     playHardDropEffect(tetromino: Tetromino, distance: number) {
         this.effects.playHardDropEffect(tetromino, distance);
+    }
+
+    /**
+     * Show action/combo popup at the center of the play field.
+     * @param {string|null} actionName - e.g. "Tetris", "T-Spin Double", "Back to Back Tetris"
+     * @param {number} combo - Current combo count (-1 or 0 = no combo)
+     */
+    showPopup(actionName: string | null, combo: number) {
+        this.popup.show(actionName, combo);
     }
 }

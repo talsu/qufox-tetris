@@ -6,10 +6,12 @@ const BLOCK_SIZE = getBlockSize();
 export class PlayFieldEffects {
     private scene: Phaser.Scene;
     private container: Phaser.GameObjects.Container;
+    private popupLayer: Phaser.GameObjects.Container;
 
-    constructor(scene: Phaser.Scene, container: Phaser.GameObjects.Container) {
+    constructor(scene: Phaser.Scene, container: Phaser.GameObjects.Container, popupLayer: Phaser.GameObjects.Container) {
         this.scene = scene;
         this.container = container;
+        this.popupLayer = popupLayer;
     }
 
     /**
@@ -54,6 +56,7 @@ export class PlayFieldEffects {
         });
 
         this.container.add(graphics);
+        this.container.bringToTop(this.popupLayer);
 
         // Particles
         if (!this.scene.textures.exists('starFragment')) {
@@ -74,6 +77,7 @@ export class PlayFieldEffects {
         });
 
         this.container.add(emitter);
+        this.container.bringToTop(this.popupLayer);
 
         blocks.forEach(([col, row]) => {
             emitter.explode(4, col * BLOCK_SIZE + BLOCK_SIZE / 2, row * BLOCK_SIZE + BLOCK_SIZE / 2);

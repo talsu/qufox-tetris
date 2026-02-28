@@ -189,20 +189,10 @@ export class LevelIndicator extends ObjectBase {
         this.lpmValueText = createStatRow(this.scene, this.container, y, 'LPM', PADDING_LEFT, rightX);
         y += BLOCK_SIZE;
 
-        // Action Text (temporary feedback)
-        this.actionText = createStyledText(
-            this.scene, this.container,
-            BG_WIDTH / 2, y, '', TextStyles.action,
-        );
-        this.actionText.setOrigin(0.5, 0);
-        y += BLOCK_SIZE;
-
-        // Combo Text (temporary feedback)
-        this.comboText = createStyledText(
-            this.scene, this.container,
-            BG_WIDTH / 2, y, '', TextStyles.combo,
-        );
-        this.comboText.setOrigin(0.5, 0);
+        // Action/Combo texts are now shown as animated popups inside the PlayField.
+        // Keep hidden off-screen objects so setAction/setCombo calls don't crash.
+        this.actionText = this.scene.add.text(-9999, -9999, '', TextStyles.action);
+        this.comboText = this.scene.add.text(-9999, -9999, '', TextStyles.combo);
     }
 
     /**

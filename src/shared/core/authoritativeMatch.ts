@@ -1,7 +1,7 @@
 import { nextLcg, normalizeSeed } from './random';
 import { CONST, RotateType, TetrominoType } from '../../tetris/const/const';
 import { GameRules } from '../../tetris/logic/gameRules';
-import { ScoreSystem } from '../../tetris/logic/scoreSystem';
+import { LockResult, ScoreSystem } from '../../tetris/logic/scoreSystem';
 
 const BOARD_ROWS = 20;
 const BOARD_COLS = 10;
@@ -49,6 +49,8 @@ type PlayerState = {
     gravityMsCounter: number;
     inputQueue: Array<{ direction: string; state: string }>;
     lastSeq: number;
+    lastLockFeedbackId: number;
+    lastLockFeedback: { id: number; actionName: string | null; combo: number } | null;
 };
 
 export type SyncState = {
@@ -110,6 +112,8 @@ function createPlayer(name: string, seed: number): PlayerState {
         gravityMsCounter: 0,
         inputQueue: [],
         lastSeq: 0,
+        lastLockFeedbackId: 0,
+        lastLockFeedback: null,
     };
 }
 
@@ -281,8 +285,10 @@ function lockPiece(player: PlayerState): number {
     }
 
     const locked = player.active;
-    const cleared = clearLines(player);
+    // Match client behavior: T-Spin corner occupancy is evaluated
+    // against the pre-line-clear locked board state.
     const tSpinCornerOccupiedCount = getTSpinCornerOccupiedCount(player, locked);
+    const cleared = clearLines(player);
     const scoreResult = player.scoreSystem.onLock(
         cleared,
         locked.type,
@@ -293,6 +299,7 @@ function lockPiece(player: PlayerState): number {
         locked.dropCounter,
         tSpinCornerOccupiedCount,
     );
+    updateLastLockFeedback(player, scoreResult);
 
     const stats = player.scoreSystem.getStats(0);
     player.score = stats.score;
@@ -307,6 +314,19 @@ function lockPiece(player: PlayerState): number {
     player.active = null;
     spawn(player);
     return garbage;
+}
+
+function updateLastLockFeedback(player: PlayerState, result: LockResult): void {
+    if (!result.actionName && result.combo <= 0) {
+        return;
+    }
+
+    player.lastLockFeedbackId += 1;
+    player.lastLockFeedback = {
+        id: player.lastLockFeedbackId,
+        actionName: result.actionName,
+        combo: result.combo,
+    };
 }
 
 function moveDown(player: PlayerState, dropType: 'softDrop' | 'hardDrop' | 'autoDrop' = 'autoDrop'): boolean {
@@ -411,7 +431,9 @@ function applyInput(player: PlayerState, input: { direction: string; state: stri
             active.row = kickedRow;
             active.lastMovement = 'rotate';
             active.lastKickDataIndex = attemptIndex;
-            active.droppedRotateType = rotate;
+            // droppedRotateType must NOT be updated on rotation.
+            // It tracks the rotation at the time the piece last moved down,
+            // so that T-Spin detection can verify the piece was rotated after falling.
             handleSuccessfulManipulation(player);
             break;
         }
@@ -478,13 +500,28 @@ function syncSnapshot(player: PlayerState): SyncState {
     };
 }
 
-function snapshot(player: PlayerState): { board: string | Uint8Array; score: number; level: number; lines: number; isAlive: boolean } {
+function snapshot(player: PlayerState): {
+    board: string | Uint8Array;
+    score: number;
+    level: number;
+    lines: number;
+    isAlive: boolean;
+    stats: { tetrises: number; tspins: number; combos: number };
+    lockFeedback?: { id: number; actionName: string | null; combo: number };
+} {
+    const scoreStats = player.scoreSystem.getStats(0);
     return {
         board: boardString(player),
         score: player.score,
         level: player.level,
         lines: player.lines,
         isAlive: player.isAlive,
+        stats: {
+            tetrises: scoreStats.tetrises,
+            tspins: scoreStats.tspins,
+            combos: scoreStats.combos,
+        },
+        lockFeedback: player.lastLockFeedback ?? undefined,
     };
 }
 
@@ -578,8 +615,25 @@ export class AuthoritativeMatch {
 
     getSnapshotFor(playerKey: PlayerKey): {
         tick: number;
-        self: { board: string | Uint8Array; score: number; level: number; lines: number; isAlive: boolean; sync: SyncState };
-        opponent: { board: string | Uint8Array; score: number; level: number; lines: number; isAlive: boolean };
+        self: {
+            board: string | Uint8Array;
+            score: number;
+            level: number;
+            lines: number;
+            isAlive: boolean;
+            stats: { tetrises: number; tspins: number; combos: number };
+            lockFeedback?: { id: number; actionName: string | null; combo: number };
+            sync: SyncState;
+        };
+        opponent: {
+            board: string | Uint8Array;
+            score: number;
+            level: number;
+            lines: number;
+            isAlive: boolean;
+            stats: { tetrises: number; tspins: number; combos: number };
+            lockFeedback?: { id: number; actionName: string | null; combo: number };
+        };
     } {
         const self = this.players[playerKey];
         const opponent = playerKey === 'p1' ? this.players.p2 : this.players.p1;

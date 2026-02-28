@@ -188,6 +188,53 @@ describe('AuthoritativeMatch', () => {
         expect(match.players.p1.active.col).toBe(3);
     });
 
+    test('keeps T-Spin single detection when the clear line contains T-Spin corners', () => {
+        const match = new AuthoritativeMatch('A', 'B', 8888, 99991);
+        const p1 = match.players.p1;
+
+        p1.board = Array.from({ length: 20 }, () => new Array(10).fill('0'));
+        for (let col = 0; col < 10; col += 1) {
+            if (col === 5) continue;
+            p1.board[19][col] = 'G';
+        }
+        p1.board[17][6] = 'G';
+
+        p1.active = {
+            type: 'T',
+            rotate: 'R',
+            col: 4,
+            row: 17,
+            lowestRow: 17,
+            manipulationCount: 0,
+            lockDelayMsCounter: 0,
+            droppedRotateType: '0',
+            lastMovement: 'rotate',
+            lastKickDataIndex: 0,
+            dropCounter: {
+                softDrop: 0,
+                hardDrop: 0,
+                autoDrop: 0,
+            },
+        };
+
+        let stepResult = { toP1: 0, toP2: 0 };
+        for (let i = 0; i < 10; i += 1) {
+            stepResult = match.step();
+        }
+
+        const snapshot = match.getSnapshotFor('p1').self;
+        expect(stepResult.toP2).toBe(2);
+        expect(snapshot.score).toBe(800);
+        expect(snapshot.lines).toBe(1);
+        expect(snapshot.stats.tspins).toBe(1);
+        expect(snapshot.lockFeedback).toEqual(
+            expect.objectContaining({
+                actionName: 'T-Spin Single',
+                combo: 0,
+            }),
+        );
+    });
+
     test('awards non-zero score on hard drop lock to match client drop scoring path', () => {
         const match = new AuthoritativeMatch('A', 'B', 13579, 99991);
 

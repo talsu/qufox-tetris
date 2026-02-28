@@ -6,6 +6,19 @@ export class Scene {
     time: TimeManager;
     tweens: TweenManager;
     events: EventEmitter;
+    cameras: {
+        main: {
+            shake: (...args: any[]) => void;
+            preRender: () => void;
+            width: number;
+            height: number;
+            zoom: number;
+            worldView: { x: number; y: number };
+        };
+    };
+    textures: {
+        exists: (key: string) => boolean;
+    };
 
     constructor() {
         this.add = new GameObjectFactory();
@@ -13,6 +26,19 @@ export class Scene {
         this.time = new TimeManager();
         this.tweens = new TweenManager();
         this.events = new EventEmitter();
+        this.cameras = {
+            main: {
+                shake: () => {},
+                preRender: () => {},
+                width: 800,
+                height: 600,
+                zoom: 1,
+                worldView: { x: 0, y: 0 },
+            },
+        };
+        this.textures = {
+            exists: () => false,
+        };
     }
 }
 
@@ -64,6 +90,20 @@ export class GameObjectFactory {
     text(x: number, y: number, content: string, style?: any): Text {
         return new Text(x, y, content, style);
     }
+    particles(x: number, y: number, texture: string, config?: any) {
+        return {
+            x,
+            y,
+            texture,
+            config,
+            active: true,
+            explode: () => {},
+            emitParticleAt: () => {},
+            destroy() {
+                this.active = false;
+            },
+        };
+    }
     tween(config: any): Tween {
         const tween = new Tween(config);
         if (config.onComplete) {
@@ -96,6 +136,10 @@ export class Container {
     list: any[] = [];
     visible: boolean = true;
     alpha: number = 1;
+    scaleX: number = 1;
+    scaleY: number = 1;
+    depth: number = 0;
+    active: boolean = true;
 
     constructor(x: number, y: number) {
         this.x = x;
@@ -103,17 +147,55 @@ export class Container {
     }
 
     add(child: any) {
-        this.list.push(child);
+        if (Array.isArray(child)) {
+            this.list.push(...child);
+        } else {
+            this.list.push(child);
+        }
+        return this;
     }
     remove(child: any) {
         const index = this.list.indexOf(child);
         if (index > -1) this.list.splice(index, 1);
+        return this;
     }
     destroy() {
         this.list = [];
+        this.active = false;
     }
-    setScale(x: number, y?: number) {}
-    setMask(mask: any) {}
+    setScale(x: number, y?: number) {
+        this.scaleX = x;
+        this.scaleY = y !== undefined ? y : x;
+        return this;
+    }
+    setMask(mask: any) {
+        return this;
+    }
+    setAlpha(alpha: number) {
+        this.alpha = alpha;
+        return this;
+    }
+    setVisible(visible: boolean) {
+        this.visible = visible;
+        return this;
+    }
+    setPosition(x: number, y: number) {
+        this.x = x;
+        this.y = y;
+        return this;
+    }
+    setDepth(depth: number) {
+        this.depth = depth;
+        return this;
+    }
+    bringToTop(child: any) {
+        const index = this.list.indexOf(child);
+        if (index > -1) {
+            this.list.splice(index, 1);
+            this.list.push(child);
+        }
+        return this;
+    }
     removeAll(destroy?: boolean) {
         if (destroy) {
             this.list.forEach(c => c.destroy && c.destroy());
@@ -134,6 +216,8 @@ export class Graphics {
     fillRect(x: number, y: number, width: number, height: number) {}
     lineStyle(width: number, color: number, alpha?: number) {}
     strokeRect(x: number, y: number, width: number, height: number) {}
+    fillCircle(x: number, y: number, radius: number) {}
+    generateTexture(key: string, width: number, height: number) {}
     clear() {}
     destroy() {}
     beginPath() {}
@@ -182,6 +266,9 @@ export class Text {
     originX: number = 0.5;
     originY: number = 0.5;
     visible: boolean = true;
+    alpha: number = 1;
+    depth: number = 0;
+    active: boolean = true;
 
     constructor(x: number, y: number, content: string, style?: any) {
         this.x = x;
@@ -199,12 +286,15 @@ export class Text {
         this.text = value;
         return this;
     }
+    setColor(color: string) { return this; }
+    setAlpha(alpha: number) { this.alpha = alpha; return this; }
     setStroke(color: string, thickness: number) { return this; }
     setShadow(offsetX: number, offsetY: number, color: string, blur: number, stroke: boolean, fill: boolean) { return this; }
     setFontSize(size: number) { return this; }
     setPosition(x: number, y: number) { this.x = x; this.y = y; return this; }
     setVisible(visible: boolean) { this.visible = visible; return this; }
-    destroy() {}
+    setDepth(depth: number) { this.depth = depth; return this; }
+    destroy() { this.active = false; }
 }
 
 export class TimeManager {
@@ -239,6 +329,7 @@ export class TimerEvent {
     }
 
     destroy() {}
+    remove() {}
 }
 
 export class TweenManager {

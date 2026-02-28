@@ -45,4 +45,65 @@ describe('PlayScene authoritative end-game score', () => {
         expect(showEndGameMessage).toHaveBeenCalledWith('GAME OVER', '#ff0000', 156);
         expect(emit).toHaveBeenCalledWith('player_ready', { roomId: 'room-1' });
     });
+
+    test('forwards authoritative lock feedback to engine HUD pipeline', () => {
+        const handlers: Record<string, (data: unknown) => void> = {};
+        const scene = new PlayScene() as any;
+        const applyAuthoritativeHud = jest.fn();
+
+        scene.mode = 'multi';
+        scene.useAuthoritativeServer = true;
+        scene.roomId = 'room-1';
+        scene.socket = {
+            on: jest.fn((event: string, cb: (data: unknown) => void) => {
+                handlers[event] = cb;
+            }),
+            emit: jest.fn(),
+            off: jest.fn(),
+        };
+        scene.statusText = {
+            setText: jest.fn().mockReturnThis(),
+            setVisible: jest.fn().mockReturnThis(),
+        };
+        scene.playField = {
+            deserializeEncoded: jest.fn(),
+            serializeEncoded: jest.fn(() => '0'.repeat(200)),
+        };
+        scene.opponentPlayField = { deserializeEncoded: jest.fn() };
+        scene.inputManager = { isEnabled: true };
+        scene.inGameMenu = { isMenuOpen: false };
+        scene.engine = {
+            applyAuthoritativeHud,
+            getScore: jest.fn(() => 10),
+        };
+        scene.isGameRunning = true;
+        scene.isGameEnded = false;
+
+        scene.setupMultiplayer();
+
+        const lockFeedback = { id: 7, actionName: 'T-Spin Double', combo: 1 };
+        handlers.auth_snapshot?.({
+            tick: 10,
+            self: {
+                board: '0'.repeat(200),
+                score: 1200,
+                level: 3,
+                lines: 8,
+                isAlive: true,
+                stats: { tetrises: 0, tspins: 1, combos: 2 },
+                lockFeedback,
+            },
+            opponent: { board: '0'.repeat(200), score: 0, level: 1, lines: 0, isAlive: true },
+        });
+
+        expect(applyAuthoritativeHud).toHaveBeenCalledWith({
+            score: 1200,
+            level: 3,
+            lines: 8,
+            stats: { tetrises: 0, tspins: 1, combos: 2 },
+            lockFeedback,
+        }, {
+            showLockFeedback: true,
+        });
+    });
 });

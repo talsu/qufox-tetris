@@ -119,6 +119,7 @@ export class Engine {
      * @param {number} kickDataIndex - Kick data index. (how many kick occurred.)
      * @param {{ softDrop: number, hardDrop: number, autoDrop: number }} dropCounter - Drop count data.
      * @param {{ pointSide: number, flatSide: number }} tSpinCornerOccupiedCount - T tetromino corner occupied count.
+     * @param {{ isImmobile?: boolean }} lockContext - Optional lock context for extended action labels.
      */
     onLock(
         clearedLineCount: number,
@@ -128,8 +129,10 @@ export class Engine {
         movement: string,
         kickDataIndex: number,
         dropCounter: { softDrop: number, hardDrop: number, autoDrop: number },
-        tSpinCornerOccupiedCount: { pointSide: number, flatSide: number }
+        tSpinCornerOccupiedCount: { pointSide: number, flatSide: number },
+        lockContext?: { isImmobile?: boolean }
     ) {
+        const isPerfectClear = this.playField.getInactiveBlocks().length === 0;
         const result = this.scoreSystem.onLock(
             clearedLineCount,
             tetrominoType,
@@ -138,7 +141,11 @@ export class Engine {
             movement,
             kickDataIndex,
             dropCounter,
-            tSpinCornerOccupiedCount
+            tSpinCornerOccupiedCount,
+            {
+                isImmobile: lockContext?.isImmobile === true,
+                isPerfectClear,
+            }
         );
 
         if (this.isDebugLogging && result.scoreAdded > 0 && result.actionName) {
@@ -165,12 +172,7 @@ export class Engine {
         this.playField.autoDropDelay = this.scoreSystem.getAutoDropDelay();
 
         // Calculate Garbage (Multiplayer)
-        let garbage = result.garbage;
-
-        // Perfect Clear
-        if (this.playField.getInactiveBlocks().length === 0) {
-            garbage += 10;
-        }
+        const garbage = result.garbage;
 
         // Send Garbage
         if (garbage > 0 && this.onAttack) {

@@ -31,6 +31,14 @@ describe('ScoreSystem - Garbage Calculation', () => {
         expect(result.garbage).toBe(0);
     });
 
+    test('Perfect Clear adds 10 garbage through lock context', () => {
+        const result = scoreSystem.onLock(
+            1, TetrominoType.I, RotateType.UP, RotateType.UP, 'drop', 0,
+            defaultDrop, noCorner, { isPerfectClear: true }
+        );
+        expect(result.garbage).toBe(10);
+    });
+
     test('Double clear produces 1 garbage', () => {
         const result = scoreSystem.onLock(
             2, TetrominoType.I, RotateType.UP, RotateType.UP, 'drop', 0,
@@ -77,6 +85,15 @@ describe('ScoreSystem - Garbage Calculation', () => {
             defaultDrop, { pointSide: 2, flatSide: 1 }
         );
         expect(result.garbage).toBe(6);
+    });
+
+    test('J-Spin Double keeps base line-clear garbage by default', () => {
+        const result = scoreSystem.onLock(
+            2, TetrominoType.J, RotateType.UP, RotateType.RIGHT, 'rotate', 0,
+            defaultDrop, noCorner, { isImmobile: true }
+        );
+        expect(result.actionName).toBe('J-Spin Double');
+        expect(result.garbage).toBe(1);
     });
 
     test('Back-to-Back Tetris adds 1 bonus garbage', () => {

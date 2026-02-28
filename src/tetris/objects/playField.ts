@@ -539,6 +539,7 @@ export class PlayField extends ObjectBase {
         // If lockable active tetromino is not exist, stop function.
         if (!this.activeTetromino) return;
         if (!this.activeTetromino.isLockable()) return;
+        const isImmobileAtLock = this.activeTetromino.isImmobile();
         // Stop auto drop timer.
         this.stopAutoDropTimer();
         // Inactive tetromino.
@@ -575,7 +576,8 @@ export class PlayField extends ObjectBase {
                 lockedTetromino.lastMovement,
                 lockedTetromino.lastKickDataIndex,
                 lockedTetromino.dropCounter,
-                lockedTetromino.getTSpinCornerOccupiedCount()
+                lockedTetromino.getTSpinCornerOccupiedCount(),
+                { isImmobile: isImmobileAtLock }
             );
 
             // ARE

@@ -4,7 +4,7 @@ Guide for coding agents operating in this repository.
 ## Project Summary
 - Tech: TypeScript, Phaser 3, Webpack 5, Jest (ts-jest), Socket.io, Express
 - Client entry: `src/tetris/game.ts`
-- Server entry: `server/index.js`
+- Server source entry: `server/index.ts` (runtime bootstrap: `server/index.js` -> `dist/server/index.js`)
 - Tests: `test/unit/**/*.test.ts`
 - Phaser is mocked in tests via `test/mocks/phaserMock.ts`
 
@@ -28,26 +28,28 @@ Read these before making non-trivial changes:
 src/tetris/
   game.ts                Client bootstrap + scene registration
   engine.ts              Core orchestration (playfield/hold/queue/indicator)
-  const/const.ts         Shared constants (timing, board, scoring tables)
+  const/const.ts         Shared constants, enums, and input direction guards
   scenes/                Scene-level orchestration (single/1v1/n-multi)
   objects/               Board/piece/object state and rendering
   logic/                 Deterministic rules (score, garbage, bot)
   input/                 Keyboard/touch translation with DAS behavior
-  net/                   Board codec + socket utility
+  net/                   Board codec + snapshot/listener transport helpers
   ui/                    Layout calculators + in-game overlays/helpers
-  view/                  Gameplay visual effects
+  view/                  Gameplay visual effects and popup feedback
 server/
-  index.js               Express + Socket.io room state and protocol
+  index.ts               Express + Socket.io room state/protocol authority
+  roomModePolicy.ts      Shared create/join/lifecycle policy helpers
+  botController.ts       Server-side bot input planner
 test/unit/
-  ...                    Domain-oriented unit tests
+  ...                    Domain-oriented tests + server integration coverage
 ```
 
 ## Gameplay / Networking Baseline
 - Rule target: 2009 Tetris Guideline (`2009 Tetris Design Guideline.md`).
 - Playfield: 20x10, block size baseline from `getBlockSize()` in `const.ts`.
 - Input handling should flow through `InputManager`, not ad-hoc scene key logic.
-- 1v1 mode: room pair model (`p1`/`p2`) with board + garbage events.
-- n-multi mode: snapshot-based room broadcast (`nMultiPlayScene` + server room snapshots).
+- 1v1 mode: room pair model (`p1`/`p2`) with authoritative tick snapshots.
+- n-multi mode: per-player authoritative sim + delta snapshot broadcast.
 - Server port default: `3031` (`PORT` env override supported).
 
 ## Cursor/Copilot Rules
@@ -63,15 +65,17 @@ npm run dev
 npm run server
 ```
 - `npm run dev`: webpack dev server
-- `npm run server`: multiplayer backend (`http://localhost:3031` by default)
+- `npm run server`: compiles server runtime, then starts multiplayer backend (`http://localhost:3031` by default)
 
 ## Build Commands
 ```bash
 npm run dev-build
 npm run build
+npm run server:build
 ```
 - `dev-build`: development bundle
 - `build`: production bundle (output in `build/`)
+- `server:build`: compile server TypeScript to `dist/server/`
 
 ## Test Commands
 Run all:
@@ -86,9 +90,9 @@ Run one test by name:
 ```bash
 npm test -- test/unit/logic/scoreSystem.test.ts -t "initial state"
 ```
-Run by file pattern (current repo uses Jest 29):
+Run server integration flow test:
 ```bash
-npx jest --testPathPattern="scoreSystem"
+npm test -- --runTestsByPath test/unit/server/serverIndex.integration.test.ts
 ```
 Debug helpers:
 ```bash
@@ -97,7 +101,7 @@ npm test -- --showConfig
 ```
 Notes:
 - Use `--` when forwarding options through `npm test`.
-- Jest 30 renamed `--testPathPattern` to `--testPathPatterns`.
+- `test/unit/server/serverIndex.integration.test.ts` binds a local TCP port and spawns a node server process.
 
 ## Lint / Format Status
 - No ESLint config found.
@@ -107,19 +111,19 @@ Notes:
 ## Ownership Boundaries
 - `src/tetris/const/`: shared constants, enums, lookup tables
 - `src/tetris/input/`: keyboard/touch translation + DAS behavior
-- `src/tetris/net/`: board codec and socket helper utilities
+- `src/tetris/net/`: board codec, snapshot handling, socket listener lifecycle helpers
 - `src/tetris/scenes/`: orchestration and mode flow
 - `src/tetris/objects/`: board/piece state and object rendering
 - `src/tetris/logic/`: deterministic rule/scoring logic
 - `src/tetris/ui/`: layout calculators and UI helpers
-- `src/tetris/view/`: visual effects tied to gameplay events
-- `server/`: socket protocol and room state
-- `test/unit/`: deterministic unit tests by domain
+- `src/tetris/view/`: visual feedback tied to gameplay events
+- `server/`: socket protocol and room state authority
+- `test/unit/`: deterministic tests and targeted integration tests
 Do not duplicate gameplay logic in scenes/UI when it belongs in logic/objects.
 
 ## Code Style Conventions
 ### Imports
-- Use ES imports in TypeScript; CommonJS in server JS.
+- Use ES imports in TypeScript; CommonJS only where existing server JS bootstrap requires it.
 - Put framework/external imports first, local imports next.
 - Prefer named imports.
 
@@ -150,13 +154,15 @@ Do not duplicate gameplay logic in scenes/UI when it belongs in logic/objects.
 ## Testing Conventions
 - Keep tests under `test/unit/` by domain.
 - Keep tests deterministic and isolated.
-- Use Phaser mock harness via jest config.
-- Update tests when changing metrics, scoring, or socket contracts.
+- Use Phaser mock harness via jest config for browser-side units.
+- Prefer production-path tests over test-local logic replicas.
+- Update tests when changing metrics, scoring, socket contracts, or payload guards.
 High-signal test files:
 - `test/unit/ui/gameLayout.metrics.test.ts`
 - `test/unit/scenes/layoutPositions.test.ts`
 - `test/unit/logic/scoreSystem.test.ts`
-- `test/unit/server/nMultiServer.test.ts`
+- `test/unit/server/socketPayloads.test.ts`
+- `test/unit/server/serverIndex.integration.test.ts`
 
 ## Multiplayer Rules
 - Keep 1v1 and n-multi flows explicit and separate.
@@ -165,12 +171,16 @@ High-signal test files:
 - Keep snapshot/broadcast payloads compact.
 
 ### Socket Event Families
-- 1v1 core: `create_room`, `join_room`, `player_ready`, `update_state`, `send_garbage`, `game_over`, `request_restart`
-- n-multi core: `nmulti_create_room`, `nmulti_join_room`, `nmulti_join_or_create`, `nmulti_update_state`, `nmulti_send_garbage`, `nmulti_game_over`, `nmulti_restart`
+- 1v1 lobby/core: `create_room`, `join_room`, `join_or_create`, `player_ready`, `request_restart`
+- 1v1 authoritative: `auth_input`, `auth_presence`, `resume_auth`, `auth_snapshot`, `auth_receive_garbage`, `auth_round_over`
+- 1v1 legacy compatibility: `update_state`, `send_garbage`, `game_over`
+- n-multi lobby/core: `nmulti_create_room`, `nmulti_join_room`, `nmulti_join_or_create`, `nmulti_leave_room`, `nmulti_restart`
+- n-multi authoritative: `nmulti_auth_input`, `nmulti_presence`, `nmulti_auth_snapshot`, `nmulti_snapshot`, `nmulti_request_full_sync`
+- n-multi legacy compatibility: `nmulti_update_state`, `nmulti_send_garbage`, `nmulti_game_over`
 - When changing event payloads, update:
-  1) server handlers in `server/index.js`
-  2) scene handlers in `playScene.ts` / `nMultiPlayScene.ts`
-  3) matching tests in `test/unit/server/*` and scene/layout tests
+  1) server handlers in `server/index.ts`
+  2) scene handlers in `playScene.ts` / `nMultiPlayScene.ts` / `menuScene.ts`
+  3) matching tests in `test/unit/server/*` and scene payload-guard tests
 
 ## Asset File Rules
 - All files under `assets/` must have git file mode `755` (executable).
@@ -198,6 +208,7 @@ npm install
 npm run dev
 npm run server
 npm test -- --runTestsByPath test/unit/logic/scoreSystem.test.ts
+npm test -- --runTestsByPath test/unit/server/serverIndex.integration.test.ts
 npm test
 npm run build
 ```

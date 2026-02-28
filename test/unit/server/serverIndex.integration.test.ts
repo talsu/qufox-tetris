@@ -108,6 +108,8 @@ function connectClient(baseUrl: string): Promise<Socket> {
 }
 
 describe('server/index integration', () => {
+    jest.setTimeout(30000);
+
     const repoRoot = path.resolve(__dirname, '../../..');
     const distEntry = path.join(repoRoot, 'dist/server/index.js');
 

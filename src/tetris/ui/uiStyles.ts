@@ -3,12 +3,27 @@ import { getBlockSize } from "../const/const";
 const BLOCK_SIZE = getBlockSize();
 export const GAME_FONT_FAMILY = 'Pretendard, Arial Black, sans-serif';
 
+export const UI_THEME = {
+    textPrimary: '#f7fbff',
+    textAccent: '#9fd8ff',
+    strokePrimary: '#061c3c',
+    panelFillColor: 0x041327,
+    panelFillAlpha: 0.72,
+    panelStrokeColor: 0x8ec3ff,
+    panelStrokeAlpha: 0.94,
+    panelLineWidth: 2,
+} as const;
+
+export const ACCESSIBILITY = {
+    minTouchTargetPx: 48,
+} as const;
+
 // ─── Common Text Visual Effects ─────────────────────────────────────
-export const TEXT_STROKE_COLOR = '#000000';
+export const TEXT_STROKE_COLOR = UI_THEME.strokePrimary;
 export const TEXT_SHADOW = {
     offsetX: 2,
     offsetY: 2,
-    color: '#000000',
+    color: UI_THEME.strokePrimary,
     blur: 2,
     stroke: true,
     fill: true,
@@ -16,11 +31,11 @@ export const TEXT_SHADOW = {
 
 // ─── Panel Background Defaults ──────────────────────────────────────
 export const PANEL_BG = {
-    fillColor: 0x000000,
-    fillAlpha: 0.2,
-    strokeColor: 0xEEEEEE,
-    strokeAlpha: 1.0,
-    lineWidth: 1,
+    fillColor: UI_THEME.panelFillColor,
+    fillAlpha: UI_THEME.panelFillAlpha,
+    strokeColor: UI_THEME.panelStrokeColor,
+    strokeAlpha: UI_THEME.panelStrokeAlpha,
+    lineWidth: UI_THEME.panelLineWidth,
 } as const;
 
 // ─── Reusable Text Style Presets ────────────────────────────────────
@@ -29,14 +44,14 @@ export const TextStyles = {
         fontFamily: GAME_FONT_FAMILY,
         fontStyle: 'bold',
         fontSize: `${BLOCK_SIZE * 0.7}px`,
-        color: '#ffffff',
+        color: UI_THEME.textPrimary,
         align: 'left',
     },
 
     valueLarge: {
         fontFamily: GAME_FONT_FAMILY,
         fontSize: `${BLOCK_SIZE * 0.8}px`,
-        color: '#ffffff',
+        color: UI_THEME.textPrimary,
         align: 'left',
     },
 
@@ -44,28 +59,28 @@ export const TextStyles = {
         fontFamily: GAME_FONT_FAMILY,
         fontStyle: 'bold',
         fontSize: `${BLOCK_SIZE * 0.5}px`,
-        color: '#ffffff',
+        color: UI_THEME.textPrimary,
         align: 'left',
     },
 
     valueSmall: {
         fontFamily: GAME_FONT_FAMILY,
         fontSize: `${BLOCK_SIZE * 0.5}px`,
-        color: '#ffffff',
+        color: UI_THEME.textPrimary,
         align: 'right',
     },
 
     action: {
         fontFamily: GAME_FONT_FAMILY,
         fontSize: `${BLOCK_SIZE * 0.8}px`,
-        color: '#ffff00',
+        color: '#ffd257',
         align: 'center',
     },
 
     combo: {
         fontFamily: GAME_FONT_FAMILY,
         fontSize: `${BLOCK_SIZE * 0.5}px`,
-        color: '#00ffff',
+        color: UI_THEME.textAccent,
         align: 'center',
     },
 } as const;

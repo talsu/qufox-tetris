@@ -121,6 +121,11 @@ export class PlayField extends ObjectBase {
         this.maskGraphics.setScale(scale);
     }
 
+    setPosition(x: number, y: number) {
+        this.container.setPosition(x, y);
+        this.maskGraphics.setPosition(x, y);
+    }
+
     /**
      * Clear all tetromino
      */

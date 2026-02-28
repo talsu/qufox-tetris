@@ -1,4 +1,4 @@
-import { GAME_FONT_FAMILY, PANEL_BG } from './uiStyles';
+import { ACCESSIBILITY, GAME_FONT_FAMILY, PANEL_BG } from './uiStyles';
 import {
     createKenneyButtonVisual,
     KenneyButtonKind,
@@ -192,7 +192,7 @@ export class InGameMenu {
         }
 
         const buttonsTop = this.scoreText.visible ? panelY + 220 * worldPerPixel : panelY + 165 * worldPerPixel;
-        const minButtonHeight = 44 * worldPerPixel;
+        const minButtonHeight = ACCESSIBILITY.minTouchTargetPx * worldPerPixel;
         const buttonHeight = Math.max(minButtonHeight, Math.round((isPortrait ? 58 : 62) * worldPerPixel));
         const buttonWidth = panelWidth - 90 * worldPerPixel;
         const minButtonGap = 10 * worldPerPixel;

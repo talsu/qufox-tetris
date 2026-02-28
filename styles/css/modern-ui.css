@@ -403,99 +403,6 @@
     border-radius: 8px;
 }
 
-.nmulti-leaderboard {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    width: 260px;
-    max-height: 400px;
-    color: #1d3b72;
-    overflow-y: auto;
-    pointer-events: none;
-    z-index: 5000;
-    border: 3px solid #8cb0ef;
-    border-bottom-width: 5px;
-    border-bottom-color: #4d72c4;
-    border-radius: 12px;
-    background: linear-gradient(180deg, rgba(248, 253, 255, 0.95) 0%, rgba(224, 236, 255, 0.95) 100%);
-    box-shadow:
-        0 6px 0 rgba(77, 114, 196, 0.28),
-        0 14px 28px rgba(24, 44, 93, 0.28);
-    padding: 10px;
-}
-
-.nmulti-leaderboard::before {
-    content: none;
-}
-
-.nmulti-leaderboard::after {
-    content: none;
-}
-
-.nmulti-leaderboard > * {
-    position: static;
-}
-
-.lb-title {
-    font-family: var(--font-title);
-    font-size: 18px;
-    color: #fff;
-    text-align: center;
-    margin-bottom: 8px;
-    text-shadow: 0 1px 0 #fff, 0 4px 0 #3559a5;
-    -webkit-text-stroke: 1.5px #3559a5;
-}
-
-.lb-list {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
-
-.lb-row {
-    display: flex;
-    align-items: center;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.62);
-    font-size: 13px;
-}
-
-.lb-row.lb-me {
-    background: rgba(255, 237, 142, 0.78);
-    box-shadow: inset 0 0 0 1px rgba(237, 161, 53, 0.7);
-}
-
-.lb-row.lb-dead {
-    opacity: 0.5;
-}
-
-.lb-rank {
-    width: 30px;
-    font-weight: 700;
-    color: #2c4f96;
-}
-
-.lb-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.lb-score {
-    font-weight: 700;
-    color: #1f3e7a;
-    min-width: 60px;
-    text-align: right;
-}
-
-.lb-separator {
-    text-align: center;
-    color: #50689f;
-    font-size: 12px;
-    padding: 2px 0;
-}
 
 @media (max-width: 768px) {
     .menu-container {
@@ -551,9 +458,6 @@
         font-size: 16px;
     }
 
-    .nmulti-leaderboard {
-        width: 210px;
-    }
 }
 
 @media (max-width: 480px) {
@@ -626,26 +530,6 @@
         min-width: 90px;
         font-size: 15px;
         padding: 8px 8px 10px;
-    }
-}
-
-@media (max-width: 480px) and (orientation: portrait) {
-    .nmulti-leaderboard {
-        top: auto;
-        bottom: 5px;
-        left: 5px;
-        right: 5px;
-        width: auto;
-        max-height: 150px;
-        border-radius: 10px;
-    }
-
-    .nmulti-leaderboard.nmulti-leaderboard--portrait {
-        top: auto;
-        bottom: 5px;
-        left: 5px;
-        right: 5px;
-        width: auto;
     }
 }
 

@@ -29,3 +29,4 @@ Tests should validate behavior contracts through production code paths.
 - Phaser is mocked by `test/mocks/phaserMock.ts` via `jest.config.js` mapping.
 - `test/unit/server/serverIndex.integration.test.ts` runs in node environment, compiles server TS, spawns a real server process, and binds a local port.
 - If layout constants change, update `ui/gameLayout.metrics.test.ts` and `scenes/layoutPositions.test.ts` together.
+- If runtime HUD placement behavior changes, also update `ui/runtimeHudLayout.test.ts`.

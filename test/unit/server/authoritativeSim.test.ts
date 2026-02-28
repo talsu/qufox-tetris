@@ -123,6 +123,17 @@ describe('AuthoritativeMatch', () => {
         expect(snapshot.self.sync.queue).toHaveLength(6);
     });
 
+    test('includes opponent sync state for hold/queue reflection', () => {
+        const match = new AuthoritativeMatch('A', 'B', 1111, 2222);
+        const snapshot = match.getSnapshotFor('p1');
+
+        expect(snapshot.opponent.sync).toBeDefined();
+        expect(Object.prototype.hasOwnProperty.call(snapshot.opponent.sync, 'hold')).toBe(true);
+        expect(Array.isArray(snapshot.opponent.sync.queue)).toBe(true);
+        expect(Array.isArray(snapshot.opponent.sync.bag)).toBe(true);
+        expect(typeof snapshot.opponent.sync.queueRngState).toBe('number');
+    });
+
     test('ignores hardDrop hold state to avoid duplicate drops in same tick', () => {
         const seed = 4321;
 

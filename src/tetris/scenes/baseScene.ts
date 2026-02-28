@@ -60,6 +60,7 @@ export abstract class BaseScene extends Phaser.Scene {
     }
 
     protected resize(gameSize: { width: number; height: number } | number, baseSize?: number, displaySize?: unknown, resolution?: unknown) {
+        this.handleResolution();
         if (!this.cameras || !this.cameras.main) {
             return;
         }

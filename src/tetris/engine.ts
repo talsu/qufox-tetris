@@ -2,7 +2,7 @@ import {PlayField} from "./objects/playField";
 import {TetrominoBox} from "./objects/tetrominoBox";
 import {TetrominoBoxQueue} from "./objects/tetrominoBoxQueue";
 import {LevelIndicator} from "./objects/levelIndicator";
-import {InputState, TetrominoType, RotateType} from "./const/const";
+import {InputDirection, InputState, TetrominoType, RotateType} from "./const/const";
 import {ScoreSystem, GameStats} from "./logic/scoreSystem";
 import { AuthLockFeedback, AuthSnapshotSide, AuthSnapshotStats, AuthSyncState } from '../shared/types/socketPayloads';
 
@@ -315,7 +315,7 @@ export class Engine {
      * @param direction direction
      * @param state key state - press, hold, release
      */
-    onInput(direction: string, state: InputState) {
+    onInput(direction: InputDirection, state: InputState) {
         this.playField.onInput(direction, state);
     }
 }

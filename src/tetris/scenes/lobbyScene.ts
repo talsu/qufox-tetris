@@ -3,7 +3,14 @@ import { BaseScene } from "./baseScene";
 import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
 import { GAME_FONT_FAMILY } from "../ui/uiStyles";
 import { PANEL_BG } from "../ui/uiStyles";
-import { KENNEY_UI_IMAGE_KEYS, preloadKenneyAssets } from "../ui/kenneyAssets";
+import { preloadKenneyAssets } from "../ui/kenneyAssets";
+import {
+    createKenneyButtonVisual,
+    KenneyButtonKind,
+    KenneyButtonState,
+    KenneyButtonVisual,
+    setKenneyButtonState,
+} from "../ui/kenneyButton";
 import {
     extractSocketErrorMessage,
     type NMultiRoomJoinedPayload,
@@ -64,8 +71,8 @@ interface LobbyConfig {
     buildSceneData: (socket: Socket, data: LobbyJoinedPayload) => LobbySceneData;
 }
 
-type BtnKind = 'blue' | 'green' | 'red';
-type BtnState = 'normal' | 'hover' | 'pressed';
+type BtnKind = KenneyButtonKind;
+type BtnState = KenneyButtonState;
 
 interface UiButton {
     bg: Phaser.GameObjects.Image;
@@ -107,6 +114,7 @@ const MULTI_CONFIG: LobbyConfig = {
             roomId: joined.roomId,
             isHost: joined.isHost,
             roomName: joined.roomName,
+            botLevel: joined.botLevel,
             resumeToken: joined.resumeToken,
             authQueueSeed: joined.authSeed,
             authSnapshot: joined.authSnapshot,
@@ -137,6 +145,7 @@ const NMULTI_CONFIG: LobbyConfig = {
             playerName: joined.playerName,
             initialPlayers: joined.players,
             roomName: joined.roomName,
+            botLevel: joined.botLevel,
             authSeed: joined.authSeed,
             authSnapshot: joined.authSnapshot,
         };
@@ -347,22 +356,20 @@ class BaseLobbyScene extends BaseScene {
     }
 
     private createButton(text: string, kind: BtnKind, onClick: () => void): UiButton {
-        const button: UiButton = {
-            bg: this.add.image(0, 0, this.resolveButtonTexture(kind, 'normal')).setOrigin(0.5),
-            label: this.add.text(0, 0, text, {
-                fontFamily: GAME_FONT_FAMILY,
-                color: '#ffffff',
-                fontStyle: 'bold',
-                align: 'center',
-            }).setOrigin(0.5),
-            hitArea: this.add.rectangle(0, 0, 1, 1, 0x000000, 0.001).setOrigin(0.5),
+        const visual = createKenneyButtonVisual({
+            scene: this,
+            text,
             kind,
-            state: 'normal',
+        });
+
+        const button: UiButton = {
+            bg: visual.background,
+            label: visual.label,
+            hitArea: visual.hitArea,
+            kind: visual.kind,
+            state: visual.state,
             onClick,
         };
-
-        button.label.setStroke('#163670', 4);
-        button.hitArea.setInteractive({ useHandCursor: true });
         button.hitArea.on('pointerover', () => this.setButtonState(button, 'hover'));
         button.hitArea.on('pointerout', () => this.setButtonState(button, 'normal'));
         button.hitArea.on('pointerdown', () => this.setButtonState(button, 'pressed'));
@@ -374,26 +381,16 @@ class BaseLobbyScene extends BaseScene {
         return button;
     }
 
-    private resolveButtonTexture(kind: BtnKind, state: BtnState): string {
-        if (kind === 'green') {
-            if (state === 'hover') return KENNEY_UI_IMAGE_KEYS.buttonGreenHover;
-            if (state === 'pressed') return KENNEY_UI_IMAGE_KEYS.buttonGreenPressed;
-            return KENNEY_UI_IMAGE_KEYS.buttonGreenNormal;
-        }
-        if (kind === 'red') {
-            if (state === 'hover') return KENNEY_UI_IMAGE_KEYS.buttonRedHover;
-            if (state === 'pressed') return KENNEY_UI_IMAGE_KEYS.buttonRedPressed;
-            return KENNEY_UI_IMAGE_KEYS.buttonRedNormal;
-        }
-        if (state === 'hover') return KENNEY_UI_IMAGE_KEYS.buttonBlueHover;
-        if (state === 'pressed') return KENNEY_UI_IMAGE_KEYS.buttonBluePressed;
-        return KENNEY_UI_IMAGE_KEYS.buttonBlueNormal;
-    }
-
     private setButtonState(button: UiButton, state: BtnState): void {
-        button.state = state;
-        button.bg.setTexture(this.resolveButtonTexture(button.kind, state));
-        button.label.setScale(state === 'pressed' ? 0.985 : 1);
+        const visual: KenneyButtonVisual = {
+            background: button.bg,
+            label: button.label,
+            hitArea: button.hitArea,
+            kind: button.kind,
+            state: button.state,
+        };
+        setKenneyButtonState(visual, state, 0.985);
+        button.state = visual.state;
     }
 
     private refreshRoomList() {

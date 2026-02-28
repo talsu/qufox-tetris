@@ -1,5 +1,11 @@
 import { GAME_FONT_FAMILY, PANEL_BG } from './uiStyles';
-import { KENNEY_UI_IMAGE_KEYS } from './kenneyAssets';
+import {
+    createKenneyButtonVisual,
+    KenneyButtonKind,
+    KenneyButtonState,
+    resolveKenneyButtonTexture,
+    setKenneyButtonState,
+} from './kenneyButton';
 
 export interface MenuCallbacks {
     onResume: () => void;
@@ -9,8 +15,8 @@ export interface MenuCallbacks {
     getBackgroundThemeLabel: () => string;
 }
 
-type MenuButtonKind = 'blue' | 'green' | 'red';
-type MenuButtonState = 'normal' | 'hover' | 'pressed';
+type MenuButtonKind = KenneyButtonKind;
+type MenuButtonState = KenneyButtonState;
 
 interface MenuButton {
     key: string;
@@ -234,19 +240,20 @@ export class InGameMenu {
     }
 
     private createButton(key: string, text: string, kind: MenuButtonKind, onClick: () => void): MenuButton {
-        const background = this.scene.add.image(0, 0, this.resolveButtonTexture(kind, 'normal')).setOrigin(0);
+        const visual = createKenneyButtonVisual({
+            scene: this.scene,
+            text,
+            kind,
+            originX: 0,
+            originY: 0,
+            labelStyle: {
+                fontSize: '30px',
+            },
+        });
 
-        const hitArea = this.scene.add.rectangle(0, 0, 1, 1, 0x000000, 0.001).setOrigin(0);
-        hitArea.setInteractive({ useHandCursor: true });
-
-        const label = this.scene.add.text(0, 0, text, {
-            fontFamily: GAME_FONT_FAMILY,
-            fontSize: '30px',
-            color: '#ffffff',
-            fontStyle: 'bold',
-            align: 'center',
-        }).setOrigin(0.5);
-        label.setStroke('#163670', 4);
+        const background = visual.background;
+        const label = visual.label;
+        const hitArea = visual.hitArea;
 
         hitArea.on('pointerdown', () => {
             this.setButtonState(button, 'pressed');
@@ -287,30 +294,11 @@ export class InGameMenu {
             button.label.setStroke(button.kind === 'green' ? '#f8ffe8' : '#163670', 4);
         }
 
-        button.background.setTexture(this.resolveButtonTexture(button.kind, button.state));
-    }
-
-    private resolveButtonTexture(kind: MenuButtonKind, state: MenuButtonState): string {
-        if (kind === 'green') {
-            if (state === 'hover') return KENNEY_UI_IMAGE_KEYS.buttonGreenHover;
-            if (state === 'pressed') return KENNEY_UI_IMAGE_KEYS.buttonGreenPressed;
-            return KENNEY_UI_IMAGE_KEYS.buttonGreenNormal;
-        }
-        if (kind === 'red') {
-            if (state === 'hover') return KENNEY_UI_IMAGE_KEYS.buttonRedHover;
-            if (state === 'pressed') return KENNEY_UI_IMAGE_KEYS.buttonRedPressed;
-            return KENNEY_UI_IMAGE_KEYS.buttonRedNormal;
-        }
-        if (state === 'hover') return KENNEY_UI_IMAGE_KEYS.buttonBlueHover;
-        if (state === 'pressed') return KENNEY_UI_IMAGE_KEYS.buttonBluePressed;
-        return KENNEY_UI_IMAGE_KEYS.buttonBlueNormal;
+        button.background.setTexture(resolveKenneyButtonTexture(button.kind, button.state));
     }
 
     private setButtonState(button: MenuButton, state: MenuButtonState): void {
-        button.state = state;
-        const textureKey = this.resolveButtonTexture(button.kind, state);
-        button.background.setTexture(textureKey);
-        button.label.setScale(state === 'pressed' ? 0.985 : 1);
+        setKenneyButtonState(button, state, 0.985);
         this.layout();
     }
 

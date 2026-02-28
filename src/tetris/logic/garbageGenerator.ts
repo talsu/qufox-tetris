@@ -1,5 +1,6 @@
 
 import {CONST, TetrominoType} from "../const/const";
+import { BoardBlock } from "../net/boardCodec";
 
 /**
  * Logic for generating garbage lines.
@@ -12,7 +13,7 @@ export class GarbageGenerator {
      * @param previousHoleIndex The column index of the hole in the topmost garbage line (to ensure offset). -1 if none.
      * @returns Object containing the list of lines (each line is an array of blocks) and the new hole index.
      */
-    static generate(count: number, previousHoleIndex: number = -1): { lines: any[][], holeIndex: number } {
+    static generate(count: number, previousHoleIndex: number = -1): { lines: BoardBlock[][], holeIndex: number } {
         let holeIndex;
 
         // Ensure the new hole is not in the same column as the previous one (Tetris Guideline)
@@ -24,9 +25,9 @@ export class GarbageGenerator {
             holeIndex = Math.floor(Math.random() * CONST.PLAY_FIELD.COL_COUNT);
         }
 
-        const lines = [];
+        const lines: BoardBlock[][] = [];
         for (let i = 0; i < count; i++) {
-            const lineBlocks = [];
+            const lineBlocks: BoardBlock[] = [];
             // Fill bottom-most rows.
             const targetRow = CONST.PLAY_FIELD.ROW_COUNT - 1 - i;
 

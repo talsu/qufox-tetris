@@ -5,7 +5,7 @@ import { InputManager } from '../input/inputManager';
 import { InGameMenu, MenuCallbacks } from '../ui/inGameMenu';
 import { GameOverlayControls } from '../ui/gameOverlayControls';
 import { BotManager } from '../logic/botManager';
-import { CONST, InputState } from '../const/const';
+import { CONST, InputDirection, InputState } from '../const/const';
 import { GAME_FONT_FAMILY } from '../ui/uiStyles';
 import { Socket } from 'socket.io-client';
 import { playKenneyImpactSound } from '../ui/kenneyAssets';
@@ -90,7 +90,7 @@ export abstract class BasePlayScene extends BaseScene {
         this.inGameMenu.showEndGame(mainText, color, score);
     }
 
-    protected onInput(direction: string, state: InputState): void {
+    protected onInput(direction: InputDirection, state: InputState): void {
         if (this.inGameMenu?.isMenuOpen || this.isGameEnded) return;
         if (state === InputState.PRESS && direction === 'hardDrop') {
             playKenneyImpactSound(this, 'hardDrop', 0.35);
@@ -98,7 +98,7 @@ export abstract class BasePlayScene extends BaseScene {
         if (this.engine) this.engine.onInput(direction, state);
     }
 
-    protected isOneShotInput(direction: string): boolean {
+    protected isOneShotInput(direction: InputDirection): boolean {
         return direction === 'hardDrop'
             || direction === 'hold'
             || direction === 'clockwise'
@@ -130,6 +130,9 @@ export abstract class BasePlayScene extends BaseScene {
         if (this.escKeyHandler) {
             this.input.keyboard.off('keydown-ESC', this.escKeyHandler);
             this.escKeyHandler = null;
+        }
+        if (this.inputManager) {
+            this.inputManager.destroy();
         }
         if (this.botManager) this.botManager.stop();
         if (this.inGameMenu) this.inGameMenu.destroy();

@@ -27,8 +27,12 @@ import {
     isPlayerReadyPayload,
     isRequestRestartPayload,
     isResumeAuthPayload,
+    isSendGarbagePayload,
+    isUpdateStatePayload,
     normalizeRoomName,
     type AuthSyncState,
+    type NMultiPlayerPayload,
+    type NMultiRoomJoinedPayload,
 } from '../src/shared/types/socketPayloads';
 import {
     createBotController,
@@ -221,24 +225,8 @@ function getNMultiRoomList(): Array<{ id: string; name: string; playerCount: num
     }));
 }
 
-function getNMultiPlayersPayload(room: NMultiRoom, excludePlayerId: string | null = null): Record<string, {
-    name: string;
-    score: number;
-    level: number;
-    lines: number;
-    board: string | Uint8Array | null;
-    isAlive: boolean;
-    v: number;
-}> {
-    const payload: Record<string, {
-        name: string;
-        score: number;
-        level: number;
-        lines: number;
-        board: string | Uint8Array | null;
-        isAlive: boolean;
-        v: number;
-    }> = {};
+function getNMultiPlayersPayload(room: NMultiRoom, excludePlayerId: string | null = null): Record<string, NMultiPlayerPayload> {
+    const payload: Record<string, NMultiPlayerPayload> = {};
     for (const [playerId, player] of Object.entries(room.players)) {
         if (excludePlayerId && playerId === excludePlayerId) continue;
         payload[playerId] = {
@@ -254,28 +242,7 @@ function getNMultiPlayersPayload(room: NMultiRoom, excludePlayerId: string | nul
     return payload;
 }
 
-function buildNMultiRoomJoinedPayload(room: NMultiRoom, player: NMultiPlayer): {
-    roomId: string;
-    playerId: string;
-    playerName: string;
-    roomName: string;
-    players: Record<string, {
-        name: string;
-        score: number;
-        level: number;
-        lines: number;
-        board: string | Uint8Array | null;
-        isAlive: boolean;
-        v: number;
-    }>;
-    authSeed: number;
-    botLevel: number;
-    authSnapshot: {
-        tick: number;
-        self: ReturnType<AuthoritativeMatch['getSnapshotFor']>['self'];
-        serverAckInputSeq: number;
-    };
-} {
+function buildNMultiRoomJoinedPayload(room: NMultiRoom, player: NMultiPlayer): NMultiRoomJoinedPayload {
     const authSnapshot = buildNMultiAuthSnapshot(player);
     return {
         roomId: room.id,
@@ -509,12 +476,24 @@ function createNMultiRoom(roomName: string, hostSocketId: string): NMultiRoom {
     return room;
 }
 
-function addNMultiPlayerToRoom(room: NMultiRoom, socket: Socket): NMultiPlayer {
+function addNMultiPlayerToRoom(room: NMultiRoom, socket: Socket): { player: NMultiPlayer; isNew: boolean } {
+    const existingPlayerId = room.bySocket[socket.id];
+    if (existingPlayerId) {
+        const existingPlayer = room.players[existingPlayerId];
+        if (existingPlayer) {
+            existingPlayer.socketId = socket.id;
+            markNMultiPlayerActive(existingPlayer);
+            markNMultiPlayerDirty(room, existingPlayer.id);
+            return { player: existingPlayer, isNew: false };
+        }
+        delete room.bySocket[socket.id];
+    }
+
     const player = createNMultiPlayer(room, socket.id);
     room.players[player.id] = player;
     room.bySocket[socket.id] = player.id;
     markNMultiPlayerDirty(room, player.id);
-    return player;
+    return { player, isNew: true };
 }
 
 function emitNMultiRoomJoined(socket: Socket, room: NMultiRoom, player: NMultiPlayer): void {
@@ -531,13 +510,24 @@ function createAndJoinNMultiRoom(socket: Socket, roomName: string): NMultiRoom {
 }
 
 function joinExistingNMultiRoom(socket: Socket, room: NMultiRoom): void {
-    const player = addNMultiPlayerToRoom(room, socket);
+    const { player, isNew } = addNMultiPlayerToRoom(room, socket);
     emitNMultiRoomJoined(socket, room, player);
-    socket.to(room.id).emit('nmulti_player_joined', {
-        playerId: player.id,
-        playerName: player.name,
-    });
+    if (isNew) {
+        socket.to(room.id).emit('nmulti_player_joined', {
+            playerId: player.id,
+            playerName: player.name,
+        });
+    }
     emitNMultiRoomList();
+}
+
+function ensureSocketDetachedFromNMultiRooms(socketId: string, retainRoomId: string | null = null): void {
+    for (const room of Object.values(nMultiRooms)) {
+        if (retainRoomId && room.id === retainRoomId) continue;
+        const playerId = room.bySocket[socketId];
+        if (!playerId) continue;
+        permanentlyRemovePlayerFromNMultiRoom(room, playerId);
+    }
 }
 
 function isNMultiRoomFull(room: NMultiRoom): boolean {
@@ -633,7 +623,9 @@ const oneVsOneResumePolicy: TokenLifecyclePolicy<{ room: OneVsOneRoom; seat: Sea
 
 const oneVsOneRestartPolicy: RoomLifecyclePolicy<OneVsOneRoom> = {
     findRoomById: (roomId) => oneVsOneRooms[roomId] || null,
-    execute: (_socket, room) => {
+    execute: (socket, room) => {
+        const seat = getSeatBySocket(room, socket.id);
+        if (!seat) return;
         room.seats.p1.ready = false;
         room.seats.p2.ready = false;
         room.authMatch = null;
@@ -870,15 +862,7 @@ function broadcastNMultiDelta(roomId: string): void {
     const dirty = Array.from(room.dirtyPlayers);
     if (dirty.length === 0) return;
 
-    const delta: Record<string, {
-        name: string;
-        score: number;
-        level: number;
-        lines: number;
-        board: string | Uint8Array | null;
-        isAlive: boolean;
-        v: number;
-    }> = {};
+    const delta: Record<string, NMultiPlayerPayload> = {};
 
     for (const playerId of dirty) {
         const player = room.players[playerId];
@@ -1024,15 +1008,21 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('update_state', (payload: unknown) => {
-        const roomId = extractRoomId(payload);
-        if (!roomId) return;
-        socket.to(roomId).emit('opponent_state_update', payload);
+        if (!isUpdateStatePayload(payload)) return;
+        const room = oneVsOneRooms[payload.roomId];
+        if (!room) return;
+        const seat = getSeatBySocket(room, socket.id);
+        if (!seat) return;
+        socket.to(room.id).emit('opponent_state_update', payload);
     });
 
     socket.on('send_garbage', (payload: unknown) => {
-        const roomId = extractRoomId(payload);
-        if (!roomId) return;
-        socket.to(roomId).emit('receive_garbage', payload);
+        if (!isSendGarbagePayload(payload)) return;
+        const room = oneVsOneRooms[payload.roomId];
+        if (!room) return;
+        const seat = getSeatBySocket(room, socket.id);
+        if (!seat) return;
+        socket.to(room.id).emit('receive_garbage', payload);
     });
 
     socket.on('nmulti_get_rooms', () => {
@@ -1040,16 +1030,20 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('nmulti_create_room', (roomNameCandidate: unknown) => {
+        ensureSocketDetachedFromNMultiRooms(socket.id);
         rememberRequestedBotLevel(socket.id, roomNameCandidate);
         handleCreateWithPolicy(socket, roomNameCandidate, 'Room', nMultiModePolicy);
     });
 
     socket.on('nmulti_join_room', (payload: unknown) => {
+        const targetRoomId = extractRoomId(payload);
+        ensureSocketDetachedFromNMultiRooms(socket.id, targetRoomId);
         rememberRequestedBotLevel(socket.id, payload);
-        handleJoinByIdWithPolicy(socket, extractRoomId(payload), nMultiModePolicy);
+        handleJoinByIdWithPolicy(socket, targetRoomId, nMultiModePolicy);
     });
 
     socket.on('nmulti_join_or_create', (roomNameCandidate: unknown) => {
+        ensureSocketDetachedFromNMultiRooms(socket.id);
         rememberRequestedBotLevel(socket.id, roomNameCandidate);
         handleJoinOrCreateWithPolicy(socket, roomNameCandidate, 'Room', nMultiModePolicy);
     });

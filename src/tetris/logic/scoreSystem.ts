@@ -24,6 +24,15 @@ export interface LockResult {
     level: number;
 }
 
+export interface GarbageAttackInput {
+    clearedLineCount: number;
+    isTSpin: boolean;
+    isTSpinMini: boolean;
+    isBackToBackBonus: boolean;
+    comboCount: number;
+    isPerfectClear?: boolean;
+}
+
 export class ScoreSystem {
     private level: number = 1;
     private score: number = 0;
@@ -83,6 +92,38 @@ export class ScoreSystem {
 
     getCombo() {
         return this.comboCount;
+    }
+
+    static calculateGarbageAttack(input: GarbageAttackInput): number {
+        let garbage = 0;
+
+        if (input.isTSpinMini) {
+            if (input.clearedLineCount === 2) garbage = 1;
+        } else if (input.isTSpin) {
+            if (input.clearedLineCount === 1) garbage = 2;
+            else if (input.clearedLineCount === 2) garbage = 4;
+            else if (input.clearedLineCount === 3) garbage = 6;
+        } else {
+            if (input.clearedLineCount === 2) garbage = 1;
+            else if (input.clearedLineCount === 3) garbage = 2;
+            else if (input.clearedLineCount === 4) garbage = 4;
+        }
+
+        if (input.isBackToBackBonus) garbage += 1;
+
+        if (input.comboCount >= 2) {
+            if (input.comboCount < 4) garbage += 1;
+            else if (input.comboCount < 6) garbage += 2;
+            else if (input.comboCount < 8) garbage += 3;
+            else if (input.comboCount < 10) garbage += 4;
+            else garbage += 5;
+        }
+
+        if (input.isPerfectClear) {
+            garbage += 10;
+        }
+
+        return garbage;
     }
 
     setAuthoritativeState(
@@ -208,29 +249,13 @@ export class ScoreSystem {
             this.addLineCount(clearedLineCount);
         }
 
-        // Calculate Garbage
-        let garbage = 0;
-        if (isTSpin) {
-            if (clearedLineCount === 1) garbage = 2;
-            else if (clearedLineCount === 2) garbage = 4;
-            else if (clearedLineCount === 3) garbage = 6;
-        } else if (isTSpinMini) {
-            if (clearedLineCount === 2) garbage = 1;
-        } else {
-            if (clearedLineCount === 2) garbage = 1;
-            else if (clearedLineCount === 3) garbage = 2;
-            else if (clearedLineCount === 4) garbage = 4;
-        }
-
-        if (isBackToBackBonus) garbage += 1;
-
-        if (this.comboCount >= 2) {
-            if (this.comboCount < 4) garbage += 1;
-            else if (this.comboCount < 6) garbage += 2;
-            else if (this.comboCount < 8) garbage += 3;
-            else if (this.comboCount < 10) garbage += 4;
-            else garbage += 5;
-        }
+        const garbage = ScoreSystem.calculateGarbageAttack({
+            clearedLineCount,
+            isTSpin,
+            isTSpinMini,
+            isBackToBackBonus,
+            comboCount: this.comboCount,
+        });
 
         // Return result
         return {

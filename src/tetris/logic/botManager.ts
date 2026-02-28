@@ -1,8 +1,9 @@
 import { Engine } from "../engine";
 import { PlayField } from "../objects/playField";
 import { Tetromino } from "../objects/tetromino";
-import { TetrominoType, RotateType, InputState, CONST, ColRow } from "../const/const";
+import { TetrominoType, RotateType, InputDirection, InputState, CONST, ColRow } from "../const/const";
 import { GameRules } from "./gameRules";
+import { ScoreSystem } from "./scoreSystem";
 
 interface BotMoveResult {
     col: number;
@@ -58,7 +59,7 @@ export class BotManager {
     private botLevel: number;
     private isRunning: boolean = false;
     private currentTarget: BotMoveResult = null;
-    private inputQueue: string[] = [];
+    private inputQueue: InputDirection[] = [];
     private lastInputTime: number = 0;
     private nextInputDelay: number = 100;
     private lastActiveTetromino: Tetromino = null;
@@ -588,33 +589,16 @@ export class BotManager {
         comboCount: number = this.predictedComboCount,
         backToBackActive: boolean = this.predictedBackToBackChain
     ): number {
-        let garbage = 0;
-
-        if (isTSpin) {
-            if (clearedLines === 1) garbage = 2;
-            else if (clearedLines === 2) garbage = 4;
-            else if (clearedLines === 3) garbage = 6;
-        } else {
-            if (clearedLines === 2) garbage = 1;
-            else if (clearedLines === 3) garbage = 2;
-            else if (clearedLines === 4) garbage = 4;
-        }
-
-        if (clearedLines > 0 && backToBackActive && (isTSpin || clearedLines === 4)) {
-            garbage += 1;
-        }
-
         const nextCombo = clearedLines > 0 ? comboCount + 1 : -1;
-        if (nextCombo >= 2) {
-            if (nextCombo < 4) garbage += 1;
-            else if (nextCombo < 6) garbage += 2;
-            else if (nextCombo < 8) garbage += 3;
-            else if (nextCombo < 10) garbage += 4;
-            else garbage += 5;
-        }
-
-        if (isPerfectClear) garbage += 10;
-        return garbage;
+        const isBackToBackBonus = clearedLines > 0 && backToBackActive && (isTSpin || clearedLines === 4);
+        return ScoreSystem.calculateGarbageAttack({
+            clearedLineCount: clearedLines,
+            isTSpin,
+            isTSpinMini: false,
+            isBackToBackBonus,
+            comboCount: nextCombo,
+            isPerfectClear,
+        });
     }
 
     private getLockOutcome(newBlocks: ColRow[], inactiveBlocks: ColRow[]): LockOutcome {

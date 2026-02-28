@@ -2,25 +2,25 @@ import { CONST } from "../const/const";
 import { BaseScene } from "./baseScene";
 import { io, type Socket } from "socket.io-client";
 import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
+import { SocketListenerRegistry } from "../net/socketListenerRegistry";
 import { GAME_FONT_FAMILY, PANEL_BG } from "../ui/uiStyles";
 import { ensureGameFontReady } from "../ui/fontLoader";
-import { KENNEY_UI_IMAGE_KEYS, preloadKenneyAssets } from "../ui/kenneyAssets";
+import { preloadKenneyAssets } from "../ui/kenneyAssets";
+import {
+    createKenneyButtonVisual,
+    KenneyButtonKind,
+    KenneyButtonState,
+    KenneyButtonVisual,
+    setKenneyButtonState,
+} from "../ui/kenneyButton";
 import {
     extractSocketErrorMessage,
     isNMultiRoomJoinedPayload,
     isOneVsOneRoomJoinedPayload,
 } from "../../shared/types/socketPayloads";
 
-type MenuButtonKind = 'blue' | 'green' | 'red';
-type MenuButtonState = 'normal' | 'hover' | 'pressed';
-
-interface MenuButton {
+interface MenuButton extends KenneyButtonVisual {
     key: string;
-    kind: MenuButtonKind;
-    state: MenuButtonState;
-    background: Phaser.GameObjects.Image;
-    label: Phaser.GameObjects.Text;
-    hitArea: Phaser.GameObjects.Rectangle;
     onClick: () => void;
 }
 
@@ -44,6 +44,8 @@ export class MenuScene extends BaseScene {
     private keyDownHandler: (() => void) | null = null;
     private keyEnterHandler: (() => void) | null = null;
     private isShuttingDown: boolean = false;
+    private urlJoinSocket: Socket | null = null;
+    private readonly urlJoinSocketListeners = new SocketListenerRegistry();
 
     constructor() {
         super({ key: "MenuScene" });
@@ -171,24 +173,18 @@ export class MenuScene extends BaseScene {
         this.input.keyboard.on('keydown-ENTER', this.keyEnterHandler);
     }
 
-    private createButton(key: string, text: string, kind: MenuButtonKind, onClick: () => void): MenuButton {
+    private createButton(key: string, text: string, kind: KenneyButtonKind, onClick: () => void): MenuButton {
+        const visual = createKenneyButtonVisual({
+            scene: this,
+            text,
+            kind,
+        });
+
         const button: MenuButton = {
             key,
-            kind,
-            state: 'normal',
-            background: this.add.image(0, 0, this.resolveButtonTexture(kind, 'normal')).setOrigin(0.5),
-            label: this.add.text(0, 0, text, {
-                fontFamily: GAME_FONT_FAMILY,
-                color: '#ffffff',
-                fontStyle: 'bold',
-                align: 'center',
-            }).setOrigin(0.5),
-            hitArea: this.add.rectangle(0, 0, 1, 1, 0x000000, 0.001).setOrigin(0.5),
             onClick,
+            ...visual,
         };
-
-        button.label.setStroke('#163670', 4);
-        button.hitArea.setInteractive({ useHandCursor: true });
         button.hitArea.on('pointerover', () => {
             this.selectedIndex = this.buttons.findIndex((item) => item.key === button.key);
             this.refreshSelectionVisuals();
@@ -209,26 +205,8 @@ export class MenuScene extends BaseScene {
         return button;
     }
 
-    private resolveButtonTexture(kind: MenuButtonKind, state: MenuButtonState): string {
-        if (kind === 'green') {
-            if (state === 'hover') return KENNEY_UI_IMAGE_KEYS.buttonGreenHover;
-            if (state === 'pressed') return KENNEY_UI_IMAGE_KEYS.buttonGreenPressed;
-            return KENNEY_UI_IMAGE_KEYS.buttonGreenNormal;
-        }
-        if (kind === 'red') {
-            if (state === 'hover') return KENNEY_UI_IMAGE_KEYS.buttonRedHover;
-            if (state === 'pressed') return KENNEY_UI_IMAGE_KEYS.buttonRedPressed;
-            return KENNEY_UI_IMAGE_KEYS.buttonRedNormal;
-        }
-        if (state === 'hover') return KENNEY_UI_IMAGE_KEYS.buttonBlueHover;
-        if (state === 'pressed') return KENNEY_UI_IMAGE_KEYS.buttonBluePressed;
-        return KENNEY_UI_IMAGE_KEYS.buttonBlueNormal;
-    }
-
-    private setButtonState(button: MenuButton, state: MenuButtonState): void {
-        button.state = state;
-        button.background.setTexture(this.resolveButtonTexture(button.kind, state));
-        button.label.setScale(state === 'pressed' ? 0.98 : 1);
+    private setButtonState(button: MenuButton, state: KenneyButtonState): void {
+        setKenneyButtonState(button, state, 0.98);
     }
 
     private refreshSelectionVisuals(): void {
@@ -377,9 +355,7 @@ export class MenuScene extends BaseScene {
     }
 
     private createConnectingText(): Phaser.GameObjects.Text {
-        if (this.connectingText) {
-            this.connectingText.destroy();
-        }
+        this.destroyConnectingText();
         this.connectingText = this.add.text(this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2, 'Connecting...', {
             fontFamily: GAME_FONT_FAMILY,
             fontSize: '32px',
@@ -390,29 +366,66 @@ export class MenuScene extends BaseScene {
         return this.connectingText;
     }
 
-    private joinNMultiRoomByUrl(roomName: string, botLevel: number = 0): void {
-        const connectingText = this.createConnectingText();
-        const socket: Socket = io(getSocketUrl(), { path: SOCKET_PATH });
+    private destroyConnectingText(): void {
+        if (!this.connectingText) return;
+        this.connectingText.destroy();
+        this.connectingText = null;
+    }
 
-        socket.on('connect', () => {
+    private createUrlJoinSocket(): Socket {
+        this.teardownUrlJoinSocket(true);
+        const socket: Socket = io(getSocketUrl(), { path: SOCKET_PATH });
+        this.urlJoinSocket = socket;
+        return socket;
+    }
+
+    private releaseUrlJoinSocketForSceneStart(): Socket | null {
+        if (!this.urlJoinSocket) return null;
+        const socket = this.urlJoinSocket;
+        this.urlJoinSocketListeners.clear(socket);
+        this.urlJoinSocket = null;
+        return socket;
+    }
+
+    private teardownUrlJoinSocket(disconnect: boolean): void {
+        if (!this.urlJoinSocket) return;
+        this.urlJoinSocketListeners.clear(this.urlJoinSocket);
+        if (disconnect) {
+            this.urlJoinSocket.disconnect();
+        }
+        this.urlJoinSocket = null;
+    }
+
+    private recoverFromJoinFailure(message: string): void {
+        this.destroyConnectingText();
+        this.teardownUrlJoinSocket(true);
+        if (this.isShuttingDown) {
+            return;
+        }
+        alert(message);
+        history.replaceState(null, '', '/');
+        this.createPhaserUI();
+        this.resize(window.innerWidth, window.innerHeight);
+    }
+
+    private joinNMultiRoomByUrl(roomName: string, botLevel: number = 0): void {
+        this.createConnectingText();
+        const socket = this.createUrlJoinSocket();
+
+        this.urlJoinSocketListeners.bind(socket, 'connect', () => {
             socket.emit('nmulti_join_or_create', { roomName, botLevel });
         });
 
-        socket.on('nmulti_room_joined', (data: unknown) => {
+        this.urlJoinSocketListeners.bind(socket, 'nmulti_room_joined', (data: unknown) => {
             if (!isNMultiRoomJoinedPayload(data)) {
-                connectingText.destroy();
-                this.connectingText = null;
-                socket.disconnect();
-                alert('Failed to join room: invalid room payload.');
-                history.replaceState(null, '', '/');
-                this.createPhaserUI();
-                this.resize(window.innerWidth, window.innerHeight);
+                this.recoverFromJoinFailure('Failed to join room: invalid room payload.');
                 return;
             }
-            connectingText.destroy();
-            this.connectingText = null;
+            this.destroyConnectingText();
+            const sceneSocket = this.releaseUrlJoinSocketForSceneStart();
+            if (!sceneSocket) return;
             this.scene.start("NMultiPlayScene", {
-                socket,
+                socket: sceneSocket,
                 roomId: data.roomId,
                 playerId: data.playerId,
                 playerName: data.playerName,
@@ -424,52 +437,35 @@ export class MenuScene extends BaseScene {
             });
         });
 
-        socket.on('nmulti_room_error', (payload: unknown) => {
-            connectingText.destroy();
-            this.connectingText = null;
-            socket.disconnect();
+        this.urlJoinSocketListeners.bind(socket, 'nmulti_room_error', (payload: unknown) => {
             const message = extractSocketErrorMessage(payload, 'Failed to join room.');
-            alert(`Failed to join room: ${message}`);
-            history.replaceState(null, '', '/');
-            this.createPhaserUI();
-            this.resize(window.innerWidth, window.innerHeight);
+            this.recoverFromJoinFailure(`Failed to join room: ${message}`);
         });
 
-        socket.on('connect_error', () => {
-            connectingText.destroy();
-            this.connectingText = null;
-            socket.disconnect();
-            alert('Failed to connect to server.');
-            history.replaceState(null, '', '/');
-            this.createPhaserUI();
-            this.resize(window.innerWidth, window.innerHeight);
+        this.urlJoinSocketListeners.bind(socket, 'connect_error', () => {
+            this.recoverFromJoinFailure('Failed to connect to server.');
         });
     }
 
     private joinMultiRoomByUrl(roomName: string, botLevel: number = 0): void {
-        const connectingText = this.createConnectingText();
-        const socket: Socket = io(getSocketUrl(), { path: SOCKET_PATH });
+        this.createConnectingText();
+        const socket = this.createUrlJoinSocket();
 
-        socket.on('connect', () => {
+        this.urlJoinSocketListeners.bind(socket, 'connect', () => {
             socket.emit('join_or_create', { roomName, botLevel });
         });
 
-        socket.on('room_joined', (data: unknown) => {
+        this.urlJoinSocketListeners.bind(socket, 'room_joined', (data: unknown) => {
             if (!isOneVsOneRoomJoinedPayload(data)) {
-                connectingText.destroy();
-                this.connectingText = null;
-                socket.disconnect();
-                alert('Failed to join room: invalid room payload.');
-                history.replaceState(null, '', '/');
-                this.createPhaserUI();
-                this.resize(window.innerWidth, window.innerHeight);
+                this.recoverFromJoinFailure('Failed to join room: invalid room payload.');
                 return;
             }
-            connectingText.destroy();
-            this.connectingText = null;
+            this.destroyConnectingText();
+            const sceneSocket = this.releaseUrlJoinSocketForSceneStart();
+            if (!sceneSocket) return;
             this.scene.start("PlayScene", {
                 mode: 'multi',
-                socket,
+                socket: sceneSocket,
                 roomId: data.roomId,
                 isHost: data.isHost,
                 roomName,
@@ -480,25 +476,13 @@ export class MenuScene extends BaseScene {
             });
         });
 
-        socket.on('room_error', (payload: unknown) => {
-            connectingText.destroy();
-            this.connectingText = null;
-            socket.disconnect();
+        this.urlJoinSocketListeners.bind(socket, 'room_error', (payload: unknown) => {
             const message = extractSocketErrorMessage(payload, 'Failed to join room.');
-            alert(`Failed to join room: ${message}`);
-            history.replaceState(null, '', '/');
-            this.createPhaserUI();
-            this.resize(window.innerWidth, window.innerHeight);
+            this.recoverFromJoinFailure(`Failed to join room: ${message}`);
         });
 
-        socket.on('connect_error', () => {
-            connectingText.destroy();
-            this.connectingText = null;
-            socket.disconnect();
-            alert('Failed to connect to server.');
-            history.replaceState(null, '', '/');
-            this.createPhaserUI();
-            this.resize(window.innerWidth, window.innerHeight);
+        this.urlJoinSocketListeners.bind(socket, 'connect_error', () => {
+            this.recoverFromJoinFailure('Failed to connect to server.');
         });
     }
 
@@ -544,10 +528,8 @@ export class MenuScene extends BaseScene {
     shutdown() {
         this.isShuttingDown = true;
         this.unbindKeyboard();
-        if (this.connectingText) {
-            this.connectingText.destroy();
-            this.connectingText = null;
-        }
+        this.destroyConnectingText();
+        this.teardownUrlJoinSocket(true);
         this.destroyPhaserUI();
         this.scale.off('resize', this.resize, this);
     }

@@ -172,6 +172,10 @@ High-signal test files:
   2) scene handlers in `playScene.ts` / `nMultiPlayScene.ts`
   3) matching tests in `test/unit/server/*` and scene/layout tests
 
+## Asset File Rules
+- All files under `assets/` must have git file mode `755` (executable).
+- When adding new asset files, run `git update-index --chmod=+x <file>` before committing.
+
 ## Security Rules
 - Do not inject unsanitized user strings into `innerHTML`.
 - Prefer `textContent` or Phaser text objects for user strings.

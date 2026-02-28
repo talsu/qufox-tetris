@@ -84,6 +84,9 @@ describe('PlayScene authoritative resync', () => {
         handlers.auth_snapshot(snapshot);
         handlers.auth_snapshot(snapshot);
         handlers.auth_snapshot(snapshot);
+        handlers.auth_snapshot(snapshot);
+        handlers.auth_snapshot(snapshot);
+        handlers.auth_snapshot(snapshot);
 
         expect(applyAuthoritativeSync).toHaveBeenCalledTimes(1);
         expect(applyAuthoritativeSync).toHaveBeenCalledWith(snapshot.self.sync, {

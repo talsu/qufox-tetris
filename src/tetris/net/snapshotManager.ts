@@ -1,6 +1,6 @@
 export interface PlayerSnapshot {
     name: string;
-    board: string | null;
+    board: string | Uint8Array | ArrayBuffer | null;
     score: number;
     isAlive: boolean;
     v?: number;

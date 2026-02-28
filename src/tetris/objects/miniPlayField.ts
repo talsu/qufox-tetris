@@ -31,9 +31,9 @@ export class MiniPlayField {
 
     private _cellSize: number = 4;
     private _isAlive: boolean = true;
-    private _board: string | null = null;
+    private _board: string | Uint8Array | ArrayBuffer | null = null;
     private _score: number = 0;
-    private _lastRenderedBoard: string | null = null;
+    private _lastRenderedBoard: string | Uint8Array | ArrayBuffer | null = null;
     private blockPool: Phaser.GameObjects.Image[] = [];
 
     public playerId: string;
@@ -93,8 +93,8 @@ export class MiniPlayField {
         return text;
     }
 
-    updateState(board: string | null, score: number, isAlive: boolean) {
-        const boardChanged = this._board !== board;
+    updateState(board: string | Uint8Array | ArrayBuffer | null, score: number, isAlive: boolean) {
+        const boardChanged = !BoardCodec.areUint8ArraysEqual(this._board, board);
         const aliveChanged = this._isAlive !== isAlive;
 
         this._board = board;

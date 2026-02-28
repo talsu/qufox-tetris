@@ -14,7 +14,7 @@ import {
     type RoomModePolicy,
     type TokenLifecyclePolicy,
 } from './roomModePolicy';
-import { AuthoritativeMatch } from '../src/shared/core/authoritativeMatch';
+import { AuthoritativeMatch, SyncState } from '../src/shared/core/authoritativeMatch';
 import { BoardCodec } from '../src/tetris/net/boardCodec';
 import {
     extractRoomId,
@@ -77,7 +77,7 @@ interface NMultiPlayer {
     score: number;
     level: number;
     lines: number;
-    board: string | Uint8Array | null;
+    board: Uint8Array | null;
     isAlive: boolean;
     v: number;
     presence: PresenceState;
@@ -293,13 +293,13 @@ function buildNMultiRoomJoinedPayload(room: NMultiRoom, player: NMultiPlayer): {
     };
 }
 
-function buildBinarySnapshotSide(side: ReturnType<AuthoritativeMatch['getSnapshotFor']>['self']): ReturnType<AuthoritativeMatch['getSnapshotFor']>['self'] {
+function buildBinarySnapshotSide<T extends { board: string | Uint8Array; sync?: SyncState }>(side: T): T {
     if (side.board && typeof side.board === 'string') {
-        side.board = BoardCodec.encodeBinary(BoardCodec.decode(side.board));
+        side.board = BoardCodec.stringToBinary(side.board);
     }
     if (side.sync) {
         if (side.sync.boardCore && typeof side.sync.boardCore === 'string') {
-            side.sync.boardCore = BoardCodec.encodeBinary(BoardCodec.decode(side.sync.boardCore));
+            side.sync.boardCore = BoardCodec.stringToBinary(side.sync.boardCore);
         }
     }
     return side;
@@ -354,7 +354,7 @@ function resetNMultiPlayerMatch(player: NMultiPlayer): void {
     player.score = selfSnapshot.score;
     player.level = selfSnapshot.level;
     player.lines = selfSnapshot.lines;
-    player.board = selfSnapshot.board ? BoardCodec.encodeBinary(BoardCodec.decode(selfSnapshot.board)) : null;
+    player.board = selfSnapshot.board ? BoardCodec.stringToBinary(selfSnapshot.board) : null;
     player.isAlive = selfSnapshot.isAlive;
     markNMultiPlayerActive(player);
     player.lastAckInputSeq = 0;
@@ -386,7 +386,7 @@ function createNMultiPlayer(room: NMultiRoom | null, socketId: string, name?: st
         score: initialSelf.score,
         level: initialSelf.level,
         lines: initialSelf.lines,
-        board: initialSelf.board ? BoardCodec.encodeBinary(BoardCodec.decode(initialSelf.board)) : null,
+        board: initialSelf.board ? BoardCodec.stringToBinary(initialSelf.board) : null,
         isAlive: initialSelf.isAlive,
         v: 1,
         presence: 'active',
@@ -829,10 +829,10 @@ function tickNMultiRoom(roomId: string): void {
         }
 
         const snapshot = match.getSnapshotFor('p1');
-        const self = snapshot.self;
+        const self = buildBinarySnapshotSide(snapshot.self);
         const nextAck = Number.isFinite(match.players.p1.lastSeq) ? match.players.p1.lastSeq : player.lastAckInputSeq;
-        const compressedBoard = self.board ? BoardCodec.encodeBinary(BoardCodec.decode(self.board)) : null;
-        const changed = player.board !== compressedBoard
+        const compressedBoard = self.board as Uint8Array;
+        const changed = !BoardCodec.areUint8ArraysEqual(player.board, compressedBoard)
             || player.score !== self.score
             || player.level !== self.level
             || player.lines !== self.lines
@@ -847,7 +847,11 @@ function tickNMultiRoom(roomId: string): void {
         player.lastAckInputSeq = nextAck;
 
         if (player.socketId) {
-            io.to(player.socketId).emit('nmulti_auth_snapshot', buildNMultiAuthSnapshot(player));
+            io.to(player.socketId).emit('nmulti_auth_snapshot', {
+                tick: snapshot.tick,
+                self,
+                serverAckInputSeq: player.lastAckInputSeq,
+            });
         }
 
         if (changed || (wasAlive && !player.isAlive)) {

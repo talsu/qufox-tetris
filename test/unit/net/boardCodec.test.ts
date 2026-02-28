@@ -103,6 +103,50 @@ describe('BoardCodec', () => {
         });
     });
 
+    describe('stringToBinary (Direct String → Binary)', () => {
+        test('produces identical output to encodeBinary(decode()) for empty board', () => {
+            const board = BoardCodec.encode([]);
+            const direct = BoardCodec.stringToBinary(board);
+            const via = BoardCodec.encodeBinary(BoardCodec.decode(board));
+            expect(direct).toEqual(via);
+        });
+
+        test('produces identical output for a board with mixed blocks', () => {
+            const blocks = [
+                { col: 9, row: 10, type: 'Z' },
+                { col: 0, row: 18, type: 'I' },
+                { col: 5, row: 19, type: 'GARBAGE' },
+            ];
+            const board = BoardCodec.encode(blocks);
+            const direct = BoardCodec.stringToBinary(board);
+            const via = BoardCodec.encodeBinary(BoardCodec.decode(board));
+            expect(direct).toEqual(via);
+        });
+
+        test('round-trips back to original blocks', () => {
+            const blocks = [
+                { col: 3, row: 17, type: 'T' },
+                { col: 7, row: 19, type: 'J' },
+            ];
+            const board = BoardCodec.encode(blocks);
+            const binary = BoardCodec.stringToBinary(board);
+            const decoded = BoardCodec.decode(binary);
+            expect(decoded).toEqual(blocks);
+        });
+
+        test('returns 1-byte empty marker for all-zero board', () => {
+            const board = '0'.repeat(200);
+            const result = BoardCodec.stringToBinary(board);
+            expect(result).toHaveLength(1);
+            expect(result[0]).toBe(20);
+        });
+
+        test('returns 1-byte empty marker for invalid input', () => {
+            expect(BoardCodec.stringToBinary('')).toEqual(new Uint8Array([20]));
+            expect(BoardCodec.stringToBinary('too-short')).toEqual(new Uint8Array([20]));
+        });
+    });
+
     describe('Boundary and Error Cases', () => {
         test('decode handles null and undefined', () => {
             expect(BoardCodec.decode(null as any)).toEqual([]);

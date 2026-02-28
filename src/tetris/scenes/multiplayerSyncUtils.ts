@@ -1,5 +1,6 @@
 import { EnginePhase } from '../objects/playField';
 import type { AuthSyncState } from '../../shared/types/socketPayloads';
+import { BoardCodec } from '../net/boardCodec';
 
 interface BootstrapSelfSnapshot {
     score: number;
@@ -51,14 +52,17 @@ export function shouldSkipResyncByAck(serverAckInputSeq: number | undefined, loc
 
 export function computeResyncMismatchState(params: {
     localBoard: string;
-    remoteBoard: string;
+    remoteBoard: string | Uint8Array | ArrayBuffer;
     tick: number;
     mismatchStreak: number;
     needsAuthoritativeResync: boolean;
     mismatchThreshold: number;
     minTick?: number;
 }): { mismatchStreak: number; needsAuthoritativeResync: boolean } {
-    if (params.localBoard === params.remoteBoard) {
+    const isMatch = typeof params.remoteBoard === 'string'
+        ? params.localBoard === params.remoteBoard
+        : BoardCodec.areUint8ArraysEqual(BoardCodec.stringToBinary(params.localBoard), params.remoteBoard);
+    if (isMatch) {
         return {
             mismatchStreak: 0,
             needsAuthoritativeResync: params.needsAuthoritativeResync,

@@ -51,8 +51,8 @@ type PlayerState = {
     lastSeq: number;
 };
 
-type SyncState = {
-    boardCore: string;
+export type SyncState = {
+    boardCore: string | Uint8Array | ArrayBuffer;
     active: {
         type: PieceType;
         rotate: Rotation;
@@ -478,7 +478,7 @@ function syncSnapshot(player: PlayerState): SyncState {
     };
 }
 
-function snapshot(player: PlayerState): { board: string; score: number; level: number; lines: number; isAlive: boolean } {
+function snapshot(player: PlayerState): { board: string | Uint8Array; score: number; level: number; lines: number; isAlive: boolean } {
     return {
         board: boardString(player),
         score: player.score,
@@ -578,8 +578,8 @@ export class AuthoritativeMatch {
 
     getSnapshotFor(playerKey: PlayerKey): {
         tick: number;
-        self: { board: string; score: number; level: number; lines: number; isAlive: boolean; sync: SyncState };
-        opponent: { board: string; score: number; level: number; lines: number; isAlive: boolean };
+        self: { board: string | Uint8Array; score: number; level: number; lines: number; isAlive: boolean; sync: SyncState };
+        opponent: { board: string | Uint8Array; score: number; level: number; lines: number; isAlive: boolean };
     } {
         const self = this.players[playerKey];
         const opponent = playerKey === 'p1' ? this.players.p2 : this.players.p1;

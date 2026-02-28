@@ -1,7 +1,8 @@
-import { CONST, InputState } from "../const/const";
+import { CONST, InputDirection, InputState } from "../const/const";
 import { MiniPlayField } from "../objects/miniPlayField";
 import { BasePlayScene } from "./basePlayScene";
 import { SnapshotManager } from "../net/snapshotManager";
+import { SocketListenerRegistry } from "../net/socketListenerRegistry";
 import {
     createGameLayout,
     calcNMultiPlayerPosition,
@@ -43,6 +44,7 @@ export class NMultiPlayScene extends BasePlayScene {
     private initialAuthSnapshot: NMultiAuthSnapshotPayload | null = null;
     private bootstrapRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> | null = null;
     private awaitingInitialAuthSnapshot: boolean = false;
+    private readonly socketListeners = new SocketListenerRegistry();
 
     constructor() {
         super({ key: "NMultiPlayScene" });
@@ -161,7 +163,9 @@ export class NMultiPlayScene extends BasePlayScene {
     }
 
     private setupSocketEvents(): void {
-        this.socket.on('nmulti_snapshot', (data: unknown) => {
+        this.socketListeners.clear(this.socket);
+
+        this.socketListeners.bind(this.socket, 'nmulti_snapshot', (data: unknown) => {
             if (!isNMultiSnapshotPayload(data)) return;
 
             const { needsFullSync } = this.snapshotManager.applySnapshot(data);
@@ -191,7 +195,7 @@ export class NMultiPlayScene extends BasePlayScene {
             this.updateRanks();
         });
 
-        this.socket.on('nmulti_auth_snapshot', (data: unknown) => {
+        this.socketListeners.bind(this.socket, 'nmulti_auth_snapshot', (data: unknown) => {
             if (!isNMultiAuthSnapshotPayload(data)) return;
             this.applyInitialAuthoritativeSnapshotFromLiveTick(data);
             const maybeApplyAuthoritativeHud = (this.engine as unknown as { applyAuthoritativeHud?: (payload: {
@@ -218,7 +222,7 @@ export class NMultiPlayScene extends BasePlayScene {
             }
         });
 
-        this.socket.on('nmulti_restarted', (data: unknown) => {
+        this.socketListeners.bind(this.socket, 'nmulti_restarted', (data: unknown) => {
             if (!data || typeof data !== 'object') {
                 return;
             }
@@ -244,7 +248,7 @@ export class NMultiPlayScene extends BasePlayScene {
             });
         });
 
-        this.socket.on('nmulti_player_joined', (data: unknown) => {
+        this.socketListeners.bind(this.socket, 'nmulti_player_joined', (data: unknown) => {
             if (!isNMultiPlayerJoinedPayload(data)) return;
             if (!this.miniFields.has(data.playerId)) {
                 this.addMiniField(data.playerId, data.playerName);
@@ -252,7 +256,7 @@ export class NMultiPlayScene extends BasePlayScene {
             }
         });
 
-        this.socket.on('nmulti_player_left', (data: unknown) => {
+        this.socketListeners.bind(this.socket, 'nmulti_player_left', (data: unknown) => {
             if (!isNMultiPlayerLeftPayload(data)) return;
             const mini = this.miniFields.get(data.playerId);
             if (mini) {
@@ -264,7 +268,7 @@ export class NMultiPlayScene extends BasePlayScene {
             }
         });
 
-        this.socket.on('nmulti_receive_garbage', (data: unknown) => {
+        this.socketListeners.bind(this.socket, 'nmulti_receive_garbage', (data: unknown) => {
             if (!isNMultiReceiveGarbagePayload(data)) return;
             if (this.playField && this.isGameRunning && !this.isGameEnded) {
                 this.playField.insertGarbage(data.count);
@@ -437,14 +441,7 @@ export class NMultiPlayScene extends BasePlayScene {
 
     private shutdown(): void {
         this.unbindVisibilitySync();
-        if (this.socket) {
-            this.socket.off('nmulti_snapshot');
-            this.socket.off('nmulti_auth_snapshot');
-            this.socket.off('nmulti_restarted');
-            this.socket.off('nmulti_player_joined');
-            this.socket.off('nmulti_player_left');
-            this.socket.off('nmulti_receive_garbage');
-        }
+        this.socketListeners.clear(this.socket);
         for (const [, mini] of this.miniFields) {
             mini.destroy();
         }
@@ -552,7 +549,7 @@ export class NMultiPlayScene extends BasePlayScene {
         return alive[Math.floor(Math.random() * alive.length)];
     }
 
-    protected onInput(direction: string, state: InputState): void {
+    protected onInput(direction: InputDirection, state: InputState): void {
         if (this.socket && this.isGameRunning && !this.isGameEnded) {
             const isOneShot = this.isOneShotInput(direction);
             if (!isOneShot || state === InputState.PRESS) {

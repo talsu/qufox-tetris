@@ -1,5 +1,5 @@
 
-import { CONST, InputState, getBlockSize } from "../const/const";
+import { CONST, InputDirection, InputState, getBlockSize } from "../const/const";
 
 /**
  * Manages Keyboard and Touch input for the Tetris game.
@@ -7,7 +7,7 @@ import { CONST, InputState, getBlockSize } from "../const/const";
  */
 export class InputManager {
     private scene: Phaser.Scene;
-    private onInputCallback: (direction: string, state: InputState) => void;
+    private onInputCallback: (direction: InputDirection, state: InputState) => void;
 
     // Keys
     private keys: {
@@ -35,6 +35,9 @@ export class InputManager {
     private lastPointerX: number = 0;
     private lastPointerY: number = 0;
     private isTap: boolean = false;
+    private pointerDownHandler: ((pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => void) | null = null;
+    private pointerMoveHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
+    private pointerUpHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
 
     // Flags
     public isEnabled: boolean = true;
@@ -43,7 +46,7 @@ export class InputManager {
     // Sensitivity
     private DRAG_THRESHOLD_SCALE = 2;
 
-    constructor(scene: Phaser.Scene, onInputCallback: (direction: string, state: InputState) => void) {
+    constructor(scene: Phaser.Scene, onInputCallback: (direction: InputDirection, state: InputState) => void) {
         this.scene = scene;
         this.onInputCallback = onInputCallback;
         this.BLOCK_SIZE = getBlockSize();
@@ -73,7 +76,7 @@ export class InputManager {
         this.scene.input.addPointer(1);
         this.scene.game.canvas.style.touchAction = 'none';
 
-        this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+        this.pointerDownHandler = (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
             if (!this.isEnabled) return;
             if (currentlyOver && currentlyOver.length > 0) return;
 
@@ -83,9 +86,10 @@ export class InputManager {
             this.lastPointerX = pointer.worldX;
             this.lastPointerY = pointer.worldY;
             this.isTap = true;
-        });
+        };
+        this.scene.input.on('pointerdown', this.pointerDownHandler);
 
-        this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+        this.pointerMoveHandler = (pointer: Phaser.Input.Pointer) => {
             if (!this.isEnabled || !pointer.isDown) return;
 
             const dist = Phaser.Math.Distance.Between(this.touchStartX, this.touchStartY, pointer.worldX, pointer.worldY);
@@ -115,9 +119,10 @@ export class InputManager {
                 }
                 this.lastPointerY = pointer.worldY;
             }
-        });
+        };
+        this.scene.input.on('pointermove', this.pointerMoveHandler);
 
-        this.scene.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        this.pointerUpHandler = (pointer: Phaser.Input.Pointer) => {
             if (!this.isEnabled) return;
 
             const duration = pointer.time - this.touchStartTime;
@@ -146,10 +151,11 @@ export class InputManager {
                     this.scene.time.delayedCall(100, () => this.emitInput('hardDrop', InputState.RELEASE));
                 }
             }
-        });
+        };
+        this.scene.input.on('pointerup', this.pointerUpHandler);
     }
 
-    private emitInput(direction: string, state: InputState) {
+    private emitInput(direction: InputDirection, state: InputState) {
         if (this.onInputCallback) {
             this.onInputCallback(direction, state);
         }
@@ -162,7 +168,7 @@ export class InputManager {
     /*
         https://tetris.wiki/DAS
     */
-    private chargeDAS(input: string, isPressed: boolean, time: number, init?: number, repeat?: number) {
+    private chargeDAS(input: InputDirection, isPressed: boolean, time: number, init?: number, repeat?: number) {
         if (!this.dasFlags[input]) this.dasFlags[input] = 0;
         const oldValue = this.dasFlags[input];
 
@@ -204,5 +210,20 @@ export class InputManager {
 
     public setDragThresholdScale(scale: number) {
         this.DRAG_THRESHOLD_SCALE = scale;
+    }
+
+    public destroy() {
+        if (this.pointerDownHandler) {
+            this.scene.input.off('pointerdown', this.pointerDownHandler);
+            this.pointerDownHandler = null;
+        }
+        if (this.pointerMoveHandler) {
+            this.scene.input.off('pointermove', this.pointerMoveHandler);
+            this.pointerMoveHandler = null;
+        }
+        if (this.pointerUpHandler) {
+            this.scene.input.off('pointerup', this.pointerUpHandler);
+            this.pointerUpHandler = null;
+        }
     }
 }

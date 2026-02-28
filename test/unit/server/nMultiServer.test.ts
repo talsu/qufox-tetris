@@ -583,6 +583,7 @@ describe('N-Multi Server Logic', () => {
                 playerId: socketId,
                 playerName,
                 roomName: room.name,
+                botLevel: room.players?.[socketId]?.botLevel ?? 0,
                 players: getPlayersMap(room, socketId)
             };
         }
@@ -603,6 +604,7 @@ describe('N-Multi Server Logic', () => {
             expect(response.roomName).toBe('Created Room');
             expect(response.roomId).toBe(roomId);
             expect(response.playerId).toBe(socketId);
+            expect(response.botLevel).toBe(0);
             expect(Object.keys(response.players)).toHaveLength(0);
         });
 
@@ -682,6 +684,36 @@ describe('N-Multi Server Logic', () => {
 
             const response = buildRoomJoinedResponse(nMultiRooms[roomId], 'socket1', 'Player1');
             expect(response.roomName).toBe('테스트 방 #1');
+        });
+    });
+
+    describe('Socket Rejoin Safety', () => {
+        function addOrReusePlayer(room: any, socketId: string) {
+            const existingPlayerId = room.bySocket[socketId];
+            if (existingPlayerId && room.players[existingPlayerId]) {
+                return { playerId: existingPlayerId, isNew: false };
+            }
+            const playerId = `p-${Object.keys(room.players).length + 1}`;
+            room.players[playerId] = { id: playerId };
+            room.bySocket[socketId] = playerId;
+            return { playerId, isNew: true };
+        }
+
+        test('rejoining from same socket reuses existing player mapping', () => {
+            const room = {
+                players: {
+                    'p-1': { id: 'p-1' },
+                },
+                bySocket: {
+                    s1: 'p-1',
+                },
+            };
+
+            const result = addOrReusePlayer(room, 's1');
+            expect(result.isNew).toBe(false);
+            expect(result.playerId).toBe('p-1');
+            expect(Object.keys(room.players)).toHaveLength(1);
+            expect(room.bySocket.s1).toBe('p-1');
         });
     });
 });

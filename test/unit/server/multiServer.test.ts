@@ -34,7 +34,7 @@ describe('1v1 Multi Server Logic', () => {
         };
         return {
             roomId,
-            response: { roomId, isHost: true, roomName }
+            response: { roomId, isHost: true, roomName, botLevel: 0 }
         };
     }
 
@@ -50,7 +50,7 @@ describe('1v1 Multi Server Logic', () => {
             room.status = 'playing';
             return {
                 success: true,
-                response: { roomId, isHost: joinedAsHost, roomName: room.name }
+                response: { roomId, isHost: joinedAsHost, roomName: room.name, botLevel: 0 }
             };
         }
         return { success: false, error: 'Room is full or does not exist.' };
@@ -72,7 +72,7 @@ describe('1v1 Multi Server Logic', () => {
             room.status = 'playing';
             return {
                 roomId: existingRoomId,
-                response: { roomId: existingRoomId, isHost: false, roomName: room.name },
+                response: { roomId: existingRoomId, isHost: false, roomName: room.name, botLevel: 0 },
                 created: false
             };
         } else {
@@ -86,7 +86,7 @@ describe('1v1 Multi Server Logic', () => {
             };
             return {
                 roomId,
-                response: { roomId, isHost: true, roomName },
+                response: { roomId, isHost: true, roomName, botLevel: 0 },
                 created: true
             };
         }
@@ -317,6 +317,10 @@ describe('1v1 Multi Server Logic', () => {
     });
 
     describe('Restart Logic', () => {
+        function canRequestRestart(room: any, socketId: string): boolean {
+            return room.p1 === socketId || room.p2 === socketId;
+        }
+
         test('resets both ready states on restart', () => {
             const { roomId } = createRoom('socket1', 'My Room');
             joinRoom('socket2', roomId);
@@ -331,6 +335,16 @@ describe('1v1 Multi Server Logic', () => {
 
             expect(room.p1Ready).toBe(false);
             expect(room.p2Ready).toBe(false);
+        });
+
+        test('rejects restart from non-member socket', () => {
+            const { roomId } = createRoom('socket1', 'My Room');
+            joinRoom('socket2', roomId);
+            const room = rooms[roomId];
+
+            expect(canRequestRestart(room, 'outsider')).toBe(false);
+            expect(canRequestRestart(room, 'socket1')).toBe(true);
+            expect(canRequestRestart(room, 'socket2')).toBe(true);
         });
     });
 
@@ -386,7 +400,8 @@ describe('1v1 Multi Server Logic', () => {
             expect(response).toEqual({
                 roomId: expect.any(String),
                 isHost: true,
-                roomName: 'Test Room'
+                roomName: 'Test Room',
+                botLevel: 0,
             });
         });
 
@@ -396,7 +411,8 @@ describe('1v1 Multi Server Logic', () => {
             expect(result.response).toEqual({
                 roomId,
                 isHost: false,
-                roomName: 'Test Room'
+                roomName: 'Test Room',
+                botLevel: 0,
             });
         });
 

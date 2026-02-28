@@ -1,3 +1,5 @@
+import { InputDirection, InputState, isInputDirection } from "../../tetris/const/const";
+
 export interface RoomScopedPayload {
     roomId: string;
 }
@@ -14,8 +16,8 @@ export interface ResumeAuthPayload {
 }
 
 export interface AuthInputPayload extends RoomScopedPayload {
-    direction: string;
-    state: string;
+    direction: InputDirection;
+    state: InputState;
     seq?: number;
 }
 
@@ -124,8 +126,8 @@ export interface NMultiUpdateStatePayload extends RoomScopedPayload {
 }
 
 export interface NMultiAuthInputPayload extends RoomScopedPayload {
-    direction: string;
-    state: string;
+    direction: InputDirection;
+    state: InputState;
     seq?: number;
 }
 
@@ -150,8 +152,18 @@ export interface NMultiPlayerPayload {
     v: number;
 }
 
+export interface NMultiPlayerDeltaPayload {
+    name?: string;
+    score?: number;
+    level?: number;
+    lines?: number;
+    board?: string | Uint8Array | ArrayBuffer | null;
+    isAlive?: boolean;
+    v?: number;
+}
+
 export interface NMultiSnapshotPayload {
-    players: Record<string, Partial<NMultiPlayerPayload>>;
+    players: Record<string, NMultiPlayerDeltaPayload>;
     isDelta?: boolean;
 }
 
@@ -192,6 +204,7 @@ export interface OneVsOneRoomJoinedPayload {
     isHost: boolean;
     roomName: string;
     resumeToken: string;
+    botLevel: number;
     authSeed?: number | null;
     authSnapshot?: AuthSnapshotPayload;
 }
@@ -203,6 +216,7 @@ export interface NMultiRoomJoinedPayload {
     roomName: string;
     players: Record<string, NMultiPlayerPayload>;
     authSeed: number;
+    botLevel: number;
     authSnapshot: NMultiAuthSnapshotPayload;
 }
 
@@ -258,10 +272,8 @@ export function isAuthInputPayload(value: unknown): value is AuthInputPayload {
     if (!hasRoomId(value) || !isRecord(value)) {
         return false;
     }
-    return typeof value.direction === 'string'
-        && value.direction.length > 0
-        && typeof value.state === 'string'
-        && value.state.length > 0
+    return isInputDirection(value.direction)
+        && isInputState(value.state)
         && (value.seq === undefined || Number.isFinite(value.seq));
 }
 
@@ -284,6 +296,12 @@ function isStringRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteOrUndefined(value: unknown): boolean {
     return value === undefined || Number.isFinite(value);
+}
+
+function isInputState(value: unknown): value is InputState {
+    return value === InputState.PRESS
+        || value === InputState.RELEASE
+        || value === InputState.HOLD;
 }
 
 function isAuthSnapshotStats(value: unknown): value is AuthSnapshotStats {
@@ -344,6 +362,21 @@ function isNMultiPlayerPayload(value: unknown): value is NMultiPlayerPayload {
 function isNMultiPlayersMap(value: unknown): value is Record<string, NMultiPlayerPayload> {
     if (!isRecord(value)) return false;
     return Object.values(value).every((entry) => isNMultiPlayerPayload(entry));
+}
+
+function isNMultiPlayerDeltaPayload(value: unknown): value is NMultiPlayerDeltaPayload {
+    if (!isRecord(value)) return false;
+    const boardOk = value.board === undefined
+        || value.board === null
+        || typeof value.board === 'string'
+        || isBinaryLike(value.board);
+    return (value.name === undefined || typeof value.name === 'string')
+        && (value.score === undefined || Number.isFinite(value.score))
+        && (value.level === undefined || Number.isFinite(value.level))
+        && (value.lines === undefined || Number.isFinite(value.lines))
+        && boardOk
+        && (value.isAlive === undefined || typeof value.isAlive === 'boolean')
+        && (value.v === undefined || Number.isFinite(value.v));
 }
 
 function isAuthSyncState(value: unknown): value is AuthSyncState {
@@ -459,7 +492,7 @@ export function isNMultiSnapshotPayload(value: unknown): value is NMultiSnapshot
     if (!isRecord(value)) return false;
     if (!isStringRecord(value.players)) return false;
     if (value.isDelta !== undefined && typeof value.isDelta !== 'boolean') return false;
-    return true;
+    return Object.values(value.players).every((entry) => isNMultiPlayerDeltaPayload(entry));
 }
 
 export function isRoomResumedPayload(value: unknown): value is RoomResumedPayload {
@@ -489,10 +522,8 @@ export function isNMultiAuthInputPayload(value: unknown): value is NMultiAuthInp
     if (!hasRoomId(value) || !isRecord(value)) {
         return false;
     }
-    return typeof value.direction === 'string'
-        && value.direction.length > 0
-        && typeof value.state === 'string'
-        && value.state.length > 0
+    return isInputDirection(value.direction)
+        && isInputState(value.state)
         && (value.seq === undefined || Number.isFinite(value.seq));
 }
 
@@ -518,6 +549,7 @@ export function isOneVsOneRoomJoinedPayload(value: unknown): value is OneVsOneRo
         && typeof value.roomName === 'string'
         && typeof value.resumeToken === 'string'
         && value.resumeToken.length > 0
+        && Number.isFinite(value.botLevel)
         && (value.authSeed === undefined || value.authSeed === null || Number.isFinite(value.authSeed))
         && (value.authSnapshot === undefined || isAuthSnapshotPayload(value.authSnapshot));
 }
@@ -531,6 +563,7 @@ export function isNMultiRoomJoinedPayload(value: unknown): value is NMultiRoomJo
         && typeof value.playerName === 'string'
         && typeof value.roomName === 'string'
         && Number.isFinite(value.authSeed)
+        && Number.isFinite(value.botLevel)
         && isNMultiPlayersMap(value.players)
         && isNMultiAuthSnapshotPayload(value.authSnapshot);
 }

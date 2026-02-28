@@ -1,6 +1,7 @@
 import { PlayField } from '../objects/playField';
 import { BoardCodec } from '../net/boardCodec';
-import { CONST, getBlockSize } from "../const/const";
+import { SocketListenerRegistry } from '../net/socketListenerRegistry';
+import { CONST, getBlockSize, InputDirection, InputState } from "../const/const";
 import { BasePlayScene } from "./basePlayScene";
 import { BotManager } from "../logic/botManager";
 import {
@@ -53,6 +54,7 @@ export class PlayScene extends BasePlayScene {
     private visibilityHandler: (() => void) | null = null;
     private bootstrapRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> | null = null;
     private awaitingInitialAuthSnapshot: boolean = false;
+    private readonly socketListeners = new SocketListenerRegistry();
 
     private readonly MAIN_SCALE = 1;
     private readonly SIDE_SCALE = 1;
@@ -321,15 +323,16 @@ export class PlayScene extends BasePlayScene {
     private setupMultiplayer(): void {
         this.statusText.setText('Waiting for opponent...');
         if (!this.socket) return;
+        this.socketListeners.clear(this.socket);
         this.bindVisibilitySync();
 
-        this.socket.on('connect', () => {
+        this.socketListeners.bind(this.socket, 'connect', () => {
             if (this.resumeToken) {
                 this.socket.emit('resume_auth', { resumeToken: this.resumeToken });
             }
         });
 
-        this.socket.on('room_resumed', (data: unknown) => {
+        this.socketListeners.bind(this.socket, 'room_resumed', (data: unknown) => {
             if (!isRoomResumedPayload(data)) return;
             const shouldApplyResumeSync = this.needsAuthoritativeResync;
             if (data.resumeToken) {
@@ -367,7 +370,7 @@ export class PlayScene extends BasePlayScene {
             }
         });
 
-        this.socket.on('game_start', (startData: unknown) => {
+        this.socketListeners.bind(this.socket, 'game_start', (startData: unknown) => {
             if (this.isGameRunning) return;
             if (!isGameStartPayload(startData)) return;
 
@@ -397,7 +400,7 @@ export class PlayScene extends BasePlayScene {
             this.startGame();
         });
 
-        this.socket.on('opponent_state_update', (data) => {
+        this.socketListeners.bind(this.socket, 'opponent_state_update', (data) => {
             if (this.useAuthoritativeServer) return;
             if (this.opponentPlayField) {
                 if (typeof data.board === 'string') {
@@ -409,7 +412,7 @@ export class PlayScene extends BasePlayScene {
             }
         });
 
-        this.socket.on('receive_garbage', (data) => {
+        this.socketListeners.bind(this.socket, 'receive_garbage', (data) => {
             if (this.useAuthoritativeServer) return;
             if (this.playField) {
                 this.playField.insertGarbage(data.count);
@@ -417,13 +420,13 @@ export class PlayScene extends BasePlayScene {
             }
         });
 
-        this.socket.on('opponent_game_over', () => {
+        this.socketListeners.bind(this.socket, 'opponent_game_over', () => {
             if (!this.isGameRunning || this.isGameEnded) return;
             const score = this.engine ? this.engine.getScore() : 0;
             this.showEndGameMessage('YOU WIN!', '#00ff00', score);
         });
 
-        this.socket.on('auth_snapshot', (data: unknown) => {
+        this.socketListeners.bind(this.socket, 'auth_snapshot', (data: unknown) => {
             if (!this.useAuthoritativeServer || !this.playField || !this.opponentPlayField) return;
             if (!isAuthSnapshotPayload(data)) return;
 
@@ -464,7 +467,7 @@ export class PlayScene extends BasePlayScene {
             }
         });
 
-        this.socket.on('auth_receive_garbage', (data: unknown) => {
+        this.socketListeners.bind(this.socket, 'auth_receive_garbage', (data: unknown) => {
             if (!this.useAuthoritativeServer || !this.playField || !this.isGameRunning || this.isGameEnded) return;
             if (!isNMultiReceiveGarbagePayload(data)) return;
             const count = Number(data.count || 0);
@@ -473,7 +476,7 @@ export class PlayScene extends BasePlayScene {
             this.cameras.main.shake(200, 0.01);
         });
 
-        this.socket.on('auth_round_over', (data: unknown) => {
+        this.socketListeners.bind(this.socket, 'auth_round_over', (data: unknown) => {
             if (!this.useAuthoritativeServer || !this.isGameRunning || this.isGameEnded) return;
             if (!isAuthRoundOverPayload(data)) return;
 
@@ -489,7 +492,7 @@ export class PlayScene extends BasePlayScene {
             this.showEndGameMessage(didWin ? 'YOU WIN!' : 'GAME OVER', didWin ? '#00ff00' : '#ff0000', score);
         });
 
-        this.socket.on('restart_signal', () => {
+        this.socketListeners.bind(this.socket, 'restart_signal', () => {
             this.scene.restart({
                 mode: 'multi',
                 socket: this.socket,
@@ -503,7 +506,7 @@ export class PlayScene extends BasePlayScene {
             });
         });
 
-        this.socket.on('opponent_disconnected', (data?: { message?: string }) => {
+        this.socketListeners.bind(this.socket, 'opponent_disconnected', (data?: { message?: string }) => {
             this.handleOpponentDisconnected(data?.message);
         });
 
@@ -618,19 +621,7 @@ export class PlayScene extends BasePlayScene {
 
     private shutdown(): void {
         this.unbindVisibilitySync();
-        if (this.socket) {
-            this.socket.off('game_start');
-            this.socket.off('connect');
-            this.socket.off('room_resumed');
-            this.socket.off('opponent_state_update');
-            this.socket.off('receive_garbage');
-            this.socket.off('opponent_game_over');
-            this.socket.off('restart_signal');
-            this.socket.off('opponent_disconnected');
-            this.socket.off('auth_snapshot');
-            this.socket.off('auth_receive_garbage');
-            this.socket.off('auth_round_over');
-        }
+        this.socketListeners.clear(this.socket);
         this.hideDisconnectNotice();
         this.shutdownBase();
     }
@@ -774,9 +765,9 @@ export class PlayScene extends BasePlayScene {
         }
     }
 
-    protected onInput(direction: string, state: any): void {
+    protected onInput(direction: InputDirection, state: InputState): void {
         if (this.mode === 'multi' && this.useAuthoritativeServer && this.socket && this.isGameRunning && !this.isGameEnded) {
-            if (this.isOneShotInput(direction) && state !== 'press') {
+            if (this.isOneShotInput(direction) && state !== InputState.PRESS) {
                 super.onInput(direction, state);
                 return;
             }

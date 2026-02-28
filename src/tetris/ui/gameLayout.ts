@@ -1,4 +1,4 @@
-import { CONST, getBlockSize, InputState } from "../const/const";
+import { CONST, getBlockSize, InputDirection, InputState } from "../const/const";
 import { PlayField } from "../objects/playField";
 import { TetrominoBox } from "../objects/tetrominoBox";
 import { TetrominoBoxQueue } from "../objects/tetrominoBoxQueue";
@@ -90,7 +90,7 @@ export interface GameLayoutOptions {
     /** Scale for side panels: hold, queue, indicator (default 1) */
     sideScale?: number;
     /** Callback for hold touch zone input */
-    onHoldInput: (direction: string, state: InputState) => void;
+    onHoldInput: (direction: InputDirection, state: InputState) => void;
     /** Guard function to check if input should be accepted */
     isInputBlocked: () => boolean;
     /** Layout mode for responsive positioning */

@@ -44,6 +44,16 @@ describe('socket payload guards', () => {
             state: 'press',
             seq: 'bad',
         })).toBe(false);
+        expect(isAuthInputPayload({
+            roomId: 'room-1',
+            direction: 'invalid',
+            state: 'press',
+        })).toBe(false);
+        expect(isAuthInputPayload({
+            roomId: 'room-1',
+            direction: 'left',
+            state: 'invalid',
+        })).toBe(false);
     });
 
     test('validates resume and room-scoped payloads', () => {
@@ -156,6 +166,8 @@ describe('socket payload guards', () => {
     test('validates n-multi snapshot and player event payloads', () => {
         expect(isNMultiSnapshotPayload({ players: { a: { score: 1 } }, isDelta: true })).toBe(true);
         expect(isNMultiSnapshotPayload({ players: null })).toBe(false);
+        expect(isNMultiSnapshotPayload({ players: { a: null } })).toBe(false);
+        expect(isNMultiSnapshotPayload({ players: { a: { score: 'bad' } } })).toBe(false);
 
         expect(isNMultiPlayerJoinedPayload({ playerId: 'a', playerName: 'Alpha' })).toBe(true);
         expect(isNMultiPlayerJoinedPayload({ playerId: '', playerName: 'Alpha' })).toBe(false);
@@ -173,6 +185,7 @@ describe('socket payload guards', () => {
             isHost: true,
             roomName: 'My Room',
             resumeToken: 'resume-123',
+            botLevel: 0,
         };
         expect(isOneVsOneRoomJoinedPayload(oneVsOnePayload)).toBe(true);
         expect(isOneVsOneRoomJoinedPayload({ ...oneVsOnePayload, resumeToken: '' })).toBe(false);
@@ -196,6 +209,7 @@ describe('socket payload guards', () => {
             playerName: 'Alpha',
             roomName: 'Battle',
             authSeed: 123,
+            botLevel: 10,
             authSnapshot: nMultiAuthSnapshot,
             players: {
                 'player-2': {

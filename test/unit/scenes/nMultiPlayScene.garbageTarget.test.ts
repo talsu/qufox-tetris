@@ -1,10 +1,24 @@
 import { NMultiPlayScene } from '../../../src/tetris/scenes/nMultiPlayScene';
 import { SnapshotManager } from '../../../src/tetris/net/snapshotManager';
 
-function makeScene(selfId: string, opponents: Record<string, any>): any {
+function makeScene(selfId: string, opponents: Record<string, { isAlive: boolean }>): any {
     const scene = new NMultiPlayScene() as any;
     scene.playerId = selfId;
-    scene.snapshotManager = new SnapshotManager(selfId, opponents);
+    const normalizedOpponents = Object.fromEntries(
+        Object.entries(opponents).map(([id, payload]) => [
+            id,
+            {
+                name: id,
+                score: 0,
+                level: 1,
+                lines: 0,
+                board: null,
+                isAlive: payload.isAlive,
+                v: 1,
+            },
+        ]),
+    );
+    scene.snapshotManager = new SnapshotManager(selfId, normalizedOpponents);
     return scene;
 }
 

@@ -132,6 +132,17 @@ describe('LeaderboardPanel', () => {
         expect(scoreEl!.textContent).toBe('12345');
     });
 
+    test('renders user names as text without HTML injection', () => {
+        const entries: LeaderboardEntry[] = [
+            { playerId: 'p1', name: '<img src=x onerror=alert(1)>', score: 10, isAlive: true },
+        ];
+        panel.update(entries);
+
+        const injectedImage = document.querySelector('.lb-name img');
+        expect(injectedImage).toBeNull();
+        expect(document.querySelector('.lb-name')!.textContent).toBe('<img src=x onerror=alert(1)>');
+    });
+
     test('destroy removes container from DOM', () => {
         expect(document.querySelector('.nmulti-leaderboard')).not.toBeNull();
         panel.destroy();

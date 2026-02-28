@@ -1,26 +1,13 @@
-import {CONST, TetrominoType, ColRow, InputState, RotateType, getBlockSize} from "../const/const";
+import {CONST, TetrominoType, ColRow, InputDirection, InputState, RotateType, getBlockSize} from "../const/const";
 import {ObjectBase} from './objectBase';
 import {Tetromino} from "./tetromino";
 import {PlayFieldEffects} from "../view/playFieldEffects";
 import {PlayFieldPopup} from "../view/playFieldPopup";
 import {GarbageGenerator} from "../logic/garbageGenerator";
-import { BoardCodec } from "../net/boardCodec";
+import { BoardBlock, BoardCodec } from "../net/boardCodec";
 
 
 const BLOCK_SIZE = getBlockSize();
-const TYPE_TO_CHAR: Record<string, string> = {
-    [TetrominoType.I]: 'I',
-    [TetrominoType.J]: 'J',
-    [TetrominoType.L]: 'L',
-    [TetrominoType.O]: 'O',
-    [TetrominoType.S]: 'S',
-    [TetrominoType.T]: 'T',
-    [TetrominoType.Z]: 'Z',
-    [TetrominoType.GARBAGE]: 'G',
-};
-
-
-
 export enum EnginePhase {
     GENERATION = 'Generation',
     FALLING = 'Falling',
@@ -236,7 +223,7 @@ export class PlayField extends ObjectBase {
      * @param {string} input - input value (ex. Z, X, C, UP, Down...)
      * @param {InputState} state - state (ex, PRESS -> HOLD -> HOLD -> RELEASE)
      */
-    onInput(input: string, state: InputState) {
+    onInput(input: InputDirection, state: InputState) {
         // If active tetromino is not exists, ignore input.
         if (!this.activeTetromino) return;
 
@@ -436,8 +423,8 @@ export class PlayField extends ObjectBase {
     /**
      * Serialize field state.
      */
-    serialize(): any[] {
-        const result = [];
+    serialize(): BoardBlock[] {
+        const result: BoardBlock[] = [];
 
         // Collect inactive blocks
         this.inactiveTetrominos.forEach(t => {
@@ -463,36 +450,16 @@ export class PlayField extends ObjectBase {
      * Serialize field state to 200-char encoded board string.
      */
     serializeEncoded(): string {
-        const grid = new Array(200).fill('0');
-
-        const writeBlocks = (tetromino: Tetromino, type: TetrominoType) => {
-            const blocks = tetromino.getBlocks();
-            const encodedType = TYPE_TO_CHAR[type] || '0';
-            for (const [col, row] of blocks) {
-                if (row >= 0 && row < CONST.PLAY_FIELD.ROW_COUNT && col >= 0 && col < CONST.PLAY_FIELD.COL_COUNT) {
-                    grid[row * CONST.PLAY_FIELD.COL_COUNT + col] = encodedType;
-                }
-            }
-        };
-
-        for (const tetromino of this.inactiveTetrominos) {
-            writeBlocks(tetromino, tetromino.type);
-        }
-
-        if (this.activeTetromino) {
-            writeBlocks(this.activeTetromino, this.activeTetromino.type);
-        }
-
-        return grid.join('');
+        return BoardCodec.encode(this.serialize());
     }
 
     /**
      * Deserialize field state (for opponent view).
      */
-    deserialize(blocks: any[]) {
+    deserialize(blocks: BoardBlock[] | null | undefined) {
         this.clear(); // Clears all tetrominos
-        
-        if (!blocks || blocks.length === 0) return;
+
+        if (!Array.isArray(blocks) || blocks.length === 0) return;
         
         // Create a single dummy tetromino to display these blocks.
         // Initialize at (0, 0) to match absolute coordinates from server.

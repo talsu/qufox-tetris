@@ -4,6 +4,24 @@ export enum RotateType { UP = "0", LEFT = "L", DOWN = "2", RIGHT = "R" }
 
 export enum InputState { PRESS = "press", RELEASE = "release", HOLD = "hold" }
 
+export const INPUT_DIRECTIONS = [
+    'left',
+    'right',
+    'softDrop',
+    'hardDrop',
+    'clockwise',
+    'anticlockwise',
+    'hold',
+] as const;
+
+export type InputDirection = typeof INPUT_DIRECTIONS[number];
+
+const INPUT_DIRECTION_SET = new Set<string>(INPUT_DIRECTIONS);
+
+export function isInputDirection(value: unknown): value is InputDirection {
+    return typeof value === 'string' && INPUT_DIRECTION_SET.has(value);
+}
+
 export enum BackgroundTheme {
     AURORA = "aurora",
     LASER_GRID = "laser-grid",

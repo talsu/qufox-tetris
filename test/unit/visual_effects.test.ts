@@ -31,6 +31,7 @@ const mockScene = {
         graphics: jest.fn(() => mockGraphics),
         container: jest.fn(() => ({
             add: jest.fn(),
+            bringToTop: jest.fn(),
             width: 0,
             height: 0,
             setMask: jest.fn(),

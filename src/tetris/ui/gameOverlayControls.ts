@@ -78,32 +78,24 @@ export class GameOverlayControls {
         cam.preRender();
 
         const zoom = cam.zoom || 1;
-        const worldPerPixel = 1 / zoom;
         const viewX = cam.worldView.x;
         const viewY = cam.worldView.y;
         const viewWidthPx = cam.width;
+        const viewWidth = cam.width / zoom;
 
         const isMobilePortrait = this.resolveIsMobilePortrait();
-        const barHeightPx = Math.round(getBlockSize() * 1.5);
+        const barHeight = getBlockSize() * 1.6;
+        const horizontalPadding = barHeight * 0.22;
+        const verticalPadding = barHeight * 0.12;
+        const menuHeight = Math.max(1, barHeight - verticalPadding * 2);
+        const menuWidth = Math.min(menuHeight * 2.45, Math.max(menuHeight * 1.9, viewWidth * 0.26));
 
-        const horizontalPaddingPx = Math.max(8, Math.round(barHeightPx * 0.35));
-        const verticalPaddingPx = Math.max(2, Math.round(barHeightPx * 0.12));
-        const menuHeightPx = Math.max(18, barHeightPx - verticalPaddingPx * 2);
-        const menuWidthPx = Math.max(56, Math.round(menuHeightPx * 2.45));
+        const menuFontSize = Math.max(10, Math.round(menuHeight * 0.46));
+        this.menuLabel.setFontSize(`${menuFontSize}px`);
 
-        const menuFontSizePx = Math.max(11, Math.round(menuHeightPx * 0.52));
-        this.menuLabel.setFontSize(`${Math.round(menuFontSizePx * worldPerPixel)}px`);
-
-        const guideFontSizePx = isMobilePortrait
-            ? Math.max(10, Math.round(menuHeightPx * 0.45))
-            : Math.max(13, Math.round(menuHeightPx * 0.5));
-
-        const barHeight = barHeightPx * worldPerPixel;
-        const horizontalPadding = horizontalPaddingPx * worldPerPixel;
-        const verticalPadding = verticalPaddingPx * worldPerPixel;
-        const menuHeight = menuHeightPx * worldPerPixel;
-        const menuWidth = menuWidthPx * worldPerPixel;
-        const viewWidth = viewWidthPx * worldPerPixel;
+        const guideFontSize = isMobilePortrait
+            ? Math.max(9, Math.round(menuHeight * 0.34))
+            : Math.max(11, Math.round(menuHeight * 0.40));
 
         this.root.setPosition(viewX, viewY);
         this.drawNavBar(viewWidth, barHeight);
@@ -113,9 +105,9 @@ export class GameOverlayControls {
         this.menuLabel.setPosition(horizontalPadding + menuWidth / 2, barHeight / 2);
         this.drawMenuButton();
 
-        const availableGuideWidth = Math.max(80 * worldPerPixel, viewWidth - (horizontalPadding * 3 + menuWidth));
+        const availableGuideWidth = Math.max(getBlockSize() * 2.5, viewWidth - (horizontalPadding * 3 + menuWidth));
         const guideParts = this.resolveGuideParts(isMobilePortrait, viewWidthPx);
-        this.renderGuide(guideParts, guideFontSizePx * worldPerPixel, availableGuideWidth);
+        this.renderGuide(guideParts, guideFontSize, availableGuideWidth);
         this.guideContainer.setPosition(viewWidth - horizontalPadding, barHeight / 2);
     }
 
@@ -146,6 +138,8 @@ export class GameOverlayControls {
         const width = this.menuHitArea.width;
         const height = this.menuHitArea.height;
         const radius = Math.max(4, Math.round(height * 0.24));
+        const insetA = Math.max(1, Math.round(height * 0.06));
+        const insetB = insetA + Math.max(1, Math.round(height * 0.04));
 
         this.menuBackground.clear();
 
@@ -156,30 +150,48 @@ export class GameOverlayControls {
         this.menuBackground.fillRoundedRect(x, y, width, height, radius);
 
         this.menuBackground.fillStyle(innerColor, this.menuPressed ? 0.85 : 0.9);
-        this.menuBackground.fillRoundedRect(x + 2, y + 2, Math.max(1, width - 4), Math.max(1, height - 4), Math.max(2, radius - 2));
+        this.menuBackground.fillRoundedRect(
+            x + insetA,
+            y + insetA,
+            Math.max(1, width - insetA * 2),
+            Math.max(1, height - insetA * 2),
+            Math.max(2, radius - insetA),
+        );
 
         this.menuBackground.fillStyle(0xffffff, this.menuPressed ? 0.08 : 0.16);
         this.menuBackground.fillRoundedRect(
-            x + 3,
-            y + 3,
-            Math.max(1, width - 6),
-            Math.max(1, (height - 6) * 0.45),
-            Math.max(2, radius - 3),
+            x + insetB,
+            y + insetB,
+            Math.max(1, width - insetB * 2),
+            Math.max(1, (height - insetB * 2) * 0.45),
+            Math.max(2, radius - insetB),
         );
 
         this.menuBackground.lineStyle(2, 0xbef8ff, this.menuPressed ? 0.85 : 0.95);
-        this.menuBackground.strokeRoundedRect(x + 1, y + 1, Math.max(1, width - 2), Math.max(1, height - 2), Math.max(2, radius - 1));
+        this.menuBackground.strokeRoundedRect(
+            x + insetA / 2,
+            y + insetA / 2,
+            Math.max(1, width - insetA),
+            Math.max(1, height - insetA),
+            Math.max(2, radius - insetA / 2),
+        );
 
         this.menuBackground.lineStyle(1, 0x062334, this.menuPressed ? 0.65 : 0.5);
-        this.menuBackground.strokeRoundedRect(x + 3, y + 3, Math.max(1, width - 6), Math.max(1, height - 6), Math.max(2, radius - 3));
+        this.menuBackground.strokeRoundedRect(
+            x + insetB,
+            y + insetB,
+            Math.max(1, width - insetB * 2),
+            Math.max(1, height - insetB * 2),
+            Math.max(2, radius - insetB),
+        );
 
         if (!this.menuPressed) {
             this.menuBackground.lineStyle(1, 0x67e8f9, 0.28);
-            this.menuBackground.strokeRoundedRect(x - 1, y - 1, width + 2, height + 2, radius + 1);
+            this.menuBackground.strokeRoundedRect(x - insetA / 2, y - insetA / 2, width + insetA, height + insetA, radius + insetA / 2);
         }
 
         this.menuLabel.setColor(this.menuPressed ? '#dbeafe' : '#f0fbff');
-        this.menuLabel.setPosition(x + width / 2, y + height / 2 + (this.menuPressed ? 1 : 0));
+        this.menuLabel.setPosition(x + width / 2, y + height / 2 + (this.menuPressed ? Math.max(1, insetA * 0.5) : 0));
         this.root.bringToTop(this.menuLabel);
     }
 

@@ -1,4 +1,4 @@
-import { CONST, InputDirection, InputState } from "../const/const";
+import { CONST, getBlockSize, InputDirection, InputState } from "../const/const";
 import { MiniPlayField } from "../objects/miniPlayField";
 import { BasePlayScene } from "./basePlayScene";
 import { SnapshotManager } from "../net/snapshotManager";
@@ -9,7 +9,9 @@ import {
     calcNMultiSceneDimensions,
     calcPortraitPlayFieldPosition,
     calcNMultiOpponentArea,
+    getLayoutMetrics,
 } from "../ui/gameLayout";
+import { applyRuntimeHudLayout } from "../ui/runtimeHudLayout";
 import { preloadKenneyAssets } from "../ui/kenneyAssets";
 import {
     type NMultiAuthSnapshotPayload,
@@ -44,7 +46,45 @@ export class NMultiPlayScene extends BasePlayScene {
     private initialAuthSnapshot: NMultiAuthSnapshotPayload | null = null;
     private bootstrapRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> | null = null;
     private awaitingInitialAuthSnapshot: boolean = false;
+    private opponentWallPanel: Phaser.GameObjects.Graphics | null = null;
+    private opponentWallTitle: Phaser.GameObjects.Text | null = null;
+    private opponentWallHint: Phaser.GameObjects.Text | null = null;
     private readonly socketListeners = new SocketListenerRegistry();
+
+    private refreshSceneDimensions(): void {
+        const dims = calcNMultiSceneDimensions(this.layoutMode);
+        this.GAME_WIDTH = dims.width;
+        this.GAME_HEIGHT = dims.height;
+    }
+
+    private resolvePlayerFieldPosition(): { x: number; y: number } {
+        if (this.layoutMode === 'mobile-portrait') {
+            return calcPortraitPlayFieldPosition(this.GAME_WIDTH);
+        }
+        return calcNMultiPlayerPosition(this.GAME_HEIGHT, this.GAME_WIDTH);
+    }
+
+    private relayoutRuntimeObjects(): void {
+        if (!this.playField || !this.engine) {
+            return;
+        }
+
+        const pos = this.resolvePlayerFieldPosition();
+        applyRuntimeHudLayout({
+            playField: this.playField,
+            holdBox: this.engine.holdBoxInstance,
+            queue: this.engine.queueInstance,
+            levelIndicator: this.engine.levelIndicatorInstance,
+            holdInputZone: this.holdInputZone,
+        }, {
+            layoutMode: this.layoutMode,
+            fieldX: pos.x,
+            fieldY: pos.y,
+            mainScale: 1,
+            sideScale: 1,
+            compactShowRank: true,
+        });
+    }
 
     constructor() {
         super({ key: "NMultiPlayScene" });
@@ -149,7 +189,21 @@ export class NMultiPlayScene extends BasePlayScene {
             getBackgroundThemeLabel: () => this.getBackgroundThemeLabelValue(),
         });
 
-        this.opponentContainer = this.add.container(0, 0);
+        this.opponentWallPanel = this.add.graphics().setDepth(1100);
+        this.opponentContainer = this.add.container(0, 0).setDepth(1110);
+        this.opponentWallTitle = this.add.text(0, 0, 'TACTICAL WALL', {
+            fontFamily: 'Connection, Pretendard, sans-serif',
+            fontSize: '20px',
+            color: '#f8fdff',
+            fontStyle: 'bold',
+        }).setOrigin(0.5, 0).setDepth(1120);
+        this.opponentWallTitle.setStroke('#12376f', 4);
+        this.opponentWallHint = this.add.text(0, 0, 'SAFE / WARM / HOT / OUT', {
+            fontFamily: 'Pretendard, sans-serif',
+            fontSize: '12px',
+            color: '#c9ddff',
+        }).setOrigin(0.5, 0).setDepth(1120);
+        this.opponentWallHint.setStroke('#092145', 2);
 
         this.setupSocketEvents();
         this.bindVisibilitySync();
@@ -373,10 +427,65 @@ export class NMultiPlayScene extends BasePlayScene {
     }
 
     private relayoutOpponents(): void {
+        const metrics = getLayoutMetrics();
+        const blockSize = getBlockSize();
+        const isPortrait = this.layoutMode === 'mobile-portrait';
+        const opponentArea = calcNMultiOpponentArea(this.layoutMode, this.GAME_WIDTH, this.GAME_HEIGHT);
+        const titleHeight = blockSize * (
+            isPortrait
+                ? metrics.nMultiWallTitleHeightPortraitBlocks
+                : metrics.nMultiWallTitleHeightDesktopBlocks
+        );
+        const panelRadius = blockSize * (
+            isPortrait
+                ? metrics.nMultiWallPanelRadiusPortraitBlocks
+                : metrics.nMultiWallPanelRadiusDesktopBlocks
+        );
+        const panelPadding = blockSize * (
+            isPortrait
+                ? metrics.nMultiWallPanelPaddingPortraitBlocks
+                : metrics.nMultiWallPanelPaddingDesktopBlocks
+        );
+
+        if (this.opponentWallPanel) {
+            this.opponentWallPanel.clear();
+            this.opponentWallPanel.fillStyle(0x07152f, 0.64);
+            this.opponentWallPanel.fillRoundedRect(opponentArea.x, opponentArea.y, opponentArea.width, opponentArea.height, panelRadius);
+            this.opponentWallPanel.lineStyle(2, 0x7cb6ff, 0.85);
+            this.opponentWallPanel.strokeRoundedRect(opponentArea.x, opponentArea.y, opponentArea.width, opponentArea.height, panelRadius);
+            this.opponentWallPanel.fillStyle(0x0f274d, 0.82);
+            this.opponentWallPanel.fillRoundedRect(
+                opponentArea.x + panelPadding,
+                opponentArea.y + panelPadding,
+                opponentArea.width - panelPadding * 2,
+                titleHeight,
+                Math.max(4, panelRadius - 3),
+            );
+        }
+
+        if (this.opponentWallTitle) {
+            this.opponentWallTitle.setPosition(
+                opponentArea.x + opponentArea.width / 2,
+                opponentArea.y + panelPadding + blockSize * metrics.nMultiWallTitleYOffsetBlocks,
+            );
+            this.opponentWallTitle.setFontSize(this.layoutMode === 'mobile-portrait' ? 13 : 18);
+        }
+        if (this.opponentWallHint) {
+            this.opponentWallHint.setPosition(
+                opponentArea.x + opponentArea.width / 2,
+                opponentArea.y + panelPadding + titleHeight - blockSize * metrics.nMultiWallHintYOffsetBlocks,
+            );
+            this.opponentWallHint.setFontSize(this.layoutMode === 'mobile-portrait' ? 9 : 11);
+        }
+
+        const contentX = opponentArea.x + panelPadding;
+        const contentY = opponentArea.y + panelPadding + titleHeight + panelPadding;
+        const contentWidth = opponentArea.width - panelPadding * 2;
+        const contentHeight = opponentArea.height - titleHeight - panelPadding * 3;
+
         const count = this.miniFields.size;
         if (count === 0) return;
 
-        const opponentArea = calcNMultiOpponentArea(this.layoutMode, this.GAME_WIDTH, this.GAME_HEIGHT);
         const TOTAL_ROWS = 24;
 
         let bestCols = 1;
@@ -384,10 +493,14 @@ export class NMultiPlayScene extends BasePlayScene {
 
         for (let cols = 1; cols <= count; cols++) {
             const rows = Math.ceil(count / cols);
-            const cellWidth = opponentArea.width / cols;
-            const cellHeight = opponentArea.height / rows;
-            const cellSizeFromWidth = (cellWidth - 4) / CONST.PLAY_FIELD.COL_COUNT;
-            const cellSizeFromHeight = (cellHeight - 8) / TOTAL_ROWS;
+            const cellWidth = contentWidth / cols;
+            const cellHeight = contentHeight / rows;
+            const cellSizeFromWidth = (
+                cellWidth - blockSize * metrics.nMultiWallMiniCellWidthInsetBlocks
+            ) / CONST.PLAY_FIELD.COL_COUNT;
+            const cellSizeFromHeight = (
+                cellHeight - blockSize * metrics.nMultiWallMiniCellHeightInsetBlocks
+            ) / TOTAL_ROWS;
             const cellSize = Math.min(cellSizeFromWidth, cellSizeFromHeight);
             if (cellSize > bestCellSize) {
                 bestCellSize = cellSize;
@@ -396,8 +509,8 @@ export class NMultiPlayScene extends BasePlayScene {
         }
 
         const bestRows = Math.ceil(count / bestCols);
-        const cellWidth = opponentArea.width / bestCols;
-        const cellHeight = opponentArea.height / bestRows;
+        const cellWidth = contentWidth / bestCols;
+        const cellHeight = contentHeight / bestRows;
         const cellSize = Math.max(1, bestCellSize);
         const nameHeight = Math.max(8, Math.min(Math.floor(cellSize * 2), 18)) + 4;
 
@@ -405,7 +518,10 @@ export class NMultiPlayScene extends BasePlayScene {
         for (const [, mini] of this.miniFields) {
             const col = idx % bestCols;
             const row = Math.floor(idx / bestCols);
-            mini.setPosition(opponentArea.x + col * cellWidth + 2, opponentArea.y + row * cellHeight + nameHeight);
+            mini.setPosition(
+                contentX + col * cellWidth + blockSize * metrics.nMultiWallMiniCellOffsetXBlocks,
+                contentY + row * cellHeight + nameHeight,
+            );
             mini.resize(cellSize);
             idx++;
         }
@@ -446,6 +562,18 @@ export class NMultiPlayScene extends BasePlayScene {
             mini.destroy();
         }
         this.miniFields.clear();
+        if (this.opponentWallPanel) {
+            this.opponentWallPanel.destroy();
+            this.opponentWallPanel = null;
+        }
+        if (this.opponentWallTitle) {
+            this.opponentWallTitle.destroy();
+            this.opponentWallTitle = null;
+        }
+        if (this.opponentWallHint) {
+            this.opponentWallHint.destroy();
+            this.opponentWallHint = null;
+        }
         this.shutdownBase();
     }
 
@@ -476,10 +604,7 @@ export class NMultiPlayScene extends BasePlayScene {
         this.isGameRunning = true;
         this.inputManager.isEnabled = false;
 
-        const isPortrait = this.layoutMode === 'mobile-portrait';
-        const pos = isPortrait
-            ? calcPortraitPlayFieldPosition(this.GAME_WIDTH)
-            : calcNMultiPlayerPosition(this.GAME_HEIGHT);
+        const pos = this.resolvePlayerFieldPosition();
 
         const layout = createGameLayout({
             scene: this,
@@ -493,6 +618,7 @@ export class NMultiPlayScene extends BasePlayScene {
 
         this.playField = layout.playField;
         this.engine = layout.engine;
+        this.holdInputZone = layout.holdInputZone;
         this.bindKenneyImpactEvents();
         const maybeSetAuthoritativeHudMode = (this.engine as unknown as {
             setAuthoritativeHudMode?: (enabled: boolean) => void;
@@ -532,6 +658,7 @@ export class NMultiPlayScene extends BasePlayScene {
         this.inputManager.setDragThresholdScale(1);
         this.inputManager.isEnabled = false;
 
+        this.relayoutRuntimeObjects();
         this.relayoutOpponents();
         this.updateRanks();
     }
@@ -563,6 +690,14 @@ export class NMultiPlayScene extends BasePlayScene {
             }
         }
         super.onInput(direction, state);
+    }
+
+    resize(gameSize, baseSize?, displaySize?, resolution?) {
+        this.handleResolution();
+        this.refreshSceneDimensions();
+        super.resize(gameSize, baseSize, displaySize, resolution);
+        this.relayoutRuntimeObjects();
+        this.relayoutOpponents();
     }
 
 }

@@ -30,6 +30,10 @@ export class Engine {
         return this.queue;
     }
 
+    public get levelIndicatorInstance(): LevelIndicator {
+        return this.levelIndicator;
+    }
+
     constructor(playField: PlayField, holdBox: TetrominoBox, queue: TetrominoBoxQueue, levelIndicator: LevelIndicator) {
         this.playField = playField;
         this.holdBox = holdBox;

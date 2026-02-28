@@ -1,20 +1,27 @@
 import { PlayField } from '../objects/playField';
+import { TetrominoBox } from '../objects/tetrominoBox';
+import { TetrominoBoxQueue } from '../objects/tetrominoBoxQueue';
+import { LevelIndicator } from '../objects/levelIndicator';
 import { BoardCodec } from '../net/boardCodec';
 import { SocketListenerRegistry } from '../net/socketListenerRegistry';
-import { CONST, getBlockSize, InputDirection, InputState } from "../const/const";
+import { CONST, getBlockSize, InputDirection, InputState, TetrominoType } from "../const/const";
 import { BasePlayScene } from "./basePlayScene";
 import { BotManager } from "../logic/botManager";
+import { GameStats } from "../logic/scoreSystem";
 import {
     createGameLayout,
+    calcDuelPlayerPosition,
     calcSinglePlayerPosition,
-    calcNMultiPlayerPosition,
     calcPlaySceneDimensions,
     calcPortraitPlayFieldPosition,
     calcPlaySceneOpponentLayout,
+    getLayoutMetrics,
 } from "../ui/gameLayout";
+import { applyRuntimeHudLayout } from "../ui/runtimeHudLayout";
 import { preloadKenneyAssets } from '../ui/kenneyAssets';
 import {
     type AuthSnapshotPayload,
+    type AuthSnapshotSide,
     isAuthRoundOverPayload,
     isAuthSnapshotPayload,
     isGameStartPayload,
@@ -51,13 +58,256 @@ export class PlayScene extends BasePlayScene {
     private localMismatchStreak: number = 0;
     private forceAuthoritativeResyncOnce: boolean = false;
     private lastOpponentBoardSnapshot: string | Uint8Array | ArrayBuffer | null = null;
+    private opponentHoldBox: TetrominoBox | null = null;
+    private opponentQueue: TetrominoBoxQueue | null = null;
+    private opponentIndicator: LevelIndicator | null = null;
     private visibilityHandler: (() => void) | null = null;
     private bootstrapRenderObjects: Array<{ setVisible: (visible: boolean) => unknown }> | null = null;
     private awaitingInitialAuthSnapshot: boolean = false;
     private readonly socketListeners = new SocketListenerRegistry();
 
-    private readonly MAIN_SCALE = 1;
-    private readonly SIDE_SCALE = 1;
+    private readonly MAIN_SCALE = 1.08;
+    private readonly SIDE_SCALE = 0.95;
+
+    private refreshSceneDimensions(): void {
+        const dims = calcPlaySceneDimensions(this.layoutMode, this.mode);
+        this.GAME_WIDTH = dims.width;
+        this.GAME_HEIGHT = dims.height;
+    }
+
+    private resolvePlayerFieldPosition(): { x: number; y: number } {
+        const isPortrait = this.layoutMode === 'mobile-portrait';
+        const currentMainScale = this.mode === 'single' ? this.MAIN_SCALE : 1;
+        if (isPortrait) {
+            return calcPortraitPlayFieldPosition(this.GAME_WIDTH);
+        }
+        if (this.mode === 'single') {
+            return calcSinglePlayerPosition(this.GAME_WIDTH, this.GAME_HEIGHT, currentMainScale);
+        }
+        return calcDuelPlayerPosition(this.GAME_WIDTH, this.GAME_HEIGHT);
+    }
+
+    private isPlayableTetromino(value: string | null | undefined): value is Exclude<TetrominoType, TetrominoType.GARBAGE> {
+        return value === TetrominoType.I
+            || value === TetrominoType.J
+            || value === TetrominoType.L
+            || value === TetrominoType.O
+            || value === TetrominoType.S
+            || value === TetrominoType.T
+            || value === TetrominoType.Z;
+    }
+
+    private ensureOpponentHudObjects(): void {
+        if (this.opponentHoldBox && this.opponentQueue && this.opponentIndicator) {
+            return;
+        }
+        const metrics = getLayoutMetrics();
+        this.opponentHoldBox = new TetrominoBox(this, 0, 0, metrics.holdWidth, metrics.holdHeight, "HOLD");
+        this.opponentQueue = new TetrominoBoxQueue(this, 0, 0, metrics.duelOpponentQueueSize);
+        this.opponentIndicator = new LevelIndicator(this, 0, 0, { compact: true, compactShowRank: false });
+        this.opponentIndicator.setPlayerName('OPP');
+        this.opponentIndicator.setCompactMode(true, { compactShowRank: false });
+
+        this.opponentHoldBox.container.setDepth(180);
+        this.opponentQueue.container.setDepth(180);
+        this.opponentIndicator.container.setDepth(180);
+    }
+
+    private setOpponentHudVisible(visible: boolean): void {
+        this.opponentHoldBox?.container.setVisible(visible);
+        this.opponentQueue?.container.setVisible(visible);
+        this.opponentIndicator?.container.setVisible(visible);
+    }
+
+    private destroyOpponentHudObjects(): void {
+        this.opponentHoldBox?.container.destroy();
+        this.opponentQueue?.container.destroy();
+        this.opponentIndicator?.container.destroy();
+        this.opponentHoldBox = null;
+        this.opponentQueue = null;
+        this.opponentIndicator = null;
+    }
+
+    private relayoutOpponentHud(opponentLayout: { x: number; y: number; scale: number }): void {
+        if (!this.opponentHoldBox || !this.opponentQueue || !this.opponentIndicator) {
+            return;
+        }
+
+        const isPortrait = this.layoutMode === 'mobile-portrait';
+        this.setOpponentHudVisible(true);
+
+        const metrics = getLayoutMetrics();
+        const blockSize = getBlockSize();
+        const fieldWidth = blockSize * CONST.PLAY_FIELD.COL_COUNT * opponentLayout.scale;
+        const fieldHeight = blockSize * CONST.PLAY_FIELD.ROW_COUNT * opponentLayout.scale;
+        const indicatorScale = isPortrait
+            ? Math.max(
+                metrics.duelOpponentIndicatorPortraitScaleMin,
+                Math.min(
+                    metrics.duelOpponentIndicatorPortraitScaleMax,
+                    opponentLayout.scale * metrics.duelOpponentIndicatorPortraitScaleBoost,
+                ),
+            )
+            : Math.max(metrics.duelOpponentIndicatorDesktopScaleMin, opponentLayout.scale);
+        const indicatorWidth = blockSize * 10 * indicatorScale;
+        const indicatorHeight = blockSize * 0.9 * indicatorScale;
+        const indicatorPadding = blockSize * metrics.duelOpponentIndicatorPaddingBlocks;
+        const rawIndicatorX = isPortrait ? opponentLayout.x + (fieldWidth - indicatorWidth) / 2 : opponentLayout.x;
+        const indicatorX = Math.max(
+            indicatorPadding,
+            Math.min(rawIndicatorX, this.GAME_WIDTH - indicatorWidth - indicatorPadding),
+        );
+        const rawIndicatorY = opponentLayout.y + fieldHeight + blockSize * metrics.duelOpponentIndicatorYOffsetBlocks;
+        const indicatorY = Math.min(rawIndicatorY, this.GAME_HEIGHT - indicatorHeight - indicatorPadding);
+
+        if (isPortrait) {
+            // Mobile 1v1: place HOLD/NEXT into left/right side margins around opponent field.
+            const sidePadding = blockSize * metrics.duelOpponentPortraitPaddingBlocks;
+            const leftMargin = opponentLayout.x;
+            const opponentRight = opponentLayout.x + fieldWidth;
+            const rightMargin = this.GAME_WIDTH - opponentRight;
+            const holdBaseWidth = metrics.holdWidth;
+            const holdBaseHeight = metrics.holdHeight;
+            const queueBaseWidth = metrics.holdWidth + blockSize;
+            const maxScaleLeft = (leftMargin - sidePadding * 2) / holdBaseWidth;
+            const maxScaleRight = (rightMargin - sidePadding * 2) / queueBaseWidth;
+            const maxMarginScale = Math.max(metrics.duelOpponentPortraitScaleMin, Math.min(maxScaleLeft, maxScaleRight));
+            const sideScale = Math.max(
+                metrics.duelOpponentPortraitScaleMin,
+                Math.min(
+                    metrics.duelOpponentPortraitScaleMax,
+                    opponentLayout.scale * metrics.duelOpponentPortraitScaleBoost,
+                    maxMarginScale,
+                ),
+            );
+            const holdWidth = holdBaseWidth * sideScale;
+            const holdHeight = holdBaseHeight * sideScale;
+            const queueWidth = queueBaseWidth * sideScale;
+            const holdY = opponentLayout.y + Math.max(0, (fieldHeight - holdHeight) / 2);
+            const queueY = holdY - (blockSize * metrics.duelOpponentQueueOffsetBlocks * sideScale);
+            const holdX = Math.max(sidePadding, (leftMargin - holdWidth) / 2);
+            const centeredQueueX = opponentRight + Math.max(0, (rightMargin - queueWidth) / 2);
+            const queueX = Math.max(
+                opponentRight + sidePadding,
+                Math.min(centeredQueueX, this.GAME_WIDTH - queueWidth - sidePadding),
+            );
+
+            this.opponentHoldBox.container.setScale(sideScale);
+            this.opponentHoldBox.container.setPosition(holdX, holdY);
+
+            this.opponentQueue.setDisplayQueueSize(metrics.mobileQueueSize);
+            this.opponentQueue.container.setScale(sideScale);
+            this.opponentQueue.container.setPosition(queueX, queueY);
+        } else {
+            const sideScale = Math.max(
+                metrics.duelOpponentSideScaleMin,
+                Math.min(
+                    metrics.duelOpponentSideScaleMax,
+                    opponentLayout.scale * metrics.duelOpponentSideScaleBase,
+                ),
+            );
+            const railGap = blockSize * metrics.commandCenterRailGapBlocks;
+            const holdRailX = opponentLayout.x + fieldWidth + railGap;
+            const queueOffset = blockSize * metrics.duelOpponentQueueOffsetBlocks * sideScale;
+            const queueX = holdRailX - queueOffset;
+            const queueY = opponentLayout.y - queueOffset;
+            const holdY = opponentLayout.y + fieldHeight - (metrics.holdHeight * sideScale);
+
+            this.opponentHoldBox.container.setScale(sideScale);
+            this.opponentHoldBox.container.setPosition(holdRailX, holdY);
+
+            this.opponentQueue.setDisplayQueueSize(metrics.duelOpponentQueueSize);
+            this.opponentQueue.container.setScale(sideScale);
+            this.opponentQueue.container.setPosition(queueX, queueY);
+        }
+
+        this.opponentIndicator.setCompactMode(true, { compactShowRank: false });
+        this.opponentIndicator.container.setScale(indicatorScale);
+        this.opponentIndicator.container.setPosition(indicatorX, indicatorY);
+    }
+
+    private applyOpponentSideState(opponent: AuthSnapshotSide): void {
+        if (!opponent) {
+            return;
+        }
+
+        if (opponent.board) {
+            this.applyOpponentBoardSnapshot(opponent.board);
+        }
+
+        if (this.opponentIndicator) {
+            const opponentStats: GameStats = {
+                score: Number.isFinite(opponent.score) ? Math.max(0, Math.floor(opponent.score)) : 0,
+                level: Number.isFinite(opponent.level) ? Math.max(1, Math.floor(opponent.level)) : 1,
+                lines: Number.isFinite(opponent.lines) ? Math.max(0, Math.floor(opponent.lines)) : 0,
+                time: '00:00',
+                goal: 0,
+                tetrises: Number.isFinite(opponent.stats?.tetrises) ? Math.max(0, Math.floor(opponent.stats?.tetrises ?? 0)) : 0,
+                tspins: Number.isFinite(opponent.stats?.tspins) ? Math.max(0, Math.floor(opponent.stats?.tspins ?? 0)) : 0,
+                combos: Number.isFinite(opponent.stats?.combos) ? Math.max(0, Math.floor(opponent.stats?.combos ?? 0)) : 0,
+                tpm: 0,
+                lpm: 0,
+            };
+            this.opponentIndicator.updateStats(opponentStats);
+        }
+
+        if (!opponent.sync) {
+            return;
+        }
+
+        const hold = opponent.sync.hold;
+        if (this.opponentHoldBox) {
+            if (this.isPlayableTetromino(hold)) {
+                this.opponentHoldBox.hold(hold);
+            } else {
+                this.opponentHoldBox.clear();
+            }
+        }
+
+        if (this.opponentQueue) {
+            const queue = opponent.sync.queue.filter((type): type is Exclude<TetrominoType, TetrominoType.GARBAGE> => {
+                return this.isPlayableTetromino(type);
+            });
+            const bag = opponent.sync.bag.filter((type): type is Exclude<TetrominoType, TetrominoType.GARBAGE> => {
+                return this.isPlayableTetromino(type);
+            });
+            this.opponentQueue.setAuthoritativeState(queue, bag, opponent.sync.queueRngState);
+        }
+    }
+
+    private relayoutRuntimeObjects(): void {
+        if (!this.playField || !this.engine) {
+            return;
+        }
+
+        const currentMainScale = this.mode === 'single' ? this.MAIN_SCALE : 1;
+        const currentSideScale = this.mode === 'single' ? this.SIDE_SCALE : 1;
+        const pos = this.resolvePlayerFieldPosition();
+        const runtimeHud = applyRuntimeHudLayout({
+            playField: this.playField,
+            holdBox: this.engine.holdBoxInstance,
+            queue: this.engine.queueInstance,
+            levelIndicator: this.engine.levelIndicatorInstance,
+            holdInputZone: this.holdInputZone,
+        }, {
+            layoutMode: this.layoutMode,
+            fieldX: pos.x,
+            fieldY: pos.y,
+            mainScale: currentMainScale,
+            sideScale: currentSideScale,
+            compactShowRank: false,
+        });
+
+        if (this.mode === 'multi' && this.opponentPlayField) {
+            const opponentLayout = calcPlaySceneOpponentLayout(this.layoutMode, this.GAME_WIDTH, this.GAME_HEIGHT, pos.y);
+            this.opponentPlayField.setScale(opponentLayout.scale);
+            this.opponentPlayField.setPosition(opponentLayout.x, opponentLayout.y);
+            this.relayoutOpponentHud(opponentLayout);
+        }
+
+        this.inputManager.setDragThresholdScale(runtimeHud.dragThresholdScale);
+    }
+
     private emitAuthPresence(state: 'active' | 'inactive'): void {
         if (!this.socket || !this.roomId) return;
         this.socket.emit('auth_presence', {
@@ -204,6 +454,9 @@ export class PlayScene extends BasePlayScene {
         this.localMismatchStreak = 0;
         this.forceAuthoritativeResyncOnce = false;
         this.lastOpponentBoardSnapshot = null;
+        this.opponentHoldBox = null;
+        this.opponentQueue = null;
+        this.opponentIndicator = null;
         this.startImmediately = data.startImmediately || false;
     }
 
@@ -220,9 +473,7 @@ export class PlayScene extends BasePlayScene {
                 });
             },
             applyOpponent: (opponent) => {
-                if (opponent.board && this.opponentPlayField) {
-                    this.applyOpponentBoardSnapshot(opponent.board);
-                }
+                this.applyOpponentSideState(opponent);
             },
         });
 
@@ -264,9 +515,7 @@ export class PlayScene extends BasePlayScene {
             });
         }
 
-        if (data.opponent.board && this.opponentPlayField) {
-            this.applyOpponentBoardSnapshot(data.opponent.board);
-        }
+        this.applyOpponentSideState(data.opponent);
 
         this.localMismatchStreak = 0;
         this.needsAuthoritativeResync = false;
@@ -357,8 +606,8 @@ export class PlayScene extends BasePlayScene {
                 this.localMismatchStreak = 0;
                 this.forceAuthoritativeResyncOnce = false;
             }
-            if (shouldApplyResumeSync && data.shadowOpponent && typeof data.shadowOpponent.board === 'string') {
-                this.applyOpponentBoardSnapshot(data.shadowOpponent.board);
+            if (shouldApplyResumeSync && data.shadowOpponent) {
+                this.applyOpponentSideState(data.shadowOpponent);
             }
             if (shouldApplyResumeSync && Array.isArray(data.pendingGarbage) && this.playField) {
                 for (const pending of data.pendingGarbage) {
@@ -455,9 +704,7 @@ export class PlayScene extends BasePlayScene {
                 this.maybeResyncLocalStateFromSnapshot(data);
             }
 
-            if (data.opponent.board) {
-                this.applyOpponentBoardSnapshot(data.opponent.board);
-            }
+            this.applyOpponentSideState(data.opponent);
 
             if (this.isGameRunning && data.self.isAlive === false && !this.isGameEnded) {
                 this.showEndGameMessage('GAME OVER', '#ff0000', this.resolveEndGameScore(data.self.score));
@@ -623,6 +870,7 @@ export class PlayScene extends BasePlayScene {
         this.unbindVisibilitySync();
         this.socketListeners.clear(this.socket);
         this.hideDisconnectNotice();
+        this.destroyOpponentHudObjects();
         this.shutdownBase();
     }
 
@@ -648,15 +896,7 @@ export class PlayScene extends BasePlayScene {
         const isPortrait = this.layoutMode === 'mobile-portrait';
         const currentMainScale = this.mode === 'single' ? this.MAIN_SCALE : 1;
         const currentSideScale = this.mode === 'single' ? this.SIDE_SCALE : 1;
-
-        let pos: { x: number; y: number };
-        if (isPortrait) {
-            pos = calcPortraitPlayFieldPosition(this.GAME_WIDTH);
-        } else if (this.mode === 'single') {
-            pos = calcSinglePlayerPosition(this.GAME_WIDTH, this.GAME_HEIGHT, currentMainScale);
-        } else {
-            pos = calcNMultiPlayerPosition(this.GAME_HEIGHT);
-        }
+        const pos = this.resolvePlayerFieldPosition();
 
         const layout = createGameLayout({
             scene: this,
@@ -671,6 +911,7 @@ export class PlayScene extends BasePlayScene {
 
         this.playField = layout.playField;
         this.engine = layout.engine;
+        this.holdInputZone = layout.holdInputZone;
         this.bindKenneyImpactEvents();
 
         const shouldGateBootstrapRender = this.mode === 'multi' && this.useAuthoritativeServer;
@@ -730,6 +971,8 @@ export class PlayScene extends BasePlayScene {
             const opponentLayout = calcPlaySceneOpponentLayout(this.layoutMode, this.GAME_WIDTH, this.GAME_HEIGHT, pos.y);
             this.opponentPlayField = new PlayField(this, opponentLayout.x, opponentLayout.y, rawPlayFieldWidth, rawPlayFieldHeight);
             this.opponentPlayField.setScale(opponentLayout.scale);
+            this.ensureOpponentHudObjects();
+            this.relayoutOpponentHud(opponentLayout);
             this.applyInitialAuthoritativeBootstrap();
         }
 
@@ -741,6 +984,8 @@ export class PlayScene extends BasePlayScene {
 
         this.inputManager.setDragThresholdScale(isPortrait ? 1 : currentMainScale);
         this.inputManager.isEnabled = shouldGateBootstrapRender ? false : true;
+
+        this.relayoutRuntimeObjects();
 
         if (this.mode === 'single' && this.botLevel > 0 && this.engine) {
             this.botManager = new BotManager(this.engine, this.playField, this.botLevel);
@@ -783,7 +1028,10 @@ export class PlayScene extends BasePlayScene {
     }
 
     resize(gameSize, baseSize?, displaySize?, resolution?) {
+        this.handleResolution();
+        this.refreshSceneDimensions();
         super.resize(gameSize, baseSize, displaySize, resolution);
+        this.relayoutRuntimeObjects();
         this.layoutDisconnectNotice();
     }
 }

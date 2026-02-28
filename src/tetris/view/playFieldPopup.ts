@@ -78,6 +78,7 @@ export class PlayFieldPopup {
     private popupLayer: Phaser.GameObjects.Container;
     private activePopups: Phaser.GameObjects.Container[] = [];
     private rainbowTimers: Phaser.Time.TimerEvent[] = [];
+    private popupEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
     constructor(scene: Phaser.Scene, popupLayer: Phaser.GameObjects.Container) {
         this.scene = scene;
@@ -240,23 +241,32 @@ export class PlayFieldPopup {
             g.destroy();
         }
 
-        const emitter = this.scene.add.particles(CENTER_X, BASE_Y, 'popupParticle', {
-            speed: { min: 60, max: style.particleCount > 20 ? 240 : 170 },
-            angle: { min: 0, max: 360 },
-            scale: { start: 1.8, end: 0 },
-            lifespan: style.particleCount > 20 ? 750 : 550,
-            gravityY: 160,
-            tint: style.particleColor,
-            quantity: style.particleCount,
-            emitting: false,
-        });
+        if (!this.popupEmitter) {
+            this.popupEmitter = this.scene.add.particles(CENTER_X, BASE_Y, 'popupParticle', {
+                speed: { min: 60, max: 240 },
+                angle: { min: 0, max: 360 },
+                scale: { start: 1.8, end: 0 },
+                lifespan: 750,
+                gravityY: 160,
+                tint: 0xffffff,
+                quantity: 35,
+                emitting: false,
+            });
+            this.popupLayer.add(this.popupEmitter);
+        }
 
-        this.popupLayer.add(emitter);
-        emitter.explode(style.particleCount, CENTER_X, BASE_Y);
+        const emitterApi = this.popupEmitter as unknown as {
+            setSpeed?: (value: { min: number; max: number }) => void;
+            setLifespan?: (value: number) => void;
+            setQuantity?: (value: number) => void;
+            setTint?: (value: number) => void;
+        };
+        emitterApi.setSpeed?.({ min: 60, max: style.particleCount > 20 ? 240 : 170 });
+        emitterApi.setLifespan?.(style.particleCount > 20 ? 750 : 550);
+        emitterApi.setQuantity?.(style.particleCount);
+        emitterApi.setTint?.(style.particleColor);
 
-        this.scene.time.delayedCall(900, () => {
-            if (emitter.active) emitter.destroy();
-        });
+        this.popupEmitter.explode(style.particleCount, CENTER_X, BASE_Y);
     }
 
     private startRainbow(text: Phaser.GameObjects.Text) {
@@ -290,5 +300,9 @@ export class PlayFieldPopup {
         this.rainbowTimers = [];
         this.activePopups.forEach(p => { if (p.active) p.destroy(); });
         this.activePopups = [];
+        if (this.popupEmitter && this.popupEmitter.active) {
+            this.popupEmitter.destroy();
+        }
+        this.popupEmitter = null;
     }
 }

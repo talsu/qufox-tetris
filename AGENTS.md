@@ -34,7 +34,7 @@ src/tetris/
   logic/                 Deterministic rules (score, garbage, bot)
   input/                 Keyboard/touch translation with DAS behavior
   net/                   Board codec + snapshot/listener transport helpers
-  ui/                    Layout calculators + in-game overlays/helpers
+  ui/                    Layout calculators + runtime HUD layout + in-game overlays/helpers
   view/                  Gameplay visual effects and popup feedback
 server/
   index.ts               Express + Socket.io room state/protocol authority

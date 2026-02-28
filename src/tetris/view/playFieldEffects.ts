@@ -7,6 +7,8 @@ export class PlayFieldEffects {
     private scene: Phaser.Scene;
     private container: Phaser.GameObjects.Container;
     private popupLayer: Phaser.GameObjects.Container;
+    private hardDropGraphicsPool: Phaser.GameObjects.Graphics[] = [];
+    private starEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
     constructor(scene: Phaser.Scene, container: Phaser.GameObjects.Container, popupLayer: Phaser.GameObjects.Container) {
         this.scene = scene;
@@ -20,7 +22,7 @@ export class PlayFieldEffects {
      * @param {number} distance - The distance the tetromino dropped.
      */
     playHardDropEffect(tetromino: Tetromino, distance: number) {
-        const graphics = this.scene.add.graphics();
+        const graphics = this.acquireHardDropGraphics();
         const blocks = tetromino.getBlocks();
 
         // Draw trail
@@ -66,17 +68,7 @@ export class PlayFieldEffects {
             g.generateTexture('starFragment', 4, 4);
         }
 
-        const emitter = this.scene.add.particles(0, 0, 'starFragment', {
-            speed: { min: 50, max: 150 },
-            angle: { min: 200, max: 340 },
-            scale: { start: 1, end: 0 },
-            lifespan: 500,
-            gravityY: 200,
-            quantity: 4,
-            emitting: false
-        });
-
-        this.container.add(emitter);
+        const emitter = this.ensureStarEmitter();
         this.container.bringToTop(this.popupLayer);
 
         blocks.forEach(([col, row]) => {
@@ -88,8 +80,9 @@ export class PlayFieldEffects {
             alpha: 0,
             duration: CONST.PLAY_FIELD.LOCK_DELAY_MS,
             onComplete: () => {
-                graphics.destroy();
-                emitter.destroy();
+                graphics.clear();
+                graphics.setVisible(false);
+                this.hardDropGraphicsPool.push(graphics);
             }
         });
     }
@@ -110,5 +103,39 @@ export class PlayFieldEffects {
         this.scene.time.delayedCall(CONST.PLAY_FIELD.LINE_CLEAR_DELAY_MS, () => {
              if (onComplete) onComplete();
         });
+    }
+
+    private acquireHardDropGraphics(): Phaser.GameObjects.Graphics {
+        const pooled = this.hardDropGraphicsPool.pop();
+        if (pooled) {
+            pooled.clear();
+            pooled.setVisible(true);
+            pooled.alpha = 1;
+            this.container.add(pooled);
+            return pooled;
+        }
+
+        const graphics = this.scene.add.graphics();
+        this.container.add(graphics);
+        return graphics;
+    }
+
+    private ensureStarEmitter(): Phaser.GameObjects.Particles.ParticleEmitter {
+        if (this.starEmitter) {
+            return this.starEmitter;
+        }
+
+        this.starEmitter = this.scene.add.particles(0, 0, 'starFragment', {
+            speed: { min: 50, max: 150 },
+            angle: { min: 200, max: 340 },
+            scale: { start: 1, end: 0 },
+            lifespan: 500,
+            gravityY: 200,
+            quantity: 4,
+            emitting: false
+        });
+
+        this.container.add(this.starEmitter);
+        return this.starEmitter;
     }
 }

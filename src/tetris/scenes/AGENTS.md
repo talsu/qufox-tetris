@@ -17,6 +17,7 @@ Scenes should compose engine/objects/ui/input/net utilities, not re-implement ga
 - Input enters through `InputManager`, not ad-hoc key handlers.
 - UI overlays and panels should use `src/tetris/ui/` modules.
 - Layout positioning should come from `src/tetris/ui/gameLayout.ts` calculators.
+- Runtime HUD repositioning (hold/queue/indicator/hold-zone) should use `src/tetris/ui/runtimeHudLayout.ts`.
 - Register socket events via `SocketListenerRegistry` and clear listeners on shutdown/transition.
 - Keep scene transitions explicit (`this.scene.start(...)`) and mode-aware.
 - In authoritative modes, rely on server snapshots for canonical remote state and resync triggers.
@@ -25,6 +26,7 @@ Scenes should compose engine/objects/ui/input/net utilities, not re-implement ga
 - Adding core scoring/collision logic directly in scene methods.
 - Building raw HTML with unsanitized user strings for lobby/game UI.
 - Hardcoding mobile/desktop coordinates without layout helpers.
+- Duplicating local HUD relayout branches in both `playScene.ts` and `nMultiPlayScene.ts`.
 - Duplicating socket event payload shape conversions or listener teardown logic in multiple scenes.
 
 ## NOTES

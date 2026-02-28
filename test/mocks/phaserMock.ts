@@ -211,6 +211,9 @@ export class Graphics {
     x: number = 0;
     y: number = 0;
     alpha: number = 1;
+    visible: boolean = true;
+    scaleX: number = 1;
+    scaleY: number = 1;
 
     fillStyle(color: number, alpha?: number) {}
     fillRect(x: number, y: number, width: number, height: number) {}
@@ -222,6 +225,9 @@ export class Graphics {
     destroy() {}
     beginPath() {}
     createGeometryMask() { return {}; }
+    setPosition(x: number, y: number) { this.x = x; this.y = y; return this; }
+    setScale(x: number, y?: number) { this.scaleX = x; this.scaleY = y !== undefined ? y : x; return this; }
+    setVisible(visible: boolean) { this.visible = visible; return this; }
 }
 
 export class Image {

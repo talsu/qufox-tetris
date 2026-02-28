@@ -23,9 +23,6 @@ const config: Phaser.Types.Core.GameConfig = {
         autoCenter: Phaser.Scale.NO_CENTER
     },
     parent: "game",
-    dom: {
-        createContainer: true
-    },
     scene: [MenuScene, LobbyScene, PlayScene, NMultiLobbyScene, NMultiPlayScene],
     physics: {
         default: "arcade",

@@ -642,18 +642,23 @@ export class AuthoritativeMatch {
             isAlive: boolean;
             stats: { tetrises: number; tspins: number; combos: number };
             lockFeedback?: { id: number; actionName: string | null; combo: number };
+            sync: SyncState;
         };
     } {
         const self = this.players[playerKey];
         const opponent = playerKey === 'p1' ? this.players.p2 : this.players.p1;
         const selfSnapshot = snapshot(self);
+        const opponentSnapshot = snapshot(opponent);
         return {
             tick: this.tick,
             self: {
                 ...selfSnapshot,
                 sync: syncSnapshot(self),
             },
-            opponent: snapshot(opponent),
+            opponent: {
+                ...opponentSnapshot,
+                sync: syncSnapshot(opponent),
+            },
         };
     }
 }

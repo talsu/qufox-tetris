@@ -32,6 +32,7 @@ export abstract class BasePlayScene extends BaseScene {
     protected botLevel: number = 0;
     protected botManager: BotManager;
     protected overlayControls: GameOverlayControls | null = null;
+    protected holdInputZone: Phaser.GameObjects.Zone | null = null;
     private escKeyHandler: (() => void) | null = null;
 
     protected createBaseUI(callbacks: MenuCallbacks): void {
@@ -139,6 +140,10 @@ export abstract class BasePlayScene extends BaseScene {
         if (this.overlayControls) {
             this.overlayControls.destroy();
             this.overlayControls = null;
+        }
+        if (this.holdInputZone) {
+            this.holdInputZone.destroy();
+            this.holdInputZone = null;
         }
     }
 

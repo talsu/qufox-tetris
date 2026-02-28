@@ -23,6 +23,19 @@ const TEMP_TEXT_DURATION = 3000;
 // Compact horizontal mode constants
 const COMPACT_WIDTH = BLOCK_SIZE * 10;
 
+const DEFAULT_STATS: GameStats = {
+    score: 0,
+    time: '00:00.00',
+    lines: 0,
+    level: 1,
+    goal: 5,
+    tetrises: 0,
+    tspins: 0,
+    combos: 0,
+    tpm: 0,
+    lpm: 0,
+};
+
 export interface LevelIndicatorOptions {
     compact?: boolean;
     compactShowRank?: boolean;
@@ -58,6 +71,7 @@ export class LevelIndicator extends ObjectBase {
     private actionTextShowEvent: Phaser.Time.TimerEvent;
     private comboText: Phaser.GameObjects.Text;
     private comboTextShowEvent: Phaser.Time.TimerEvent;
+    private lastRenderedStats: GameStats | null = null;
 
     constructor(scene: Phaser.Scene, x: number, y: number, options?: LevelIndicatorOptions) {
         super(scene);
@@ -69,6 +83,96 @@ export class LevelIndicator extends ObjectBase {
         } else {
             this.createUI();
         }
+    }
+
+    private destroyDetachedUIObjects(): void {
+        const children = this.container.list as unknown[];
+        const destroyIfDetached = (obj?: { destroy?: () => void } | null): void => {
+            if (!obj || children.includes(obj as unknown)) {
+                return;
+            }
+            obj.destroy?.();
+        };
+
+        destroyIfDetached(this.scoreValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.timeValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.linesValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.levelValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.goalValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.tetrisesValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.tSpinsValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.combosValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.tpmValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.lpmValueText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.actionText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.comboText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.compactRankText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.compactLevelText as unknown as { destroy?: () => void } | null);
+        destroyIfDetached(this.compactNameText as unknown as { destroy?: () => void } | null);
+    }
+
+    private rebuildUI(): void {
+        this.actionTextShowEvent?.destroy();
+        this.actionTextShowEvent = null;
+        this.comboTextShowEvent?.destroy();
+        this.comboTextShowEvent = null;
+
+        this.destroyDetachedUIObjects();
+        this.container.removeAll(true);
+
+        if (this.compact) {
+            this.createCompactUI();
+            return;
+        }
+        this.createUI();
+    }
+
+    public setCompactMode(compact: boolean, options?: LevelIndicatorOptions): void {
+        const nextCompactShowRank = options?.compactShowRank ?? this.compactShowRank;
+        if (compact === this.compact && nextCompactShowRank === this.compactShowRank) {
+            if (this.compact) {
+                this.refreshCompactInfoText();
+            }
+            return;
+        }
+
+        this.compact = compact;
+        this.compactShowRank = nextCompactShowRank;
+        const stats = this.lastRenderedStats ? { ...this.lastRenderedStats } : { ...DEFAULT_STATS };
+        this.rebuildUI();
+        this.lastRenderedStats = null;
+        this.updateStats(stats);
+        if (this.compact) {
+            this.refreshCompactInfoText();
+        }
+    }
+
+    private createValueText(
+        x: number,
+        y: number,
+        content: string,
+        fallbackStyle: Phaser.Types.GameObjects.Text.TextStyle,
+        strokeThickness: number,
+    ): Phaser.GameObjects.Text {
+        return createStyledText(this.scene, this.container, x, y, content, fallbackStyle, strokeThickness);
+    }
+
+    private formatDisplayTime(rawTime: string): string {
+        if (!rawTime) {
+            return '00:00';
+        }
+        const dotIndex = rawTime.indexOf('.');
+        if (dotIndex <= 0) {
+            return rawTime;
+        }
+        return rawTime.slice(0, dotIndex);
+    }
+
+    private setTextIfChanged(target: Phaser.GameObjects.Text, next: string): void {
+        if (target.text === next) {
+            return;
+        }
+        target.setText(next);
     }
 
     private createCompactUI() {
@@ -105,9 +209,7 @@ export class LevelIndicator extends ObjectBase {
             2,
         ).setOrigin(0, 0.5);
 
-        this.scoreValueText = createStyledText(
-            this.scene,
-            this.container,
+        this.scoreValueText = this.createValueText(
             COMPACT_WIDTH - pad,
             centerY,
             '0',
@@ -163,7 +265,7 @@ export class LevelIndicator extends ObjectBase {
         y = this.createLargeValueSection(y, 'SCORE', '0', (text) => { this.scoreValueText = text; });
 
         // TIME section
-        y = this.createLargeValueSection(y, 'TIME', '00:00.00', (text) => { this.timeValueText = text; });
+        y = this.createLargeValueSection(y, 'TIME', '00:00', (text) => { this.timeValueText = text; });
 
         // Spacer
         y += PADDING_LEFT;
@@ -208,7 +310,13 @@ export class LevelIndicator extends ObjectBase {
         createStyledText(this.scene, this.container, PADDING_LEFT, y, label, TextStyles.header);
         y += HEADER_ROW_HEIGHT;
 
-        const valueText = createStyledText(this.scene, this.container, PADDING_LEFT, y, initialValue, TextStyles.valueLarge);
+        const valueText = this.createValueText(
+            PADDING_LEFT,
+            y,
+            initialValue,
+            TextStyles.valueLarge,
+            4,
+        );
         onCreated(valueText);
         y += VALUE_ROW_HEIGHT;
 
@@ -217,20 +325,50 @@ export class LevelIndicator extends ObjectBase {
 
     updateStats(stats: GameStats) {
         if (!stats) return;
-        this.scoreValueText.setText(stats.score.toString());
-        this.timeValueText.setText(stats.time);
-        this.linesValueText.setText(stats.lines.toString());
-        this.levelValueText.setText(stats.level.toString());
-        this.goalValueText.setText(stats.goal.toString());
-        this.tetrisesValueText.setText(stats.tetrises.toString());
-        this.tSpinsValueText.setText(stats.tspins.toString());
-        this.combosValueText.setText(stats.combos.toString());
-        this.tpmValueText.setText(stats.tpm.toString());
-        this.lpmValueText.setText(stats.lpm.toString());
-        if (this.compact) {
-            this.compactLevel = stats.level;
-            this.refreshCompactInfoText();
+        const previous = this.lastRenderedStats;
+
+        if (!previous || previous.score !== stats.score) {
+            this.setTextIfChanged(this.scoreValueText, stats.score.toString());
         }
+
+        if (this.compact) {
+            if (!previous || previous.level !== stats.level) {
+                this.compactLevel = stats.level;
+                this.refreshCompactInfoText();
+            }
+            this.lastRenderedStats = { ...stats };
+            return;
+        }
+
+        if (!previous || previous.time !== stats.time) {
+            this.setTextIfChanged(this.timeValueText, this.formatDisplayTime(stats.time));
+        }
+        if (!previous || previous.lines !== stats.lines) {
+            this.linesValueText.setText(stats.lines.toString());
+        }
+        if (!previous || previous.level !== stats.level) {
+            this.levelValueText.setText(stats.level.toString());
+        }
+        if (!previous || previous.goal !== stats.goal) {
+            this.goalValueText.setText(stats.goal.toString());
+        }
+        if (!previous || previous.tetrises !== stats.tetrises) {
+            this.tetrisesValueText.setText(stats.tetrises.toString());
+        }
+        if (!previous || previous.tspins !== stats.tspins) {
+            this.tSpinsValueText.setText(stats.tspins.toString());
+        }
+        if (!previous || previous.combos !== stats.combos) {
+            this.combosValueText.setText(stats.combos.toString());
+        }
+        if (!previous || previous.tpm !== stats.tpm) {
+            this.tpmValueText.setText(stats.tpm.toString());
+        }
+        if (!previous || previous.lpm !== stats.lpm) {
+            this.lpmValueText.setText(stats.lpm.toString());
+        }
+
+        this.lastRenderedStats = { ...stats };
     }
 
     setRank(rank: number | null) {
@@ -279,18 +417,8 @@ export class LevelIndicator extends ObjectBase {
 
     clear() {
         this.compactRank = null;
-        this.updateStats({
-            score: 0,
-            time: '00:00.00',
-            lines: 0,
-            level: 1,
-            goal: 5,
-            tetrises: 0,
-            tspins: 0,
-            combos: 0,
-            tpm: 0,
-            lpm: 0,
-        });
+        this.lastRenderedStats = null;
+        this.updateStats({ ...DEFAULT_STATS });
     }
 
     private refreshCompactInfoText() {

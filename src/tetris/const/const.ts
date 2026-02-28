@@ -39,11 +39,45 @@ export interface ColRow extends Array<number> {
     [key: number]: number;
 }
 
+const NON_T_SPIN_ACTION_BONUS_DEFAULTS = {
+    'I-Spin': 0,
+    'I-Spin Single': 0,
+    'I-Spin Double': 0,
+    'I-Spin Triple': 0,
+    'I-Spin Tetris': 0,
+    'J-Spin': 0,
+    'J-Spin Single': 0,
+    'J-Spin Double': 0,
+    'J-Spin Triple': 0,
+    'J-Spin Tetris': 0,
+    'L-Spin': 0,
+    'L-Spin Single': 0,
+    'L-Spin Double': 0,
+    'L-Spin Triple': 0,
+    'L-Spin Tetris': 0,
+    'O-Spin': 0,
+    'O-Spin Single': 0,
+    'O-Spin Double': 0,
+    'O-Spin Triple': 0,
+    'O-Spin Tetris': 0,
+    'S-Spin': 0,
+    'S-Spin Single': 0,
+    'S-Spin Double': 0,
+    'S-Spin Triple': 0,
+    'S-Spin Tetris': 0,
+    'Z-Spin': 0,
+    'Z-Spin Single': 0,
+    'Z-Spin Double': 0,
+    'Z-Spin Triple': 0,
+    'Z-Spin Tetris': 0,
+};
+
 export const CONST = {
     SCORE: {
         'Single': 100,
         'T-Spin Mini': 100,
         'T-Spin Mini Single': 200,
+        'T-Spin Mini Double': 400,
         'Double': 300,
         'T-Spin': 400,
         'Triple': 500,
@@ -56,6 +90,7 @@ export const CONST = {
         'Single': 1,
         'T-Spin Mini': 1,
         'T-Spin Mini Single': 2,
+        'T-Spin Mini Double': 4,
         'Double': 3,
         'T-Spin': 4,
         'Triple': 5,
@@ -63,6 +98,16 @@ export const CONST = {
         'T-Spin Single': 8,
         'T-Spin Double': 12,
         'T-Spin Triple': 16
+    },
+    ACTION_SCORE_BONUS: {
+        // Reserved for optional mode-specific bonuses.
+        // Keep zero by default so spin labels can be introduced without balance changes.
+        ...NON_T_SPIN_ACTION_BONUS_DEFAULTS
+    },
+    ACTION_GARBAGE_BONUS: {
+        // Reserved for optional mode-specific garbage bonuses.
+        // Keep zero by default so spin labels can be introduced without attack changes.
+        ...NON_T_SPIN_ACTION_BONUS_DEFAULTS
     },
     SCREEN : {
         BLOCK_IMAGE_SIZE: 36,

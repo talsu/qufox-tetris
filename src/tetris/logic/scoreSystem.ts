@@ -31,6 +31,12 @@ export interface GarbageAttackInput {
     isBackToBackBonus: boolean;
     comboCount: number;
     isPerfectClear?: boolean;
+    actionName?: string | null;
+}
+
+export interface LockContext {
+    isImmobile?: boolean;
+    isPerfectClear?: boolean;
 }
 
 export class ScoreSystem {
@@ -123,6 +129,10 @@ export class ScoreSystem {
             garbage += 10;
         }
 
+        if (input.actionName) {
+            garbage += GameRules.getActionGarbageBonus(input.actionName);
+        }
+
         return garbage;
     }
 
@@ -176,18 +186,21 @@ export class ScoreSystem {
         movement: string,
         kickDataIndex: number,
         dropCounter: { softDrop: number, hardDrop: number, autoDrop: number },
-        tSpinCornerOccupiedCount: { pointSide: number, flatSide: number }
+        tSpinCornerOccupiedCount: { pointSide: number, flatSide: number },
+        lockContext?: LockContext
     ): LockResult {
         this.totalPiecesLocked++;
         this.totalLinesCleared += clearedLineCount;
 
         const { pointSide, flatSide } = tSpinCornerOccupiedCount;
+        const isRotateLock = droppedRotateType != lockedRotateType && movement == 'rotate';
+        const isImmobile = lockContext?.isImmobile === true;
+        const isPerfectClear = lockContext?.isPerfectClear === true;
 
         // Is T-Spin
         const isTSpin =
             tetrominoType == TetrominoType.T &&
-            droppedRotateType != lockedRotateType &&
-            movement == 'rotate' &&
+            isRotateLock &&
             pointSide + flatSide > 2;
 
         if (isTSpin) this.tSpinCount++;
@@ -199,6 +212,14 @@ export class ScoreSystem {
             pointSide < 2 &&
             kickDataIndex < 3;
 
+        // Optional non-T spin labeling. Kept score/garbage-neutral by default.
+        const isNonTSpin =
+            !isTSpin &&
+            tetrominoType !== TetrominoType.T &&
+            tetrominoType !== TetrominoType.GARBAGE &&
+            isRotateLock &&
+            isImmobile;
+
         let isBackToBackBonus = false;
         if (this.isBackToBackChain) {
             this.isBackToBackChain = Boolean(isTSpin || clearedLineCount == 4 || !clearedLineCount);
@@ -207,21 +228,36 @@ export class ScoreSystem {
             this.isBackToBackChain = Boolean((isTSpin && clearedLineCount) || clearedLineCount == 4);
         }
 
+        const clearedLineAction = clearedLineCount
+            ? ['Single', 'Double', 'Triple', 'Tetris'][clearedLineCount - 1]
+            : null;
+
         const actionNameArray: string[] = [];
-        if (isTSpin) actionNameArray.push('T-Spin');
-        if (isTSpinMini) actionNameArray.push('Mini');
-        if (clearedLineCount) actionNameArray.push(['Single', 'Double', 'Triple', 'Tetris'][clearedLineCount - 1]);
+        if (isTSpin) {
+            actionNameArray.push('T-Spin');
+            if (isTSpinMini) actionNameArray.push('Mini');
+        } else if (isNonTSpin) {
+            actionNameArray.push(`${tetrominoType}-Spin`);
+        }
+        if (clearedLineAction) actionNameArray.push(clearedLineAction);
 
         let actionName: string | null = null;
-        let scoreBase = 0;
+        let scoreBaseAction: string | null = null;
         if (actionNameArray.length) {
             actionName = actionNameArray.join(' ');
-            scoreBase = GameRules.getBaseScore(actionName);
+            if (isTSpin) {
+                scoreBaseAction = actionName;
+            } else if (clearedLineAction) {
+                // Non-T spin labels keep base line-clear score by default.
+                scoreBaseAction = clearedLineAction;
+            }
         }
 
+        const scoreBase = scoreBaseAction ? GameRules.getBaseScore(scoreBaseAction) : 0;
         let scoreAdded = 0;
-        if (scoreBase) {
-            const score = scoreBase * (isBackToBackBonus ? 1.5 : 1) * this.level;
+        const actionScoreBase = scoreBase + (actionName ? GameRules.getActionScoreBonus(actionName) : 0);
+        if (actionScoreBase) {
+            const score = actionScoreBase * (isBackToBackBonus ? 1.5 : 1) * this.level;
             scoreAdded += score;
         }
 
@@ -255,6 +291,8 @@ export class ScoreSystem {
             isTSpinMini,
             isBackToBackBonus,
             comboCount: this.comboCount,
+            isPerfectClear,
+            actionName,
         });
 
         // Return result

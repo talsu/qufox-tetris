@@ -274,21 +274,23 @@ function clearLines(player: PlayerState): number {
 
 function lockPiece(player: PlayerState): number {
     if (!player.active || !player.isAlive) return 0;
-    const blocks = cloneActiveBlocks(player.active);
+    const locked = player.active;
+    const isImmobileAtLock = isImmobile(player, locked);
+    const blocks = cloneActiveBlocks(locked);
     for (const [x, y] of blocks) {
         if (y < 0) {
             player.isAlive = false;
             player.active = null;
             return 0;
         }
-        player.board[y][x] = player.active.type;
+        player.board[y][x] = locked.type;
     }
 
-    const locked = player.active;
     // Match client behavior: T-Spin corner occupancy is evaluated
     // against the pre-line-clear locked board state.
     const tSpinCornerOccupiedCount = getTSpinCornerOccupiedCount(player, locked);
     const cleared = clearLines(player);
+    const isPerfectClear = player.board.every((row) => row.every((cell) => cell === '0'));
     const scoreResult = player.scoreSystem.onLock(
         cleared,
         locked.type,
@@ -298,6 +300,10 @@ function lockPiece(player: PlayerState): number {
         locked.lastKickDataIndex,
         locked.dropCounter,
         tSpinCornerOccupiedCount,
+        {
+            isImmobile: isImmobileAtLock,
+            isPerfectClear,
+        },
     );
     updateLastLockFeedback(player, scoreResult);
 
@@ -306,10 +312,7 @@ function lockPiece(player: PlayerState): number {
     player.level = stats.level;
     player.lines = stats.lines;
 
-    let garbage = scoreResult.garbage;
-    if (player.board.every((row) => row.every((cell) => cell === '0'))) {
-        garbage += 10;
-    }
+    const garbage = scoreResult.garbage;
 
     player.active = null;
     spawn(player);
@@ -351,6 +354,12 @@ function moveDown(player: PlayerState, dropType: 'softDrop' | 'hardDrop' | 'auto
 
 function isLockable(player: PlayerState, active: ActivePiece): boolean {
     return !canPlace(player, active, active.col, active.row + 1, active.rotate);
+}
+
+function isImmobile(player: PlayerState, active: ActivePiece): boolean {
+    return !canPlace(player, active, active.col - 1, active.row, active.rotate)
+        && !canPlace(player, active, active.col + 1, active.row, active.rotate)
+        && !canPlace(player, active, active.col, active.row + 1, active.rotate);
 }
 
 function handleSuccessfulManipulation(player: PlayerState): void {

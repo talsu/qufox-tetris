@@ -27,11 +27,28 @@ export class GameRules {
     }
 
     /**
+     * Get additional score bonus for an action.
+     * This is intentionally separate from base score so optional rules
+     * can be enabled by editing constants without changing scoring flow.
+     */
+    static getActionScoreBonus(actionName: string): number {
+        return CONST.ACTION_SCORE_BONUS[actionName] || 0;
+    }
+
+    /**
      * Get the number of lines to send/count for an action.
      * @param actionName The name of the action.
      * @returns The line count.
      */
     static getLineCount(actionName: string): number {
         return CONST.LINE_COUNT[actionName] || 0;
+    }
+
+    /**
+     * Get additional garbage bonus for an action.
+     * Kept decoupled from base attack math for optional future tuning.
+     */
+    static getActionGarbageBonus(actionName: string): number {
+        return CONST.ACTION_GARBAGE_BONUS[actionName] || 0;
     }
 }

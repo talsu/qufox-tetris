@@ -36,6 +36,7 @@ describe('PlayField Delay', () => {
             dropCounter: { softDrop: 0, hardDrop: 0, autoDrop: 0 },
             getTSpinCornerOccupiedCount: () => ({ pointSide: 0, flatSide: 0 }),
             isLockable: () => true,
+            isImmobile: () => false,
             animateBlocksInRows: jest.fn(),
             clearLine: jest.fn().mockReturnValue(false),
         } as unknown as Tetromino;
@@ -56,7 +57,7 @@ describe('PlayField Delay', () => {
         // Verify clearRows NOT called yet
         expect(clearRowsSpy).not.toHaveBeenCalled();
         // Verify lock NOT emitted yet (it is inside the proceed callback which runs after animation)
-        expect(emitSpy).not.toHaveBeenCalledWith('lock', expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything());
+        expect(emitSpy).not.toHaveBeenCalledWith('lock', expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything());
 
         // Advance time by LINE_CLEAR_DELAY_MS
         jest.advanceTimersByTime(CONST.PLAY_FIELD.LINE_CLEAR_DELAY_MS);
@@ -65,7 +66,7 @@ describe('PlayField Delay', () => {
         expect(clearRowsSpy).toHaveBeenCalledWith([19]);
 
         // Verify lock emitted
-        expect(emitSpy).toHaveBeenCalledWith('lock', 1, expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything());
+        expect(emitSpy).toHaveBeenCalledWith('lock', 1, expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything());
         expect(phases).toEqual([
             EnginePhase.PATTERN,
             EnginePhase.ITERATE,
@@ -96,6 +97,7 @@ describe('PlayField Delay', () => {
             dropCounter: { softDrop: 0, hardDrop: 0, autoDrop: 0 },
             getTSpinCornerOccupiedCount: () => ({ pointSide: 0, flatSide: 0 }),
             isLockable: () => true,
+            isImmobile: () => false,
         } as unknown as Tetromino;
 
         (playField as any).droppedRotateType = '0';
@@ -109,7 +111,7 @@ describe('PlayField Delay', () => {
         expect(playClearAnimationSpy).not.toHaveBeenCalled();
         expect(clearRowsSpy).not.toHaveBeenCalled();
         // Lock emitted immediately
-        expect(emitSpy).toHaveBeenCalledWith('lock', 0, expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything());
+        expect(emitSpy).toHaveBeenCalledWith('lock', 0, expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything());
         expect(phases).toEqual([
             EnginePhase.PATTERN,
             EnginePhase.ITERATE,

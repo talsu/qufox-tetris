@@ -271,6 +271,16 @@ export class Tetromino extends ObjectBase {
     }
 
     /**
+     * Check whether the piece is immobile in its current state.
+     * Used as an optional non-T spin labeling signal.
+     */
+    isImmobile(): boolean {
+        return !this.isValidPosition(this.rotateType, this.col - 1, this.row)
+            && !this.isValidPosition(this.rotateType, this.col + 1, this.row)
+            && !this.isValidPosition(this.rotateType, this.col, this.row + 1);
+    }
+
+    /**
      * Clear line and pull down upper blocks.
      * @param {number} row - Row to clear.
      */

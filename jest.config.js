@@ -3,8 +3,7 @@ module.exports = {
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/src', '<rootDir>/test'],
   testPathIgnorePatterns: [
-    '<rootDir>/test/e2e/',
-    '<rootDir>/test/unit/logic/botManager.simulation.test.ts'
+    '<rootDir>/test/e2e/'
   ],
   moduleNameMapper: {
     '^phaser$': '<rootDir>/test/mocks/phaserMock.ts',

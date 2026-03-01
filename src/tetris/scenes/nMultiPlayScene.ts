@@ -649,6 +649,10 @@ export class NMultiPlayScene extends BasePlayScene {
         });
 
         this.playField.on('gameOver', () => {
+            if (this.socket) {
+                this.socket.emit('nmulti_game_over', { roomId: this.roomId });
+                return;
+            }
             const score = this.engine ? this.engine.getScore() : 0;
             this.showEndGameMessage('GAME OVER', '#ff0000', score);
         });

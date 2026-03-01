@@ -35,6 +35,21 @@ function buildSyncSnapshot(board: string, serverAckInputSeq?: number): AuthSnaps
             level: 2,
             lines: 10,
             isAlive: true,
+            sync: {
+                boardCore: board,
+                active: {
+                    type: 'L',
+                    rotate: 'R',
+                    col: 4,
+                    row: -1,
+                },
+                hold: null,
+                canHold: true,
+                queue: ['I', 'T', 'S', 'Z', 'J'],
+                bag: ['L', 'O'],
+                queueRngState: 97531,
+                gravityMsCounter: 15,
+            },
         },
         serverAckInputSeq,
     };
@@ -60,7 +75,7 @@ describe('PlayScene authoritative resync', () => {
         });
         Reflect.set(scene, 'inputManager', { isEnabled: true });
         Reflect.set(scene, 'inGameMenu', { isMenuOpen: false });
-        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn() });
+        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn(), applyAuthoritativeState: jest.fn() });
         Reflect.set(scene, 'playField', {
             serializeEncoded: jest.fn(() => '9'.repeat(200)),
             stop: jest.fn(),
@@ -119,7 +134,7 @@ describe('PlayScene authoritative resync', () => {
         });
         Reflect.set(scene, 'inputManager', { isEnabled: true });
         Reflect.set(scene, 'inGameMenu', { isMenuOpen: false });
-        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn() });
+        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn(), applyAuthoritativeState: jest.fn() });
         Reflect.set(scene, 'playField', {
             serializeEncoded: jest.fn(() => '9'.repeat(200)),
             stop: jest.fn(),
@@ -153,7 +168,7 @@ describe('PlayScene authoritative resync', () => {
         const scene = new PlayScene();
         const handlers: HandlerMap = {};
         const emit = jest.fn();
-        const deserializeEncoded = jest.fn();
+        const applyAuthoritativeState = jest.fn();
 
         Reflect.set(scene, 'mode', 'multi');
         Reflect.set(scene, 'useAuthoritativeServer', true);
@@ -168,7 +183,7 @@ describe('PlayScene authoritative resync', () => {
         });
         Reflect.set(scene, 'inputManager', { isEnabled: true });
         Reflect.set(scene, 'inGameMenu', { isMenuOpen: false });
-        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded });
+        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn(), applyAuthoritativeState });
         Reflect.set(scene, 'playField', {
             serializeEncoded: jest.fn(() => '0'.repeat(200)),
             stop: jest.fn(),
@@ -193,8 +208,12 @@ describe('PlayScene authoritative resync', () => {
         handlers.auth_snapshot(snapshot);
         handlers.auth_snapshot(snapshot);
 
-        expect(deserializeEncoded).toHaveBeenCalledTimes(1);
-        expect(deserializeEncoded).toHaveBeenCalledWith('0'.repeat(200));
+        expect(applyAuthoritativeState).toHaveBeenCalledTimes(2);
+        expect(applyAuthoritativeState).toHaveBeenNthCalledWith(1,
+            snapshot.opponent.sync?.boardCore ?? snapshot.opponent.board,
+            snapshot.opponent.sync?.active ?? null,
+            snapshot.opponent.sync?.canHold ?? false,
+        );
     });
 
     test('does not resync local state while server ack is behind local predicted input seq', () => {
@@ -217,7 +236,7 @@ describe('PlayScene authoritative resync', () => {
         });
         Reflect.set(scene, 'inputManager', { isEnabled: true });
         Reflect.set(scene, 'inGameMenu', { isMenuOpen: false });
-        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn() });
+        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn(), applyAuthoritativeState: jest.fn() });
         Reflect.set(scene, 'playField', {
             serializeEncoded: jest.fn(() => '9'.repeat(200)),
             stop: jest.fn(),
@@ -407,7 +426,7 @@ describe('PlayScene authoritative resync', () => {
             { setVisible: setVisibleB },
         ]);
         Reflect.set(scene, 'awaitingInitialAuthSnapshot', true);
-        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn() });
+        Reflect.set(scene, 'opponentPlayField', { deserializeEncoded: jest.fn(), applyAuthoritativeState: jest.fn() });
         Reflect.set(scene, 'playField', {
             serializeEncoded: jest.fn(() => '9'.repeat(200)),
             stop: jest.fn(),

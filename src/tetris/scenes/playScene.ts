@@ -231,7 +231,14 @@ export class PlayScene extends BasePlayScene {
             return;
         }
 
-        if (opponent.board) {
+        if (opponent.sync) {
+            this.opponentPlayField?.applyAuthoritativeState(
+                opponent.sync.boardCore,
+                opponent.sync.active,
+                opponent.sync.canHold,
+            );
+            this.lastOpponentBoardSnapshot = null;
+        } else if (opponent.board) {
             this.applyOpponentBoardSnapshot(opponent.board);
         }
 

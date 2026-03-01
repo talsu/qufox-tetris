@@ -956,6 +956,9 @@ export class PlayScene extends BasePlayScene {
         this.playField.on('gameOver', () => {
             if (this.mode === 'multi' && this.socket) {
                 this.socket.emit('game_over', { roomId: this.roomId });
+                if (this.useAuthoritativeServer) {
+                    return;
+                }
             }
             const score = this.engine ? this.engine.getScore() : 0;
             this.showEndGameMessage('GAME OVER', '#ff0000', score);

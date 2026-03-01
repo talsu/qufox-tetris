@@ -58,10 +58,10 @@ export class GameOverlayControls {
         this.menuLabel.setStroke('#00111f', 2);
         this.menuLabel.setShadow(1, 1, '#00111f', 1, true, true);
 
-        this.copyJoinLabel = this.scene.add.text(0, 0, 'Copy Join URL', {
+        this.copyJoinLabel = this.scene.add.text(0, 0, 'Copy Url', {
             ...TextStyles.header,
             align: 'center',
-            fontSize: '13px',
+            fontSize: '16px',
             color: '#f8fdff',
         }).setOrigin(0.5);
         this.copyJoinLabel.setStroke('#00111f', 2);
@@ -165,10 +165,10 @@ export class GameOverlayControls {
         this.menuLabel.setFontSize(`${menuFontSize}px`);
 
         const copyJoinWidth = this.onCopyJoinUrlClick
-            ? Math.max(menuHeight * 3.2, Math.min(viewWidth * 0.32, menuHeight * 4.9))
+            ? Math.min(menuHeight * 2.45, Math.max(menuHeight * 1.9, viewWidth * 0.19))
             : 0;
         const copyJoinGap = this.onCopyJoinUrlClick ? Math.max(4, Math.round(menuHeight * 0.14)) : 0;
-        const copyJoinFontSize = Math.max(9, Math.round(menuHeight * 0.33));
+        const copyJoinFontSize = Math.max(10, Math.round(menuHeight * 0.45));
         this.copyJoinLabel.setFontSize(`${copyJoinFontSize}px`);
 
         const guideFontSize = isMobilePortrait
@@ -257,6 +257,7 @@ export class GameOverlayControls {
             label: this.menuLabel,
             hitArea: this.menuHitArea,
             pressed: this.menuPressed,
+            theme: 'blue',
         });
     }
 
@@ -270,6 +271,7 @@ export class GameOverlayControls {
             label: this.copyJoinLabel,
             hitArea: this.copyJoinHitArea,
             pressed: this.copyJoinPressed,
+            theme: 'green',
         });
     }
 
@@ -278,6 +280,7 @@ export class GameOverlayControls {
         label: Phaser.GameObjects.Text;
         hitArea: Phaser.GameObjects.Rectangle;
         pressed: boolean;
+        theme: 'blue' | 'green';
     }): void {
         const x = options.hitArea.x;
         const y = options.hitArea.y;
@@ -289,13 +292,28 @@ export class GameOverlayControls {
 
         options.background.clear();
 
-        const baseColor = options.pressed ? 0x0b3d59 : 0x0f5f82;
-        const innerColor = options.pressed ? 0x155272 : 0x1b749d;
+        const palette = options.theme === 'green'
+            ? {
+                baseColor: options.pressed ? 0x14532d : 0x166534,
+                innerColor: options.pressed ? 0x15803d : 0x16a34a,
+                outerStrokeColor: 0xbbf7d0,
+                glowColor: 0x86efac,
+                labelPressedColor: '#dcfce7',
+                labelColor: '#f0fdf4',
+            }
+            : {
+                baseColor: options.pressed ? 0x0b3d59 : 0x0f5f82,
+                innerColor: options.pressed ? 0x155272 : 0x1b749d,
+                outerStrokeColor: 0xbef8ff,
+                glowColor: 0x67e8f9,
+                labelPressedColor: '#dbeafe',
+                labelColor: '#f0fbff',
+            };
 
-        options.background.fillStyle(baseColor, 1);
+        options.background.fillStyle(palette.baseColor, 1);
         options.background.fillRoundedRect(x, y, width, height, radius);
 
-        options.background.fillStyle(innerColor, options.pressed ? 0.85 : 0.9);
+        options.background.fillStyle(palette.innerColor, options.pressed ? 0.85 : 0.9);
         options.background.fillRoundedRect(
             x + insetA,
             y + insetA,
@@ -313,7 +331,7 @@ export class GameOverlayControls {
             Math.max(2, radius - insetB),
         );
 
-        options.background.lineStyle(2, 0xbef8ff, options.pressed ? 0.85 : 0.95);
+        options.background.lineStyle(2, palette.outerStrokeColor, options.pressed ? 0.85 : 0.95);
         options.background.strokeRoundedRect(
             x + insetA / 2,
             y + insetA / 2,
@@ -332,11 +350,11 @@ export class GameOverlayControls {
         );
 
         if (!options.pressed) {
-            options.background.lineStyle(1, 0x67e8f9, 0.28);
+            options.background.lineStyle(1, palette.glowColor, 0.28);
             options.background.strokeRoundedRect(x - insetA / 2, y - insetA / 2, width + insetA, height + insetA, radius + insetA / 2);
         }
 
-        options.label.setColor(options.pressed ? '#dbeafe' : '#f0fbff');
+        options.label.setColor(options.pressed ? palette.labelPressedColor : palette.labelColor);
         options.label.setPosition(x + width / 2, y + height / 2 + (options.pressed ? Math.max(1, insetA * 0.5) : 0));
         this.root.bringToTop(options.label);
     }

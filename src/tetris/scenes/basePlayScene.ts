@@ -8,7 +8,7 @@ import { BotManager } from '../logic/botManager';
 import { CONST, InputDirection, InputState } from '../const/const';
 import { GAME_FONT_FAMILY } from '../ui/uiStyles';
 import { Socket } from 'socket.io-client';
-import { buildJoinUrl, JoinUrlMode } from '../net/joinUrl';
+import { JoinUrlMode } from '../net/joinUrl';
 import { playKenneyImpactSound } from '../ui/kenneyAssets';
 
 /**
@@ -80,24 +80,22 @@ export abstract class BasePlayScene extends BaseScene {
     }
 
     private handleCopyJoinUrl(): void {
-        const joinUrl = (this.joinUrlMode && this.joinUrlRoomKey)
-            ? buildJoinUrl(this.joinUrlMode, this.joinUrlRoomKey, true)
-            : this.resolveRootUrl();
+        const currentUrl = this.resolveCurrentUrl();
 
         if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
             return;
         }
 
-        void navigator.clipboard.writeText(joinUrl).then(() => {
+        void navigator.clipboard.writeText(currentUrl).then(() => {
             this.overlayControls?.showCopyToast();
         });
     }
 
-    private resolveRootUrl(): string {
-        if (typeof window === 'undefined' || typeof window.location?.origin !== 'string') {
+    private resolveCurrentUrl(): string {
+        if (typeof window === 'undefined' || typeof window.location?.href !== 'string') {
             return '/';
         }
-        return `${window.location.origin}/`;
+        return window.location.href;
     }
 
     protected toggleMenu(): void {

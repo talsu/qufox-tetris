@@ -8,6 +8,7 @@ import { BotManager } from '../logic/botManager';
 import { CONST, InputDirection, InputState } from '../const/const';
 import { GAME_FONT_FAMILY } from '../ui/uiStyles';
 import { Socket } from 'socket.io-client';
+import { buildJoinUrl, JoinUrlMode } from '../net/joinUrl';
 import { playKenneyImpactSound } from '../ui/kenneyAssets';
 
 /**
@@ -32,6 +33,8 @@ export abstract class BasePlayScene extends BaseScene {
     protected botLevel: number = 0;
     protected botManager: BotManager;
     protected overlayControls: GameOverlayControls | null = null;
+    protected joinUrlRoomKey: string | null = null;
+    protected joinUrlMode: JoinUrlMode | null = null;
     protected holdInputZone: Phaser.GameObjects.Zone | null = null;
     private escKeyHandler: (() => void) | null = null;
 
@@ -63,10 +66,38 @@ export abstract class BasePlayScene extends BaseScene {
         this.overlayControls = new GameOverlayControls({
             scene: this,
             onMenuClick: () => this.toggleMenu(),
+            onCopyJoinUrlClick: () => this.handleCopyJoinUrl(),
         });
 
         this.scale.on('resize', this.resize, this);
         this.resize(window.innerWidth, window.innerHeight);
+    }
+
+
+    protected configureJoinUrl(mode: JoinUrlMode | null, roomKey: string | null): void {
+        this.joinUrlMode = mode;
+        this.joinUrlRoomKey = roomKey;
+    }
+
+    private handleCopyJoinUrl(): void {
+        const joinUrl = (this.joinUrlMode && this.joinUrlRoomKey)
+            ? buildJoinUrl(this.joinUrlMode, this.joinUrlRoomKey, true)
+            : this.resolveRootUrl();
+
+        if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+            return;
+        }
+
+        void navigator.clipboard.writeText(joinUrl).then(() => {
+            this.overlayControls?.showCopyToast();
+        });
+    }
+
+    private resolveRootUrl(): string {
+        if (typeof window === 'undefined' || typeof window.location?.origin !== 'string') {
+            return '/';
+        }
+        return `${window.location.origin}/`;
     }
 
     protected toggleMenu(): void {

@@ -99,6 +99,7 @@ export class NMultiPlayScene extends BasePlayScene {
 
         this.socket = data.socket;
         this.roomId = data.roomId;
+        this.configureJoinUrl('n-multi', this.roomId);
         this.roomName = data.roomName;
         this.playerId = data.playerId;
         this.playerName = data.playerName;

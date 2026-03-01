@@ -65,6 +65,43 @@ describe('MenuScene URL join flow', () => {
         expect(scene.createPhaserUI).not.toHaveBeenCalled();
     });
 
+
+    test('initializeMenuFlow routes short n-multi URL with room id and bot level', async () => {
+        setPath('/j/n/room-raw-id?bot=11');
+        const scene = new MenuScene() as any;
+        scene.sys = { isActive: () => true };
+        scene.isShuttingDown = false;
+        scene.joinNMultiRoomByUrl = jest.fn();
+        scene.joinMultiRoomByUrl = jest.fn();
+        scene.createPhaserUI = jest.fn();
+        scene.resize = jest.fn();
+        const replaceSpy = jest.spyOn(history, 'replaceState');
+
+        await scene.initializeMenuFlow();
+
+        expect(replaceSpy).toHaveBeenCalledWith(null, '', '/n-multi/room-raw-id?bot=11');
+        expect(scene.joinNMultiRoomByUrl).toHaveBeenCalledWith('room-raw-id', 11);
+        expect(scene.joinMultiRoomByUrl).not.toHaveBeenCalled();
+    });
+
+    test('initializeMenuFlow routes short multi URL with room id and bot level', async () => {
+        setPath('/j/m/duel-room-id?bot=3');
+        const scene = new MenuScene() as any;
+        scene.sys = { isActive: () => true };
+        scene.isShuttingDown = false;
+        scene.joinNMultiRoomByUrl = jest.fn();
+        scene.joinMultiRoomByUrl = jest.fn();
+        scene.createPhaserUI = jest.fn();
+        scene.resize = jest.fn();
+        const replaceSpy = jest.spyOn(history, 'replaceState');
+
+        await scene.initializeMenuFlow();
+
+        expect(replaceSpy).toHaveBeenCalledWith(null, '', '/multi/duel-room-id?bot=3');
+        expect(scene.joinMultiRoomByUrl).toHaveBeenCalledWith('duel-room-id', 3);
+        expect(scene.joinNMultiRoomByUrl).not.toHaveBeenCalled();
+    });
+
     test('initializeMenuFlow falls back to menu UI on root path', async () => {
         setPath('/');
         const scene = new MenuScene() as any;
@@ -119,6 +156,39 @@ describe('MenuScene URL join flow', () => {
             authQueueSeed: 777,
         }));
         expect(socket.off).toHaveBeenCalledTimes(4);
+    });
+
+
+    test('joinMultiRoomByUrl keeps join_or_create behavior for any route source', () => {
+        const handlers: SocketHandlerMap = {};
+        const socket = createSocket(handlers);
+        const scene = new MenuScene() as any;
+        scene.createConnectingText = jest.fn();
+        scene.createUrlJoinSocket = jest.fn(() => {
+            scene.urlJoinSocket = socket;
+            return socket;
+        });
+
+        scene.joinMultiRoomByUrl('room-id-55', 4);
+        handlers.connect();
+
+        expect(socket.emit).toHaveBeenCalledWith('join_or_create', { roomName: 'room-id-55', botLevel: 4 });
+    });
+
+    test('joinNMultiRoomByUrl keeps nmulti_join_or_create behavior for any route source', () => {
+        const handlers: SocketHandlerMap = {};
+        const socket = createSocket(handlers);
+        const scene = new MenuScene() as any;
+        scene.createConnectingText = jest.fn();
+        scene.createUrlJoinSocket = jest.fn(() => {
+            scene.urlJoinSocket = socket;
+            return socket;
+        });
+
+        scene.joinNMultiRoomByUrl('n-room-id-55', 6);
+        handlers.connect();
+
+        expect(socket.emit).toHaveBeenCalledWith('nmulti_join_or_create', { roomName: 'n-room-id-55', botLevel: 6 });
     });
 
     test('joinNMultiRoomByUrl recovers when room payload is malformed', () => {

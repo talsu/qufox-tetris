@@ -2,6 +2,7 @@ import { CONST } from "../const/const";
 import { BaseScene } from "./baseScene";
 import { io, type Socket } from "socket.io-client";
 import { getSocketUrl, SOCKET_PATH } from "../net/socketUtils";
+import { resolveJoinRoute } from "../net/joinUrl";
 import { SocketListenerRegistry } from "../net/socketListenerRegistry";
 import { GAME_FONT_FAMILY, PANEL_BG } from "../ui/uiStyles";
 import { ensureGameFontReady } from "../ui/fontLoader";
@@ -88,21 +89,20 @@ export class MenuScene extends BaseScene {
         await ensureGameFontReady();
         if (this.isShuttingDown || !this.sys.isActive()) return;
 
-        const nMultiMatch = window.location.pathname.match(/^\/n-multi\/(.+)$/);
-        if (nMultiMatch) {
-            const roomName = decodeURIComponent(nMultiMatch[1]);
-            const urlParams = new URLSearchParams(window.location.search);
-            const botLevel = parseInt(urlParams.get('bot') || '0', 10);
-            this.joinNMultiRoomByUrl(roomName, botLevel);
+        const joinTarget = resolveJoinRoute(window.location.pathname, window.location.search);
+        if (joinTarget?.mode === 'n-multi') {
+            if (joinTarget.useShortJoin) {
+                history.replaceState(null, '', `/n-multi/${encodeURIComponent(joinTarget.roomKey)}${window.location.search}`);
+            }
+            this.joinNMultiRoomByUrl(joinTarget.roomKey, joinTarget.botLevel);
             return;
         }
 
-        const multiMatch = window.location.pathname.match(/^\/multi\/(.+)$/);
-        if (multiMatch) {
-            const roomName = decodeURIComponent(multiMatch[1]);
-            const urlParams = new URLSearchParams(window.location.search);
-            const botLevel = parseInt(urlParams.get('bot') || '0', 10);
-            this.joinMultiRoomByUrl(roomName, botLevel);
+        if (joinTarget?.mode === 'multi') {
+            if (joinTarget.useShortJoin) {
+                history.replaceState(null, '', `/multi/${encodeURIComponent(joinTarget.roomKey)}${window.location.search}`);
+            }
+            this.joinMultiRoomByUrl(joinTarget.roomKey, joinTarget.botLevel);
             return;
         }
 

@@ -428,6 +428,7 @@ export class PlayScene extends BasePlayScene {
 
         this.mode = data.mode || 'single';
         this.roomName = data.roomName;
+        this.configureJoinUrl(null, null);
         this.botLevel = data.botLevel || 0;
         this.isHost = false;
         this.authQueueSeed = null;
@@ -440,6 +441,7 @@ export class PlayScene extends BasePlayScene {
             this.authQueueSeed = toFiniteNumberOrNull(data.authQueueSeed);
             this.initialAuthSnapshot = isAuthSnapshotPayload(data.authSnapshot) ? data.authSnapshot : null;
             this.useAuthoritativeServer = true;
+            this.configureJoinUrl('multi', this.roomId);
         }
 
         const dims = calcPlaySceneDimensions(this.layoutMode, this.mode);

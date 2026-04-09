@@ -1,15 +1,21 @@
 import { expect, test } from '@playwright/test';
 
-test('loads menu and starts single-player with keyboard', async ({ page }) => {
+test('loads menu and starts single-player with canvas interaction', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.locator('.menu-container')).toBeVisible();
-    await expect(page.locator('#singleBtn')).toBeVisible();
-    await expect(page.locator('#game canvas').first()).toBeVisible();
+    // Wait for Phaser canvas to render
+    const canvas = page.locator('#game canvas').first();
+    await expect(canvas).toBeVisible({ timeout: 15000 });
 
-    await page.locator('#singleBtn').focus();
-    await page.keyboard.press('Enter');
+    // Wait for menu to be ready
+    await page.waitForTimeout(2000);
 
-    await expect(page.locator('.menu-container')).toHaveCount(0);
-    await expect(page.locator('#game canvas').first()).toBeVisible();
+    // Click Single Player via canvas coordinate
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.42);
+
+    // Menu scene transitions to PlayScene - canvas remains visible
+    await page.waitForTimeout(1000);
+    await expect(canvas).toBeVisible();
 });

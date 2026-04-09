@@ -30,3 +30,24 @@ Tests should validate behavior contracts through production code paths.
 - `test/unit/server/serverIndex.integration.test.ts` runs in node environment, compiles server TS, spawns a real server process, and binds a local port.
 - If layout constants change, update `ui/gameLayout.metrics.test.ts` and `scenes/layoutPositions.test.ts` together.
 - If runtime HUD placement behavior changes, also update `ui/runtimeHudLayout.test.ts`.
+
+## COVERAGE THRESHOLDS
+Jest enforces minimum coverage (configurable in `jest.config.js`):
+- Lines: 70% | Branches: 60% | Functions: 60% | Statements: 70%
+
+## E2E AND HARNESS (Complementary to Unit Tests)
+Unit tests cover deterministic logic. E2E tests (Playwright) cover user-facing flows.
+They live in `test/e2e/` and `test/performance/`, NOT in `test/unit/`.
+
+| Type | Location | Framework |
+|------|----------|-----------|
+| Unit | `test/unit/` | Jest + Phaser mock |
+| E2E flows | `test/e2e/flows/` | Playwright (Canvas interaction) |
+| Visual regression | `test/e2e/visual/` | Playwright screenshots |
+| Performance | `test/performance/` | Playwright timing checks |
+| Harness utils | `test/harness/` | GameHarness, SocketHarness |
+
+When adding a new user-facing feature, consider:
+1. Unit test for the underlying logic (here in `test/unit/`)
+2. E2E test for the user flow (in `test/e2e/flows/`)
+3. Update visual baselines if UI changed (in `test/e2e/visual/`)

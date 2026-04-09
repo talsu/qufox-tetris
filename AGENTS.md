@@ -103,10 +103,56 @@ Notes:
 - Use `--` when forwarding options through `npm test`.
 - `test/unit/server/serverIndex.integration.test.ts` binds a local TCP port and spawns a node server process.
 
+### E2E Tests (Playwright)
+
+E2E tests run on an **independent port (9090)** — they never reuse an existing dev server.
+You can run `npm run dev` (port 8080) simultaneously without conflicts.
+
+```bash
+npm run test:e2e             # All E2E tests
+npm run test:e2e:headed      # With visible browser
+npm run test:e2e:ui          # Playwright UI
+npm run test:perf            # Performance tests
+npm run test:all             # Unit + E2E
+```
+
+E2E tests target `test/e2e/` and `test/performance/` via `playwright.config.ts`.
+Unit tests are excluded from Playwright (Jest owns them).
+
+### Important: Game UI is Canvas, not DOM
+
+Most game UI (menu buttons, playfield, HUD) is rendered on **Phaser Canvas**, not as DOM elements.
+DOM selectors like `.menu-container` or `#singleBtn` will NOT work in E2E tests.
+
+Use canvas coordinate clicking instead:
+
+```typescript
+const canvas = page.locator('#game canvas').first();
+await expect(canvas).toBeVisible({ timeout: 15000 });
+await page.waitForTimeout(2000); // Wait for menu render
+
+const box = await canvas.boundingBox();
+await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.42); // Single Player
+```
+
+Or use the GameHarness fixture:
+```typescript
+import { test, expect } from '../../harness/fixtures';
+
+test('feature', async ({ game }) => {
+    await game.gotoMenu();
+    await game.clickSinglePlayer();
+    await game.hardDrop();
+});
+```
+
+The only DOM-based UI is `InGameMenu` (pause menu) — accessible via `.menu-panel`, `.menu-panel--pause`, etc.
+
 ## Lint / Format Status
-- No ESLint config found.
-- No Prettier config found.
-- Do not invent lint steps; follow local file style.
+- ESLint: `.eslintrc.js` (basic TypeScript config)
+- Prettier: `.prettierrc.json` (4-space, singleQuote, trailingComma)
+- Pre-commit hook: `.husky/pre-commit` → `lint-staged`
+  - ESLint `--fix` + Prettier `--write` + related unit tests
 
 ## Ownership Boundaries
 - `src/tetris/const/`: shared constants, enums, lookup tables
@@ -157,12 +203,21 @@ Do not duplicate gameplay logic in scenes/UI when it belongs in logic/objects.
 - Use Phaser mock harness via jest config for browser-side units.
 - Prefer production-path tests over test-local logic replicas.
 - Update tests when changing metrics, scoring, socket contracts, or payload guards.
+
+### E2E Tests
+- Located in `test/e2e/flows/` — user flow scenarios
+- Located in `test/e2e/visual/` — visual regression (baseline snapshots exist)
+- Located in `test/performance/` — load time, canvas size thresholds
+- Use `GameHarness` from `test/harness/gameHarness.ts` for canvas interactions
+- E2E runs on independent port 9090 (never reuses dev server)
+
 High-signal test files:
 - `test/unit/ui/gameLayout.metrics.test.ts`
 - `test/unit/scenes/layoutPositions.test.ts`
 - `test/unit/logic/scoreSystem.test.ts`
 - `test/unit/server/socketPayloads.test.ts`
 - `test/unit/server/serverIndex.integration.test.ts`
+- `test/e2e/flows/single-player.spec.ts`
 
 ## Multiplayer Rules
 - Keep 1v1 and n-multi flows explicit and separate.
@@ -199,16 +254,20 @@ Before edits:
 After edits:
 1. Run targeted single-file test(s).
 2. Run full suite: `npm test`.
-3. Run build: `npm run build`.
-4. Verify only intended files changed.
+3. Run E2E if UI changed: `npm run test:e2e`.
+4. Run build: `npm run build`.
+5. Verify only intended files changed.
 
 ## Quick Command Set
 ```bash
 npm install
-npm run dev
-npm run server
+npm run dev                     # Dev server (port 8080)
+npm run server                  # Game server (port 3031)
+npm test                        # All unit tests
 npm test -- --runTestsByPath test/unit/logic/scoreSystem.test.ts
 npm test -- --runTestsByPath test/unit/server/serverIndex.integration.test.ts
-npm test
-npm run build
+npm run test:e2e                # E2E tests (independent port 9090)
+npm run test:perf               # Performance tests
+npm run test:all                # Unit + E2E
+npm run build                   # Production bundle
 ```

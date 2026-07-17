@@ -32,6 +32,8 @@ spec:
           ports:
             - containerPort: 80
           resources:
+            requests:
+              memory: 48Mi
             limits:
               memory: 128Mi
           readinessProbe:
@@ -83,6 +85,8 @@ spec:
             - name: PORT
               value: "3031"
           resources:
+            requests:
+              memory: 64Mi
             limits:
               memory: 256Mi
           readinessProbe:

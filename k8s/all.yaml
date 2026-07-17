@@ -1,61 +1,13 @@
-# tetris.qufox.com — 정적 SPA. 파일은 NAS NFS(ro), 서빙은 nginx 파드.
-# NAS nginx의 server 블록(root /etc/qufox-tetris + SPA fallback)을 재현한다.
-# /server(멀티플레이 socket.io)는 NAS 호스트에서 도는 node 프로세스(:3031)로
-# 라우팅한다 — 셀렉터 없는 Service + EndpointSlice (qufox의 nas-minio 패턴).
+# tetris.qufox.com — Pi k3s 클러스터 매니페스트.
+#   web   : webpack 산출물을 구운 nginx 이미지 (Dockerfile.web)
+#   server: 멀티플레이 socket.io 서버 (Dockerfile.server, 구 NAS pm2 프로세스)
+# 이미지는 ghcr.io/talsu/qufox-tetris/{web,server} 비공개 패키지 — 배포는
+# scripts/deploy-k3s.sh 참조. TLS는 NAS nginx가 종료 후 파이 traefik으로 프록시.
+# 전제: ns에 ghcr-pull imagePullSecret 필요 (qufox의 k8s/README.md 참조).
 apiVersion: v1
 kind: Namespace
 metadata:
   name: qufox-tetris
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: qufox-tetris-static
-spec:
-  capacity:
-    storage: 1Gi
-  accessModes: [ReadOnlyMany]
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: ""
-  nfs:
-    server: 192.168.0.71
-    path: /volume1/cluster-volume/qufox-tetris
-    readOnly: true
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: qufox-tetris-static
-  namespace: qufox-tetris
-spec:
-  accessModes: [ReadOnlyMany]
-  storageClassName: ""
-  volumeName: qufox-tetris-static
-  resources:
-    requests:
-      storage: 1Gi
----
-# NAS nginx 블록과 동일한 서빙 규칙 (SPA fallback + /build는 404)
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: qufox-tetris-nginx
-  namespace: qufox-tetris
-data:
-  default.conf: |
-    server {
-        listen 80;
-        root /usr/share/nginx/html;
-        index index.html;
-
-        location / {
-            try_files $uri $uri/ /index.html;
-        }
-
-        location /build {
-            try_files $uri $uri/ =404;
-        }
-    }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -72,18 +24,13 @@ spec:
       labels:
         app: qufox-tetris
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: web
-          image: nginx:1.27-alpine
+          image: ghcr.io/talsu/qufox-tetris/web:latest   # deploy 스크립트가 sha 태그로 교체
           ports:
             - containerPort: 80
-          volumeMounts:
-            - name: static
-              mountPath: /usr/share/nginx/html
-              readOnly: true
-            - name: conf
-              mountPath: /etc/nginx/conf.d
-              readOnly: true
           resources:
             limits:
               memory: 128Mi
@@ -93,13 +40,6 @@ spec:
               port: 80
             initialDelaySeconds: 3
             periodSeconds: 15
-      volumes:
-        - name: static
-          persistentVolumeClaim:
-            claimName: qufox-tetris-static
-        - name: conf
-          configMap:
-            name: qufox-tetris-nginx
 ---
 apiVersion: v1
 kind: Service
@@ -113,33 +53,56 @@ spec:
     - port: 80
       targetPort: 80
 ---
-# NAS 호스트 프로세스(node server/index.js, :3031)로 가는 외부 백엔드.
-# 서버는 /server 프리픽스를 포함한 경로를 기대하므로 StripPrefix 없이 라우팅.
+# 멀티플레이 서버 — 게임 방 상태가 메모리에 있으므로 replicas는 반드시 1
+# (스케일아웃하려면 socket.io redis adapter + 상태 공유가 먼저 필요).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qufox-tetris-server
+  namespace: qufox-tetris
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # 교체 배포 시 순간 이중 실행 방지(방 상태 분열 예방)
+  selector:
+    matchLabels:
+      app: qufox-tetris-server
+  template:
+    metadata:
+      labels:
+        app: qufox-tetris-server
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: server
+          image: ghcr.io/talsu/qufox-tetris/server:latest
+          ports:
+            - containerPort: 3031
+          env:
+            - name: PORT
+              value: "3031"
+          resources:
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /server/socket.io/?EIO=4&transport=polling
+              port: 3031
+            initialDelaySeconds: 5
+            periodSeconds: 15
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: nas-tetris-server
+  name: qufox-tetris-server
   namespace: qufox-tetris
 spec:
+  selector:
+    app: qufox-tetris-server
   ports:
-    - name: ws
-      port: 3031
+    - port: 3031
       targetPort: 3031
----
-apiVersion: discovery.k8s.io/v1
-kind: EndpointSlice
-metadata:
-  name: nas-tetris-server-1
-  namespace: qufox-tetris
-  labels:
-    kubernetes.io/service-name: nas-tetris-server
-addressType: IPv4
-endpoints:
-  - addresses: ["192.168.0.71"]
-ports:
-  - name: ws
-    port: 3031
-    protocol: TCP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -152,11 +115,11 @@ spec:
     - host: tetris.192.168.0.6.nip.io   # 내부 테스트용
       http:
         paths:
-          - path: /server               # 멀티플레이 socket.io → NAS :3031
+          - path: /server               # 멀티플레이 socket.io (프리픽스 유지)
             pathType: Prefix
             backend:
               service:
-                name: nas-tetris-server
+                name: qufox-tetris-server
                 port:
                   number: 3031
           - path: /
@@ -166,14 +129,14 @@ spec:
                 name: qufox-tetris
                 port:
                   number: 80
-    - host: tetris.qufox.com            # 컷오버 후 NAS nginx가 이리로 프록시
+    - host: tetris.qufox.com            # NAS nginx가 이리로 프록시
       http:
         paths:
           - path: /server
             pathType: Prefix
             backend:
               service:
-                name: nas-tetris-server
+                name: qufox-tetris-server
                 port:
                   number: 3031
           - path: /

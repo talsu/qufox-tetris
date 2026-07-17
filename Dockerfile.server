@@ -1,0 +1,21 @@
+# Multiplayer server image: tsc build (tsconfig.server.json → dist/) →
+# slim runtime with production deps only. Same entry the pm2 setup used,
+# minus the shim: dist/server/index.js is the compiled entrypoint.
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run server:build
+
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+# --ignore-scripts: prod 의존성만 설치할 때 prepare(husky)가 없어서 127로
+# 죽는 것 방지. express/socket.io는 설치 스크립트가 필요 없다.
+RUN npm ci --omit=dev --ignore-scripts
+COPY --from=build /app/dist ./dist
+ENV PORT=3031
+EXPOSE 3031
+CMD ["node", "dist/server/index.js"]

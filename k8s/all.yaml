@@ -1,8 +1,8 @@
 # tetris.qufox.com — Pi k3s 클러스터 매니페스트.
 #   web   : webpack 산출물을 구운 nginx 이미지 (Dockerfile.web)
 #   server: 멀티플레이 socket.io 서버 (Dockerfile.server, 구 NAS pm2 프로세스)
-# 이미지는 ghcr.io/talsu/qufox-tetris/{web,server} 비공개 패키지 — 배포는
-# scripts/deploy-k3s.sh 참조. TLS는 NAS nginx가 종료 후 파이 traefik으로 프록시.
+# 이미지는 ghcr.io/talsu/qufox-tetris/{web,server} 비공개 패키지 — 배포는 GitOps
+# (GitHub Actions .github/workflows/deploy.yml → ghcr push → k8s/ 태그 커밋 → Flux). TLS는 NAS nginx가 종료 후 파이 traefik으로 프록시.
 # 전제: ns에 ghcr-pull imagePullSecret 필요 (qufox의 k8s/README.md 참조).
 apiVersion: v1
 kind: Namespace
@@ -28,7 +28,7 @@ spec:
         - name: ghcr-pull
       containers:
         - name: web
-          image: ghcr.io/talsu/qufox-tetris/web:sha-93b585e   # deploy 스크립트가 sha 태그로 교체
+          image: ghcr.io/talsu/qufox-tetris/web:sha-93b585e   # CI(.github/workflows/deploy.yml)가 sha 태그로 교체 커밋 → Flux 롤아웃
           ports:
             - containerPort: 80
           resources:

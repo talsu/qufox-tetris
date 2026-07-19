@@ -28,7 +28,7 @@ spec:
         - name: ghcr-pull
       containers:
         - name: web
-          image: ghcr.io/talsu/qufox-tetris/web:latest   # deploy 스크립트가 sha 태그로 교체
+          image: ghcr.io/talsu/qufox-tetris/web:sha-93b585e   # deploy 스크립트가 sha 태그로 교체
           ports:
             - containerPort: 80
           resources:
@@ -78,7 +78,7 @@ spec:
         - name: ghcr-pull
       containers:
         - name: server
-          image: ghcr.io/talsu/qufox-tetris/server:latest
+          image: ghcr.io/talsu/qufox-tetris/server:sha-93b585e
           ports:
             - containerPort: 3031
           env:
